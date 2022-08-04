@@ -1,0 +1,20 @@
+[package]
+name = "esplora-client"
+version = "0.0.1"
+authors = ["Alekos Filini <alekos.filini@gmail.com>"]
+license = "MIT"
+homepage = "https://github.com/bitcoindevkit/rust-esplora-client"
+repository = "https://github.com/bitcoindevkit/rust-esplora-client"
+documentation = "https://docs.rs/esplora-client/"
+description = "Bitcoin Esplora API client library. Supports plaintext, TLS and Onion servers. Blocking or async"
+keywords = ["bitcoin", "esplora"]
+readme = "README.md"
+
+[lib]
+name = "esplora_client"
+path = "src/lib.rs"
+
+[dependencies]
+
+
+[features]
