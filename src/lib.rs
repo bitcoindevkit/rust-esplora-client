@@ -24,24 +24,17 @@ use std::io;
 use bitcoin::consensus;
 use bitcoin::{BlockHash, Txid};
 
-use crate::error::Error;
-use crate::FeeRate;
+pub mod api;
+#[cfg(feature = "async")]
+pub mod r#async;
+#[cfg(feature = "blocking")]
+pub mod blocking;
 
-#[cfg(feature = "reqwest")]
-mod reqwest;
+pub use api::*;
+pub use blocking::BlockingClient;
+pub use r#async::AsyncClient;
 
-#[cfg(feature = "reqwest")]
-pub use self::reqwest::*;
-
-#[cfg(feature = "ureq")]
-mod ureq;
-
-#[cfg(feature = "ureq")]
-pub use self::ureq::*;
-
-mod api;
-
-fn into_fee_rate(target: usize, estimates: HashMap<String, f64>) -> Result<FeeRate, Error> {
+pub fn convert_fee_rate(target: usize, estimates: HashMap<String, f64>) -> Result<f32, Error> {
     let fee_val = {
         let mut pairs = estimates
             .into_iter()
@@ -54,12 +47,60 @@ fn into_fee_rate(target: usize, estimates: HashMap<String, f64>) -> Result<FeeRa
             .map(|(_, v)| v)
             .unwrap_or(1.0)
     };
-    Ok(FeeRate::from_sat_per_vb(fee_val as f32))
+    Ok(fee_val as f32)
+}
+
+#[derive(Debug, Clone)]
+pub struct Builder {
+    pub base_url: String,
+    /// Optional URL of the proxy to use to make requests to the Esplora server
+    ///
+    /// The string should be formatted as: `<protocol>://<user>:<password>@host:<port>`.
+    ///
+    /// Note that the format of this value and the supported protocols change slightly between the
+    /// blocking version of the client (using `ureq`) and the async version (using `reqwest`). For more
+    /// details check with the documentation of the two crates. Both of them are compiled with
+    /// the `socks` feature enabled.
+    ///
+    /// The proxy is ignored when targeting `wasm32`.
+    pub proxy: Option<String>,
+    /// Socket timeout.
+    pub timeout: Option<u64>,
+}
+
+impl Builder {
+    pub fn new(base_url: &str) -> Self {
+        Builder {
+            base_url: base_url.to_string(),
+            proxy: None,
+            timeout: None,
+        }
+    }
+
+    pub fn proxy(mut self, proxy: &str) -> Self {
+        self.proxy = Some(proxy.to_string());
+        self
+    }
+
+    pub fn timeout(mut self, timeout: u64) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    #[cfg(feature = "blocking")]
+    pub fn build_blocking(self) -> Result<BlockingClient, Error> {
+        BlockingClient::from_builder(self)
+    }
+
+    #[cfg(feature = "async")]
+    pub fn build_async(self) -> Result<AsyncClient, Error> {
+        AsyncClient::from_builder(self)
+    }
 }
 
 /// Errors that can happen during a sync with [`EsploraBlockchain`]
 #[derive(Debug)]
-pub enum EsploraError {
+pub enum Error {
     /// Error during ureq HTTP request
     #[cfg(feature = "ureq")]
     Ureq(::ureq::Error),
@@ -90,74 +131,33 @@ pub enum EsploraError {
     HeaderHashNotFound(BlockHash),
 }
 
-impl fmt::Display for EsploraError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
-/// Configuration for an [`EsploraBlockchain`]
-#[derive(Debug, serde::Deserialize, serde::Serialize, Clone, PartialEq)]
-pub struct EsploraBlockchainConfig {
-    /// Base URL of the esplora service
-    ///
-    /// eg. `https://blockstream.info/api/`
-    pub base_url: String,
-    /// Optional URL of the proxy to use to make requests to the Esplora server
-    ///
-    /// The string should be formatted as: `<protocol>://<user>:<password>@host:<port>`.
-    ///
-    /// Note that the format of this value and the supported protocols change slightly between the
-    /// sync version of esplora (using `ureq`) and the async version (using `reqwest`). For more
-    /// details check with the documentation of the two crates. Both of them are compiled with
-    /// the `socks` feature enabled.
-    ///
-    /// The proxy is ignored when targeting `wasm32`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub proxy: Option<String>,
-    /// Number of parallel requests sent to the esplora service (default: 4)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub concurrency: Option<u8>,
-    /// Stop searching addresses for transactions after finding an unused gap of this length.
-    pub stop_gap: usize,
-    /// Socket timeout.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub timeout: Option<u64>,
-}
-
-impl EsploraBlockchainConfig {
-    /// create a config with default values given the base url and stop gap
-    pub fn new(base_url: String, stop_gap: usize) -> Self {
-        Self {
-            base_url,
-            proxy: None,
-            timeout: None,
-            stop_gap,
-            concurrency: None,
+macro_rules! impl_error {
+    ( $from:ty, $to:ident ) => {
+        impl_error!($from, $to, Error);
+    };
+    ( $from:ty, $to:ident, $impl_for:ty ) => {
+        impl std::convert::From<$from> for $impl_for {
+            fn from(err: $from) -> Self {
+                <$impl_for>::$to(err)
+            }
         }
-    }
+    };
 }
 
-impl std::error::Error for EsploraError {}
+impl std::error::Error for Error {}
 
-#[cfg(feature = "ureq")]
-impl_error!(::ureq::Transport, UreqTransport, EsploraError);
-#[cfg(feature = "reqwest")]
-impl_error!(::reqwest::Error, Reqwest, EsploraError);
-impl_error!(io::Error, Io, EsploraError);
-impl_error!(std::num::ParseIntError, Parsing, EsploraError);
-impl_error!(consensus::encode::Error, BitcoinEncoding, EsploraError);
-impl_error!(bitcoin::hashes::hex::Error, Hex, EsploraError);
-
-#[cfg(test)]
-#[cfg(feature = "test-esplora")]
-crate::bdk_blockchain_tests! {
-    fn test_instance(test_client: &TestClient) -> EsploraBlockchain {
-        EsploraBlockchain::new(&format!("http://{}",test_client.electrsd.esplora_url.as_ref().unwrap()), 20)
-    }
-}
-
-const DEFAULT_CONCURRENT_REQUESTS: u8 = 4;
+impl_error!(::ureq::Transport, UreqTransport, Error);
+impl_error!(::reqwest::Error, Reqwest, Error);
+impl_error!(io::Error, Io, Error);
+impl_error!(std::num::ParseIntError, Parsing, Error);
+impl_error!(consensus::encode::Error, BitcoinEncoding, Error);
+impl_error!(bitcoin::hashes::hex::Error, Hex, Error);
 
 #[cfg(test)]
 mod test {
@@ -208,39 +208,5 @@ mod test {
             FeeRate::from_sat_per_vb(1.015),
             "should inherit from value for 25"
         );
-    }
-
-    #[test]
-    #[cfg(feature = "test-esplora")]
-    fn test_esplora_with_variable_configs() {
-        use crate::testutils::{
-            blockchain_tests::TestClient,
-            configurable_blockchain_tests::ConfigurableBlockchainTester,
-        };
-
-        struct EsploraTester;
-
-        impl ConfigurableBlockchainTester<EsploraBlockchain> for EsploraTester {
-            const BLOCKCHAIN_NAME: &'static str = "Esplora";
-
-            fn config_with_stop_gap(
-                &self,
-                test_client: &mut TestClient,
-                stop_gap: usize,
-            ) -> Option<EsploraBlockchainConfig> {
-                Some(EsploraBlockchainConfig {
-                    base_url: format!(
-                        "http://{}",
-                        test_client.electrsd.esplora_url.as_ref().unwrap()
-                    ),
-                    proxy: None,
-                    concurrency: None,
-                    stop_gap: stop_gap,
-                    timeout: None,
-                })
-            }
-        }
-
-        EsploraTester.run();
     }
 }
