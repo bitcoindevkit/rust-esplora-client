@@ -1,6 +1,6 @@
 //! Esplora
 //!
-//! This module defines a [`Builder`] struct that can create a blocking or 
+//! This module defines a [`Builder`] struct that can create a blocking or
 //! async Esplora client to query an Esplora backend:
 //!
 //! ## Examples
@@ -32,13 +32,16 @@ use bitcoin::consensus;
 use bitcoin::{BlockHash, Txid};
 
 pub mod api;
-#[cfg(feature = "async")]
+
+#[cfg(any(feature = "async", feature = "async-https"))]
 pub mod r#async;
 #[cfg(feature = "blocking")]
 pub mod blocking;
 
 pub use api::*;
+#[cfg(feature = "blocking")]
 pub use blocking::BlockingClient;
+#[cfg(any(feature = "async", feature = "async-https"))]
 pub use r#async::AsyncClient;
 
 pub fn convert_fee_rate(target: usize, estimates: HashMap<String, f64>) -> Result<f32, Error> {
@@ -109,13 +112,13 @@ impl Builder {
 #[derive(Debug)]
 pub enum Error {
     /// Error during ureq HTTP request
-    #[cfg(feature = "ureq")]
+    #[cfg(feature = "blocking")]
     Ureq(::ureq::Error),
     /// Transport error during the ureq HTTP call
-    #[cfg(feature = "ureq")]
+    #[cfg(feature = "blocking")]
     UreqTransport(::ureq::Transport),
     /// Error during reqwest HTTP request
-    #[cfg(feature = "reqwest")]
+    #[cfg(any(feature = "async", feature = "async-https"))]
     Reqwest(::reqwest::Error),
     /// HTTP response error
     HttpResponse(u16),
@@ -158,8 +161,9 @@ macro_rules! impl_error {
 }
 
 impl std::error::Error for Error {}
-
+#[cfg(feature = "blocking")]
 impl_error!(::ureq::Transport, UreqTransport, Error);
+#[cfg(any(feature = "async", feature = "async-https"))]
 impl_error!(::reqwest::Error, Reqwest, Error);
 impl_error!(io::Error, Io, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
@@ -206,10 +210,7 @@ mod test {
 "#,
         )
         .unwrap();
-        assert_eq!(
-            convert_fee_rate(6, esplora_fees.clone()).unwrap(),
-            2.236
-        );
+        assert_eq!(convert_fee_rate(6, esplora_fees.clone()).unwrap(), 2.236);
         assert_eq!(
             convert_fee_rate(26, esplora_fees).unwrap(),
             1.015,
