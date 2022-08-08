@@ -1,0 +1,33 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install rustup
+      run: curl https://sh.rustup.rs -sSf | sh -s -- -y
+    - name: Set default toolchain
+      run: $HOME/.cargo/bin/rustup default stable
+    - name: Set profile
+      run: $HOME/.cargo/bin/rustup set profile minimal
+    - name: Fmt
+      run: cargo fmt -- --check --verbose
+    - name: Build
+      run: cargo build --verbose --all-features
+    - name: Test
+      run: cargo test --verbose --all-features
+    - run: cargo check --verbose --no-default-features --features=blocking
+    - run: cargo check --verbose --no-default-features --features=async
+    - run: cargo check --verbose --no-default-features --features=async-https
