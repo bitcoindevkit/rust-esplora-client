@@ -1,16 +1,19 @@
 //! structs from the esplora API
 //!
 //! see: <https://github.com/Blockstream/esplora/blob/master/API.md>
-use crate::BlockTime;
+
+use bitcoin::hashes::hex::FromHex;
 use bitcoin::{OutPoint, Script, Transaction, TxIn, TxOut, Txid, Witness};
 
-#[derive(serde::Deserialize, Clone, Debug)]
+use serde::Deserialize;
+
+#[derive(Deserialize, Clone, Debug)]
 pub struct PrevOut {
     pub value: u64,
     pub scriptpubkey: Script,
 }
 
-#[derive(serde::Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct Vin {
     pub txid: Txid,
     pub vout: u32,
@@ -23,20 +26,20 @@ pub struct Vin {
     pub is_coinbase: bool,
 }
 
-#[derive(serde::Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct Vout {
     pub value: u64,
     pub scriptpubkey: Script,
 }
 
-#[derive(serde::Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct TxStatus {
     pub confirmed: bool,
     pub block_height: Option<u32>,
     pub block_time: Option<u64>,
 }
 
-#[derive(serde::Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct Tx {
     pub txid: Txid,
     pub version: i32,
@@ -45,6 +48,12 @@ pub struct Tx {
     pub vout: Vec<Vout>,
     pub status: TxStatus,
     pub fee: u64,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct BlockTime {
+    pub timestamp: u64,
+    pub height: u32,
 }
 
 impl Tx {
@@ -107,8 +116,6 @@ fn deserialize_witness<'de, D>(d: D) -> Result<Vec<Vec<u8>>, D::Error>
 where
     D: serde::de::Deserializer<'de>,
 {
-    use crate::serde::Deserialize;
-    use bitcoin::hashes::hex::FromHex;
     let list = Vec::<String>::deserialize(d)?;
     list.into_iter()
         .map(|hex_str| Vec::<u8>::from_hex(&hex_str))
