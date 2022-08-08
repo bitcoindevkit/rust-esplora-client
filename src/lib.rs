@@ -1,22 +1,29 @@
 //! Esplora
 //!
-//! This module defines a [`EsploraBlockchain`] struct that can query an Esplora
-//! backend populate the wallet's [database](crate::database::Database) by:
+//! This module defines a [`Builder`] struct that can create a blocking or 
+//! async Esplora client to query an Esplora backend:
 //!
-//! ## Example
+//! ## Examples
 //!
 //! ```no_run
-//! # use bdk::blockchain::esplora::EsploraBlockchain;
-//! let blockchain = EsploraBlockchain::new("https://blockstream.info/testnet/api", 20);
-//! # Ok::<(), bdk::Error>(())
+//! # use esplora_client::Builder;
+//! let builder = Builder::new("https://blockstream.info/testnet/api");
+//! let blocking_client = builder.build_blocking();
+//! # Ok::<(), esplora_client::Error>(());
+//! ```
+//! ```no_run
+//! # use esplora_client::Builder;
+//! let builder = Builder::new("https://blockstream.info/testnet/api");
+//! let async_client = builder.build_async();
+//! # Ok::<(), esplora_client::Error>(());
 //! ```
 //!
-//! Esplora blockchain can use either `ureq` or `reqwest` for the HTTP client
+//! Esplora client can use either `ureq` or `reqwest` for the HTTP client
 //! depending on your needs (blocking or async respectively).
 //!
 //! Please note, to configure the Esplora HTTP client correctly use one of:
-//! Blocking:  --features='esplora,ureq'
-//! Async:     --features='async-interface,esplora,reqwest' --no-default-features
+//! Blocking:  --features='blocking'
+//! Async:     --features='async'
 use std::collections::HashMap;
 use std::fmt;
 use std::io;
@@ -200,12 +207,12 @@ mod test {
         )
         .unwrap();
         assert_eq!(
-            into_fee_rate(6, esplora_fees.clone()).unwrap(),
-            FeeRate::from_sat_per_vb(2.236)
+            convert_fee_rate(6, esplora_fees.clone()).unwrap(),
+            2.236
         );
         assert_eq!(
-            into_fee_rate(26, esplora_fees).unwrap(),
-            FeeRate::from_sat_per_vb(1.015),
+            convert_fee_rate(26, esplora_fees).unwrap(),
+            1.015,
             "should inherit from value for 25"
         );
     }
