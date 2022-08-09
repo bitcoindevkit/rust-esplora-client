@@ -3,17 +3,17 @@
 //! see: <https://github.com/Blockstream/esplora/blob/master/API.md>
 
 use bitcoin::hashes::hex::FromHex;
-use bitcoin::{OutPoint, Script, Transaction, TxIn, TxOut, Txid, Witness};
+use bitcoin::{BlockHash, OutPoint, Script, Transaction, TxIn, TxOut, Txid, Witness};
 
 use serde::Deserialize;
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug, PartialEq)]
 pub struct PrevOut {
     pub value: u64,
     pub scriptpubkey: Script,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug, PartialEq)]
 pub struct Vin {
     pub txid: Txid,
     pub vout: u32,
@@ -26,17 +26,33 @@ pub struct Vin {
     pub is_coinbase: bool,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug, PartialEq)]
 pub struct Vout {
     pub value: u64,
     pub scriptpubkey: Script,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug, PartialEq)]
 pub struct TxStatus {
     pub confirmed: bool,
     pub block_height: Option<u32>,
+    pub block_hash: Option<BlockHash>,
     pub block_time: Option<u64>,
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct MerkleProof {
+    block_height: u32,
+    merkle: Vec<Txid>,
+    pos: usize,
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct OutputStatus {
+    spent: bool,
+    txid: Option<Txid>,
+    vin: Option<Vin>,
+    status: Option<TxStatus>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -93,6 +109,7 @@ impl Tx {
                 confirmed: true,
                 block_height: Some(height),
                 block_time: Some(timestamp),
+                ..
             } => Some(BlockTime { timestamp, height }),
             _ => None,
         }
