@@ -26,7 +26,7 @@ use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::{BlockHeader, Script, Transaction, Txid};
 
-use crate::{Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus, Vout};
+use crate::{Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
 #[derive(Debug, Clone)]
 pub struct BlockingClient {
@@ -149,15 +149,15 @@ impl BlockingClient {
         }
     }
 
-    /// Get the spending status of an output given a [`Txid`] and [`Vout`].
+    /// Get the spending status of an output given a [`Txid`] and the output index.
     pub fn get_output_status(
         &self,
         txid: &Txid,
-        vout: &Vout,
+        index: u64,
     ) -> Result<Option<OutputStatus>, Error> {
         let resp = self
             .agent
-            .get(&format!("{}/tx/{}/outspend/{}", self.url, txid, vout.value))
+            .get(&format!("{}/tx/{}/outspend/{}", self.url, txid, index))
             .call();
 
         match resp {
