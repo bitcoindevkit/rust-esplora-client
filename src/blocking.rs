@@ -26,7 +26,7 @@ use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::{BlockHeader, Script, Transaction, Txid};
 
-use crate::{Builder, Error, Tx};
+use crate::{Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus, Vout};
 
 #[derive(Debug, Clone)]
 pub struct BlockingClient {
@@ -74,12 +74,31 @@ impl BlockingClient {
         }
     }
 
-    /// Get a [`Transaction`] given its [`Txid`]
+    /// Get a [`Transaction`] given its [`Txid`].
     pub fn get_tx_no_opt(&self, txid: &Txid) -> Result<Transaction, Error> {
         match self.get_tx(txid) {
             Ok(Some(tx)) => Ok(tx),
             Ok(None) => Err(Error::TransactionNotFound(*txid)),
             Err(e) => Err(e),
+        }
+    }
+
+    /// Get the status of a [`Transaction`] given its [`Txid`].
+    pub fn get_tx_status(&self, txid: &Txid) -> Result<Option<TxStatus>, Error> {
+        let resp = self
+            .agent
+            .get(&format!("{}/tx/{}/status", self.url, txid))
+            .call();
+
+        match resp {
+            Ok(resp) => Ok(Some(resp.into_json()?)),
+            Err(ureq::Error::Status(code, _)) => {
+                if is_status_not_found(code) {
+                    return Ok(None);
+                }
+                Err(Error::HttpResponse(code))
+            }
+            Err(e) => Err(Error::Ureq(e)),
         }
     }
 
@@ -107,6 +126,48 @@ impl BlockingClient {
         match resp {
             Ok(resp) => Ok(deserialize(&Vec::from_hex(&resp.into_string()?)?)?),
             Err(ureq::Error::Status(code, _)) => Err(Error::HttpResponse(code)),
+            Err(e) => Err(Error::Ureq(e)),
+        }
+    }
+
+    /// Get a merkle inclusion proof for a [`Transaction`] with the given [`Txid`].
+    pub fn get_merkle_proof(&self, txid: &Txid) -> Result<Option<MerkleProof>, Error> {
+        let resp = self
+            .agent
+            .get(&format!("{}/tx/{}/merkle-proof", self.url, txid))
+            .call();
+
+        match resp {
+            Ok(resp) => Ok(Some(resp.into_json()?)),
+            Err(ureq::Error::Status(code, _)) => {
+                if is_status_not_found(code) {
+                    return Ok(None);
+                }
+                Err(Error::HttpResponse(code))
+            }
+            Err(e) => Err(Error::Ureq(e)),
+        }
+    }
+
+    /// Get the spending status of an output given a [`Txid`] and [`Vout`].
+    pub fn get_output_status(
+        &self,
+        txid: &Txid,
+        vout: &Vout,
+    ) -> Result<Option<OutputStatus>, Error> {
+        let resp = self
+            .agent
+            .get(&format!("{}/tx/{}/outspend/{}", self.url, txid, vout.value))
+            .call();
+
+        match resp {
+            Ok(resp) => Ok(Some(resp.into_json()?)),
+            Err(ureq::Error::Status(code, _)) => {
+                if is_status_not_found(code) {
+                    return Ok(None);
+                }
+                Err(Error::HttpResponse(code))
+            }
             Err(e) => Err(Error::Ureq(e)),
         }
     }

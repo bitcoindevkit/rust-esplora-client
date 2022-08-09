@@ -23,7 +23,7 @@ use log::{debug, error, info, trace};
 
 use reqwest::{Client, StatusCode};
 
-use crate::{Builder, Error, Tx};
+use crate::{Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus, Vout};
 
 #[derive(Debug)]
 pub struct AsyncClient {
@@ -69,13 +69,28 @@ impl AsyncClient {
         Ok(Some(deserialize(&resp.error_for_status()?.bytes().await?)?))
     }
 
-    /// Get a [`Transaction`] given its [`Txid`]
+    /// Get a [`Transaction`] given its [`Txid`].
     pub async fn get_tx_no_opt(&self, txid: &Txid) -> Result<Transaction, Error> {
         match self.get_tx(txid).await {
             Ok(Some(tx)) => Ok(tx),
             Ok(None) => Err(Error::TransactionNotFound(*txid)),
             Err(e) => Err(e),
         }
+    }
+
+    /// Get the status of a [`Transaction`] given its [`Txid`].
+    pub async fn get_tx_status(&self, txid: &Txid) -> Result<Option<TxStatus>, Error> {
+        let resp = self
+            .client
+            .get(&format!("{}/tx/{}/status", self.url, txid))
+            .send()
+            .await?;
+
+        if let StatusCode::NOT_FOUND = resp.status() {
+            return Ok(None);
+        }
+
+        Ok(Some(resp.error_for_status()?.json().await?))
     }
 
     /// Get a [`BlockHeader`] given a particular block height.
@@ -102,6 +117,40 @@ impl AsyncClient {
         let header = deserialize(&Vec::from_hex(&resp.text().await?)?)?;
 
         Ok(header)
+    }
+
+    /// Get a merkle inclusion proof for a [`Transaction`] with the given [`Txid`].
+    pub async fn get_merkle_proof(&self, tx_hash: &Txid) -> Result<Option<MerkleProof>, Error> {
+        let resp = self
+            .client
+            .get(&format!("{}/tx/{}/merkle-proof", self.url, tx_hash))
+            .send()
+            .await?;
+
+        if let StatusCode::NOT_FOUND = resp.status() {
+            return Ok(None);
+        }
+
+        Ok(Some(resp.error_for_status()?.json().await?))
+    }
+
+    /// Get the spending status of an output given a [`Txid`] and [`Vout`].
+    pub async fn get_output_status(
+        &self,
+        txid: &Txid,
+        vout: &Vout,
+    ) -> Result<Option<OutputStatus>, Error> {
+        let resp = self
+            .client
+            .get(&format!("{}/tx/{}/outspend/{}", self.url, txid, vout.value))
+            .send()
+            .await?;
+
+        if let StatusCode::NOT_FOUND = resp.status() {
+            return Ok(None);
+        }
+
+        Ok(Some(resp.error_for_status()?.json().await?))
     }
 
     /// Broadcast a [`Transaction`] to Esplora
