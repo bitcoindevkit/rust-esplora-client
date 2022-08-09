@@ -1,29 +1,47 @@
-//! Esplora
+//! An extensible blocking/async Esplora client
 //!
-//! This module defines a [`Builder`] struct that can create a blocking or
-//! async Esplora client to query an Esplora backend:
+//! This library provides an extensible blocking and
+//! async Esplora client to query Esplora's backend.
 //!
-//! ## Examples
+//! The library provides the possibility to build a blocking
+//! client using [`ureq`] and an async client using [`reqwest`].
+//! The library supports communicating to Esplora via a proxy
+//! and also using TLS (SSL) for secure communication.
+//!
+//!
+//! ## Usage
+//!
+//! You can create a blocking client as follows:
 //!
 //! ```no_run
-//! # use esplora_client::Builder;
+//! use esplora_client::Builder;
 //! let builder = Builder::new("https://blockstream.info/testnet/api");
 //! let blocking_client = builder.build_blocking();
 //! # Ok::<(), esplora_client::Error>(());
 //! ```
+//!
+//! Here is an example of how to create an asynchronous client.
+//!
 //! ```no_run
-//! # use esplora_client::Builder;
+//! use esplora_client::Builder;
 //! let builder = Builder::new("https://blockstream.info/testnet/api");
 //! let async_client = builder.build_async();
 //! # Ok::<(), esplora_client::Error>(());
 //! ```
 //!
-//! Esplora client can use either `ureq` or `reqwest` for the HTTP client
-//! depending on your needs (blocking or async respectively).
+//! ## Features
 //!
-//! Please note, to configure the Esplora HTTP client correctly use one of:
-//! Blocking:  --features='blocking'
-//! Async:     --features='async'
+//! By default the library enables all features. To specify
+//! specific features, set `default-features` to `false` in your `Cargo.toml`
+//! and specify the features you want. This will look like this:
+//!
+//! `esplora_client = { version = "*", default-features = false, features = ["blocking"] }`
+//!
+//! * `blocking` enables [`ureq`], the blocking client with proxy and TLS (SSL) capabilities.
+//! * `async` enables [`reqwest`], the async client with proxy capabilities.
+//! * `async-https` enables [`reqwest`], the async client with support for proxying and TLS (SSL).
+//!
+//!
 use std::collections::HashMap;
 use std::fmt;
 use std::io;
@@ -44,6 +62,8 @@ pub use blocking::BlockingClient;
 #[cfg(any(feature = "async", feature = "async-https"))]
 pub use r#async::AsyncClient;
 
+/// Get a fee value in sats/vbytes from the estimates
+/// that matches the confirmation target set as parameter.
 pub fn convert_fee_rate(target: usize, estimates: HashMap<String, f64>) -> Result<f32, Error> {
     let fee_val = {
         let mut pairs = estimates
@@ -79,6 +99,7 @@ pub struct Builder {
 }
 
 impl Builder {
+    /// Instantiate a new builder
     pub fn new(base_url: &str) -> Self {
         Builder {
             base_url: base_url.to_string(),
@@ -87,28 +108,32 @@ impl Builder {
         }
     }
 
+    /// Set the proxy of the builder
     pub fn proxy(mut self, proxy: &str) -> Self {
         self.proxy = Some(proxy.to_string());
         self
     }
 
+    /// Set the timeout of the builder
     pub fn timeout(mut self, timeout: u64) -> Self {
         self.timeout = Some(timeout);
         self
     }
 
+    /// build a blocking client from builder
     #[cfg(feature = "blocking")]
     pub fn build_blocking(self) -> Result<BlockingClient, Error> {
         BlockingClient::from_builder(self)
     }
 
+    // build an asynchronous client from builder
     #[cfg(feature = "async")]
     pub fn build_async(self) -> Result<AsyncClient, Error> {
         AsyncClient::from_builder(self)
     }
 }
 
-/// Errors that can happen during a sync with [`EsploraBlockchain`]
+/// Errors that can happen during a sync with `Esplora`
 #[derive(Debug)]
 pub enum Error {
     /// Error during ureq HTTP request

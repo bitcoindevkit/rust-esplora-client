@@ -35,6 +35,7 @@ pub struct BlockingClient {
 }
 
 impl BlockingClient {
+    /// build a blocking client from a [`Builder`]
     pub fn from_builder(builder: Builder) -> Result<Self, Error> {
         let mut agent_builder = ureq::AgentBuilder::new();
 
@@ -49,10 +50,12 @@ impl BlockingClient {
         Ok(Self::from_agent(builder.base_url, agent_builder.build()))
     }
 
+    /// build a blocking client from an [`Agent`]
     pub fn from_agent(url: String, agent: Agent) -> Self {
         BlockingClient { url, agent }
     }
 
+    /// Get a [`Transaction`] option given its [`Txid`]
     pub fn get_tx(&self, txid: &Txid) -> Result<Option<Transaction>, Error> {
         let resp = self
             .agent
@@ -71,6 +74,7 @@ impl BlockingClient {
         }
     }
 
+    /// Get a [`Transaction`] given its [`Txid`]
     pub fn get_tx_no_opt(&self, txid: &Txid) -> Result<Transaction, Error> {
         match self.get_tx(txid) {
             Ok(Some(tx)) => Ok(tx),
@@ -79,6 +83,7 @@ impl BlockingClient {
         }
     }
 
+    /// Get a [`BlockHeader`] given a particular block height.
     pub fn get_header(&self, block_height: u32) -> Result<BlockHeader, Error> {
         let resp = self
             .agent
@@ -106,6 +111,7 @@ impl BlockingClient {
         }
     }
 
+    /// Broadcast a [`Transaction`] to Esplora
     pub fn broadcast(&self, transaction: &Transaction) -> Result<(), Error> {
         let resp = self
             .agent
@@ -119,6 +125,7 @@ impl BlockingClient {
         }
     }
 
+    /// Get the current height of the blockchain tip
     pub fn get_height(&self) -> Result<u32, Error> {
         let resp = self
             .agent
@@ -132,6 +139,8 @@ impl BlockingClient {
         }
     }
 
+    /// Get an map where the key is the confirmation target (in number of blocks)
+    /// and the value is the estimated feerate (in sat/vB).
     pub fn get_fee_estimates(&self) -> Result<HashMap<String, f64>, Error> {
         let resp = self
             .agent
@@ -150,6 +159,9 @@ impl BlockingClient {
         Ok(map)
     }
 
+    /// Get confirmed transaction history for the specified address/scripthash,
+    /// sorted with newest first. Returns 25 transactions per page.
+    /// More can be requested by specifying the last txid seen by the previous query.
     pub fn scripthash_txs(
         &self,
         script: &Script,

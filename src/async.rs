@@ -32,6 +32,7 @@ pub struct AsyncClient {
 }
 
 impl AsyncClient {
+    /// build an async client from a builder
     pub fn from_builder(builder: Builder) -> Result<Self, Error> {
         let mut client_builder = Client::builder();
 
@@ -48,10 +49,12 @@ impl AsyncClient {
         Ok(Self::from_client(builder.base_url, client_builder.build()?))
     }
 
+    /// build an async client from the base url and [`Client`]
     pub fn from_client(url: String, client: Client) -> Self {
         AsyncClient { url, client }
     }
 
+    /// Get a [`Transaction`] option given its [`Txid`]
     pub async fn get_tx(&self, txid: &Txid) -> Result<Option<Transaction>, Error> {
         let resp = self
             .client
@@ -66,6 +69,7 @@ impl AsyncClient {
         Ok(Some(deserialize(&resp.error_for_status()?.bytes().await?)?))
     }
 
+    /// Get a [`Transaction`] given its [`Txid`]
     pub async fn get_tx_no_opt(&self, txid: &Txid) -> Result<Transaction, Error> {
         match self.get_tx(txid).await {
             Ok(Some(tx)) => Ok(tx),
@@ -74,6 +78,7 @@ impl AsyncClient {
         }
     }
 
+    /// Get a [`BlockHeader`] given a particular block height.
     pub async fn get_header(&self, block_height: u32) -> Result<BlockHeader, Error> {
         let resp = self
             .client
@@ -99,6 +104,7 @@ impl AsyncClient {
         Ok(header)
     }
 
+    /// Broadcast a [`Transaction`] to Esplora
     pub async fn broadcast(&self, transaction: &Transaction) -> Result<(), Error> {
         self.client
             .post(&format!("{}/tx", self.url))
@@ -110,6 +116,7 @@ impl AsyncClient {
         Ok(())
     }
 
+    /// Get the current height of the blockchain tip
     pub async fn get_height(&self) -> Result<u32, Error> {
         let req = self
             .client
@@ -120,6 +127,9 @@ impl AsyncClient {
         Ok(req.error_for_status()?.text().await?.parse()?)
     }
 
+    /// Get confirmed transaction history for the specified address/scripthash,
+    /// sorted with newest first. Returns 25 transactions per page.
+    /// More can be requested by specifying the last txid seen by the previous query.
     pub async fn scripthash_txs(
         &self,
         script: &Script,
@@ -143,6 +153,8 @@ impl AsyncClient {
             .await?)
     }
 
+    /// Get an map where the key is the confirmation target (in number of blocks)
+    /// and the value is the estimated feerate (in sat/vB).
     pub async fn get_fee_estimates(&self) -> Result<HashMap<String, f64>, Error> {
         Ok(self
             .client
