@@ -51,7 +51,7 @@ pub struct MerkleProof {
 pub struct OutputStatus {
     spent: bool,
     txid: Option<Txid>,
-    vin: Option<Vin>,
+    vin: Option<u64>,
     status: Option<TxStatus>,
 }
 

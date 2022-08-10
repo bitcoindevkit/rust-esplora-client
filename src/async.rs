@@ -23,7 +23,7 @@ use log::{debug, error, info, trace};
 
 use reqwest::{Client, StatusCode};
 
-use crate::{Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus, Vout};
+use crate::{Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
 #[derive(Debug)]
 pub struct AsyncClient {
@@ -134,15 +134,15 @@ impl AsyncClient {
         Ok(Some(resp.error_for_status()?.json().await?))
     }
 
-    /// Get the spending status of an output given a [`Txid`] and [`Vout`].
+    /// Get the spending status of an output given a [`Txid`] and the output index.
     pub async fn get_output_status(
         &self,
         txid: &Txid,
-        vout: &Vout,
+        index: u64,
     ) -> Result<Option<OutputStatus>, Error> {
         let resp = self
             .client
-            .get(&format!("{}/tx/{}/outspend/{}", self.url, txid, vout.value))
+            .get(&format!("{}/tx/{}/outspend/{}", self.url, txid, index))
             .send()
             .await?;
 
