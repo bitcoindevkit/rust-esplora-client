@@ -12,11 +12,12 @@
 //! Esplora by way of `reqwest` HTTP client.
 
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use bitcoin::consensus::{deserialize, serialize};
 use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::{sha256, Hash};
-use bitcoin::{BlockHeader, Script, Transaction, Txid};
+use bitcoin::{BlockHash, BlockHeader, Script, Transaction, Txid};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
@@ -174,6 +175,19 @@ impl AsyncClient {
             .await?;
 
         Ok(req.error_for_status()?.text().await?.parse()?)
+    }
+
+    /// Get the [`BlockHash`] of the current blockchain tip.
+    pub async fn get_tip_hash(&self) -> Result<BlockHash, Error> {
+        let resp = self
+            .client
+            .get(&format!("{}/blocks/tip/hash", self.url))
+            .send()
+            .await?;
+
+        Ok(BlockHash::from_str(
+            &resp.error_for_status()?.text().await?,
+        )?)
     }
 
     /// Get confirmed transaction history for the specified address/scripthash,

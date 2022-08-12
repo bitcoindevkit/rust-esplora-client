@@ -14,6 +14,7 @@
 use std::collections::HashMap;
 use std::io;
 use std::io::Read;
+use std::str::FromStr;
 use std::time::Duration;
 
 #[allow(unused_imports)]
@@ -24,7 +25,7 @@ use ureq::{Agent, Proxy, Response};
 use bitcoin::consensus::{deserialize, serialize};
 use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::{sha256, Hash};
-use bitcoin::{BlockHeader, Script, Transaction, Txid};
+use bitcoin::{BlockHash, BlockHeader, Script, Transaction, Txid};
 
 use crate::{Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
@@ -186,7 +187,7 @@ impl BlockingClient {
         }
     }
 
-    /// Get the current height of the blockchain tip
+    /// Get the height of the current blockchain tip.
     pub fn get_height(&self) -> Result<u32, Error> {
         let resp = self
             .agent
@@ -195,6 +196,20 @@ impl BlockingClient {
 
         match resp {
             Ok(resp) => Ok(resp.into_string()?.parse()?),
+            Err(ureq::Error::Status(code, _)) => Err(Error::HttpResponse(code)),
+            Err(e) => Err(Error::Ureq(e)),
+        }
+    }
+
+    /// Get the [`BlockHash`] of the current blockchain tip.
+    pub fn get_tip_hash(&self) -> Result<BlockHash, Error> {
+        let resp = self
+            .agent
+            .get(&format!("{}/blocks/tip/hash", self.url))
+            .call();
+
+        match resp {
+            Ok(resp) => Ok(BlockHash::from_str(&resp.into_string()?)?),
             Err(ureq::Error::Status(code, _)) => Err(Error::HttpResponse(code)),
             Err(e) => Err(Error::Ureq(e)),
         }
