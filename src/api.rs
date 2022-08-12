@@ -42,17 +42,17 @@ pub struct TxStatus {
 
 #[derive(Deserialize, Clone, Debug, PartialEq)]
 pub struct MerkleProof {
-    block_height: u32,
-    merkle: Vec<Txid>,
-    pos: usize,
+    pub block_height: u32,
+    pub merkle: Vec<Txid>,
+    pub pos: usize,
 }
 
 #[derive(Deserialize, Clone, Debug, PartialEq)]
 pub struct OutputStatus {
-    spent: bool,
-    txid: Option<Txid>,
-    vin: Option<u64>,
-    status: Option<TxStatus>,
+    pub spent: bool,
+    pub txid: Option<Txid>,
+    pub vin: Option<u64>,
+    pub status: Option<TxStatus>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
