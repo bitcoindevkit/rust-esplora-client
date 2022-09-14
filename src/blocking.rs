@@ -84,6 +84,34 @@ impl BlockingClient {
         }
     }
 
+    /// Get a [`Txid`] of a transaction given its index in a block with a given hash.
+    pub fn get_txid_at_block_index(
+        &self,
+        block_hash: &BlockHash,
+        index: usize,
+    ) -> Result<Option<Txid>, Error> {
+        let resp = self
+            .agent
+            .get(&format!(
+                "{}/block/{}/txid/{}",
+                self.url,
+                block_hash.to_string(),
+                index
+            ))
+            .call();
+
+        match resp {
+            Ok(resp) => Ok(Some(Txid::from_str(&resp.into_string()?)?)),
+            Err(ureq::Error::Status(code, _)) => {
+                if is_status_not_found(code) {
+                    return Ok(None);
+                }
+                Err(Error::HttpResponse(code))
+            }
+            Err(e) => Err(Error::Ureq(e)),
+        }
+    }
+
     /// Get the status of a [`Transaction`] given its [`Txid`].
     pub fn get_tx_status(&self, txid: &Txid) -> Result<Option<TxStatus>, Error> {
         let resp = self

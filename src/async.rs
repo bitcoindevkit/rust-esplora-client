@@ -79,6 +79,30 @@ impl AsyncClient {
         }
     }
 
+    /// Get a [`Txid`] of a transaction given its index in a block with a given hash.
+    pub async fn get_txid_at_block_index(
+        &self,
+        block_hash: &BlockHash,
+        index: usize,
+    ) -> Result<Option<Txid>, Error> {
+        let resp = self
+            .client
+            .get(&format!(
+                "{}/block/{}/txid/{}",
+                self.url,
+                block_hash.to_string(),
+                index
+            ))
+            .send()
+            .await?;
+
+        if let StatusCode::NOT_FOUND = resp.status() {
+            return Ok(None);
+        }
+
+        Ok(Some(Txid::from_str(&resp.text().await?)?))
+    }
+
     /// Get the status of a [`Transaction`] given its [`Txid`].
     pub async fn get_tx_status(&self, txid: &Txid) -> Result<Option<TxStatus>, Error> {
         let resp = self
