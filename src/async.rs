@@ -100,7 +100,7 @@ impl AsyncClient {
             return Ok(None);
         }
 
-        Ok(Some(deserialize(&Vec::from_hex(&resp.text().await?)?)?))
+        Ok(Some(Txid::from_str(&resp.text().await?)?))
     }
 
     /// Get the status of a [`Transaction`] given its [`Txid`].

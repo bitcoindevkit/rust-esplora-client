@@ -101,7 +101,7 @@ impl BlockingClient {
             .call();
 
         match resp {
-            Ok(resp) => Ok(Some(deserialize(&Vec::from_hex(&resp.into_string()?)?)?)),
+            Ok(resp) => Ok(Some(Txid::from_str(&resp.into_string()?)?)),
             Err(ureq::Error::Status(code, _)) => {
                 if is_status_not_found(code) {
                     return Ok(None);
