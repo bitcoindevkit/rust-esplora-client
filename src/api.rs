@@ -7,13 +7,13 @@ use bitcoin::{BlockHash, OutPoint, Script, Transaction, TxIn, TxOut, Txid, Witne
 
 use serde::Deserialize;
 
-#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct PrevOut {
     pub value: u64,
     pub scriptpubkey: Script,
 }
 
-#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Vin {
     pub txid: Txid,
     pub vout: u32,
@@ -26,13 +26,13 @@ pub struct Vin {
     pub is_coinbase: bool,
 }
 
-#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Vout {
     pub value: u64,
     pub scriptpubkey: Script,
 }
 
-#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct TxStatus {
     pub confirmed: bool,
     pub block_height: Option<u32>,
@@ -40,14 +40,14 @@ pub struct TxStatus {
     pub block_time: Option<u64>,
 }
 
-#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct MerkleProof {
     pub block_height: u32,
     pub merkle: Vec<Txid>,
     pub pos: usize,
 }
 
-#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct OutputStatus {
     pub spent: bool,
     pub txid: Option<Txid>,
