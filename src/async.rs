@@ -87,12 +87,7 @@ impl AsyncClient {
     ) -> Result<Option<Txid>, Error> {
         let resp = self
             .client
-            .get(&format!(
-                "{}/block/{}/txid/{}",
-                self.url,
-                block_hash.to_string(),
-                index
-            ))
+            .get(&format!("{}/block/{}/txid/{}", self.url, block_hash, index))
             .send()
             .await?;
 
