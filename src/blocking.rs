@@ -92,12 +92,7 @@ impl BlockingClient {
     ) -> Result<Option<Txid>, Error> {
         let resp = self
             .agent
-            .get(&format!(
-                "{}/block/{}/txid/{}",
-                self.url,
-                block_hash.to_string(),
-                index
-            ))
+            .get(&format!("{}/block/{}/txid/{}", self.url, block_hash, index))
             .call();
 
         match resp {
