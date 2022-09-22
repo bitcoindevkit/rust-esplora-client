@@ -205,19 +205,28 @@ mod test {
     };
     use electrum_client::ElectrumApi;
     use lazy_static::lazy_static;
+    use std::env;
     use std::sync::{Mutex, Once};
     use std::time::Duration;
 
     lazy_static! {
         static ref BITCOIND: BitcoinD = {
-            let bitcoind_exe =
-                bitcoind::downloaded_exe_path().expect("bitcoind version feature must be enabled");
+            let bitcoind_exe = env::var("BITCOIND_EXE")
+                .ok()
+                .or(bitcoind::downloaded_exe_path().ok())
+                .expect(
+                    "you should provide env var BITCOIND_EXE or specifiy a bitcoind version feature",
+                );
             let conf = bitcoind::Conf::default();
             BitcoinD::with_conf(bitcoind_exe, &conf).unwrap()
         };
         static ref ELECTRSD: ElectrsD = {
-            let electrs_exe =
-                electrsd::downloaded_exe_path().expect("electrs version feature must be enabled");
+            let electrs_exe = env::var("ELECTRS_EXE")
+                .ok()
+                .or(electrsd::downloaded_exe_path())
+                .expect(
+                    "you should provide env var ELECTRS_EXE or specifiy a electrsd version feature",
+                );
             let mut conf = electrsd::Conf::default();
             conf.http_enabled = true;
             ElectrsD::with_conf(electrs_exe, &BITCOIND, &conf).unwrap()
