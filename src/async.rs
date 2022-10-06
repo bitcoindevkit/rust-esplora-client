@@ -116,7 +116,11 @@ impl AsyncClient {
     /// Get a [`BlockHeader`] given a particular block height.
     pub async fn get_header(&self, block_height: u32) -> Result<BlockHeader, Error> {
         let block_hash = self.get_block_hash(block_height).await?;
+        self.get_header_by_hash(&block_hash).await
+    }
 
+    /// Get a [`BlockHeader`] given a particular block hash.
+    pub async fn get_header_by_hash(&self, block_hash: &BlockHash) -> Result<BlockHeader, Error> {
         let resp = self
             .client
             .get(&format!("{}/block/{}/header", self.url, block_hash))
