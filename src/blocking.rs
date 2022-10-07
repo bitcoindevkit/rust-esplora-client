@@ -27,7 +27,7 @@ use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::{BlockHash, BlockHeader, Script, Transaction, Txid};
 
-use crate::{Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
+use crate::{BlockStatus, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
 #[derive(Debug, Clone)]
 pub struct BlockingClient {
@@ -145,6 +145,20 @@ impl BlockingClient {
 
         match resp {
             Ok(resp) => Ok(deserialize(&Vec::from_hex(&resp.into_string()?)?)?),
+            Err(ureq::Error::Status(code, _)) => Err(Error::HttpResponse(code)),
+            Err(e) => Err(Error::Ureq(e)),
+        }
+    }
+
+    /// Get the [`BlockStatus`] given a particular [`BlockHash`].
+    pub fn get_block_status(&self, block_hash: &BlockHash) -> Result<BlockStatus, Error> {
+        let resp = self
+            .agent
+            .get(&format!("{}/block/{}/status", self.url, block_hash))
+            .call();
+
+        match resp {
+            Ok(resp) => Ok(resp.into_json()?),
             Err(ureq::Error::Status(code, _)) => Err(Error::HttpResponse(code)),
             Err(e) => Err(Error::Ureq(e)),
         }

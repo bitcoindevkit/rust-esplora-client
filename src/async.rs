@@ -24,7 +24,7 @@ use log::{debug, error, info, trace};
 
 use reqwest::{Client, StatusCode};
 
-use crate::{Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
+use crate::{BlockStatus, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
 #[derive(Debug)]
 pub struct AsyncClient {
@@ -134,6 +134,17 @@ impl AsyncClient {
         let header = deserialize(&Vec::from_hex(&resp.text().await?)?)?;
 
         Ok(header)
+    }
+
+    /// Get the [`BlockStatus`] given a particular [`BlockHash`].
+    pub async fn get_block_status(&self, block_hash: &BlockHash) -> Result<BlockStatus, Error> {
+        let resp = self
+            .client
+            .get(&format!("{}/block/{}/status", self.url, block_hash))
+            .send()
+            .await?;
+
+        Ok(resp.error_for_status()?.json().await?)
     }
 
     /// Get a merkle inclusion proof for a [`Transaction`] with the given [`Txid`].
