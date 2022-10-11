@@ -547,6 +547,19 @@ mod test {
 
     #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
     #[tokio::test]
+    async fn test_get_block_hash() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let block_hash = BITCOIND.client.get_block_hash(21).unwrap();
+
+        let block_hash_blocking = blocking_client.get_block_hash(21).unwrap();
+        let block_hash_async = async_client.get_block_hash(21).await.unwrap();
+        assert_eq!(block_hash, block_hash_blocking);
+        assert_eq!(block_hash, block_hash_async);
+    }
+
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[tokio::test]
     async fn test_get_txid_at_block_index() {
         let (blocking_client, async_client) = setup_clients().await;
 
