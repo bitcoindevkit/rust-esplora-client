@@ -128,23 +128,11 @@ impl BlockingClient {
 
     /// Get a [`BlockHeader`] given a particular block height.
     pub fn get_header(&self, block_height: u32) -> Result<BlockHeader, Error> {
-        let resp = self
-            .agent
-            .get(&format!("{}/block-height/{}", self.url, block_height))
-            .call();
-
-        let bytes = match resp {
-            Ok(resp) => Ok(into_bytes(resp)?),
-            Err(ureq::Error::Status(code, _)) => Err(Error::HttpResponse(code)),
-            Err(e) => Err(Error::Ureq(e)),
-        }?;
-
-        let hash =
-            std::str::from_utf8(&bytes).map_err(|_| Error::HeaderHeightNotFound(block_height))?;
+        let block_hash = self.get_block_hash(block_height)?;
 
         let resp = self
             .agent
-            .get(&format!("{}/block/{}/header", self.url, hash))
+            .get(&format!("{}/block/{}/header", self.url, block_hash))
             .call();
 
         match resp {
@@ -231,7 +219,27 @@ impl BlockingClient {
             .get(&format!("{}/blocks/tip/hash", self.url))
             .call();
 
-        match resp {
+        Self::process_block_result(resp)
+    }
+
+    /// Get the [`BlockHash`] of a specific block height
+    pub fn get_block_hash(&self, block_height: u32) -> Result<BlockHash, Error> {
+        let resp = self
+            .agent
+            .get(&format!("{}/block-height/{}", self.url, block_height))
+            .call();
+
+        if let Err(ureq::Error::Status(code, _)) = resp {
+            if is_status_not_found(code) {
+                return Err(Error::HeaderHeightNotFound(block_height));
+            }
+        }
+
+        Self::process_block_result(resp)
+    }
+
+    fn process_block_result(response: Result<Response, ureq::Error>) -> Result<BlockHash, Error> {
+        match response {
             Ok(resp) => Ok(BlockHash::from_str(&resp.into_string()?)?),
             Err(ureq::Error::Status(code, _)) => Err(Error::HttpResponse(code)),
             Err(e) => Err(Error::Ureq(e)),

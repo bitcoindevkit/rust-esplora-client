@@ -115,22 +115,11 @@ impl AsyncClient {
 
     /// Get a [`BlockHeader`] given a particular block height.
     pub async fn get_header(&self, block_height: u32) -> Result<BlockHeader, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/block-height/{}", self.url, block_height))
-            .send()
-            .await?;
-
-        if let StatusCode::NOT_FOUND = resp.status() {
-            return Err(Error::HeaderHeightNotFound(block_height));
-        }
-        let bytes = resp.bytes().await?;
-        let hash =
-            std::str::from_utf8(&bytes).map_err(|_| Error::HeaderHeightNotFound(block_height))?;
+        let block_hash = self.get_block_hash(block_height).await?;
 
         let resp = self
             .client
-            .get(&format!("{}/block/{}/header", self.url, hash))
+            .get(&format!("{}/block/{}/header", self.url, block_hash))
             .send()
             .await?;
 
@@ -203,6 +192,23 @@ impl AsyncClient {
             .get(&format!("{}/blocks/tip/hash", self.url))
             .send()
             .await?;
+
+        Ok(BlockHash::from_str(
+            &resp.error_for_status()?.text().await?,
+        )?)
+    }
+
+    /// Get the [`BlockHash`] of a specific block height
+    pub async fn get_block_hash(&self, block_height: u32) -> Result<BlockHash, Error> {
+        let resp = self
+            .client
+            .get(&format!("{}/block-height/{}", self.url, block_height))
+            .send()
+            .await?;
+
+        if let StatusCode::NOT_FOUND = resp.status() {
+            return Err(Error::HeaderHeightNotFound(block_height));
+        }
 
         Ok(BlockHash::from_str(
             &resp.error_for_status()?.text().await?,
