@@ -450,10 +450,13 @@ mod test {
 
     #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
     #[tokio::test]
-    async fn test_get_header() {
+    async fn test_get_header_by_hash() {
         let (blocking_client, async_client) = setup_clients().await;
-        let block_header = blocking_client.get_header(53).unwrap();
-        let block_header_async = async_client.get_header(53).await.unwrap();
+
+        let block_hash = BITCOIND.client.get_block_hash(23).unwrap();
+
+        let block_header = blocking_client.get_header_by_hash(&block_hash).unwrap();
+        let block_header_async = async_client.get_header_by_hash(&block_hash).await.unwrap();
         assert_eq!(block_header, block_header_async);
     }
 
