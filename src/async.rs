@@ -184,13 +184,13 @@ impl AsyncClient {
 
     /// Get the current height of the blockchain tip
     pub async fn get_height(&self) -> Result<u32, Error> {
-        let req = self
+        let resp = self
             .client
             .get(&format!("{}/blocks/tip/height", self.url))
             .send()
             .await?;
 
-        Ok(req.error_for_status()?.text().await?.parse()?)
+        Ok(resp.error_for_status()?.text().await?.parse()?)
     }
 
     /// Get the [`BlockHash`] of the current blockchain tip.
