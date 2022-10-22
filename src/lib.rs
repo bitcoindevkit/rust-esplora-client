@@ -462,6 +462,51 @@ mod test {
 
     #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
     #[tokio::test]
+    async fn test_get_block_status() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let block_hash = BITCOIND.client.get_block_hash(21).unwrap();
+        let next_block_hash = BITCOIND.client.get_block_hash(22).unwrap();
+
+        let expected = BlockStatus {
+            in_best_chain: true,
+            height: Some(21),
+            next_best: Some(next_block_hash),
+        };
+
+        let block_status = blocking_client.get_block_status(&block_hash).unwrap();
+        let block_status_async = async_client.get_block_status(&block_hash).await.unwrap();
+        assert_eq!(expected, block_status);
+        assert_eq!(expected, block_status_async);
+    }
+
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[tokio::test]
+    async fn test_get_non_existing_block_status() {
+        // Esplora returns the same status for orphaned blocks as for non-existing blocks:
+        // non-existing: https://blockstream.info/api/block/0000000000000000000000000000000000000000000000000000000000000000/status
+        // orphaned: https://blockstream.info/api/block/000000000000000000181b1a2354620f66868a723c0c4d5b24e4be8bdfc35a7f/status
+        // (Here the block is cited as orphaned: https://bitcoinchain.com/block_explorer/block/000000000000000000181b1a2354620f66868a723c0c4d5b24e4be8bdfc35a7f/ )
+        // For this reason, we only test for the non-existing case here.
+
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let block_hash = BlockHash::default();
+
+        let expected = BlockStatus {
+            in_best_chain: false,
+            height: None,
+            next_best: None,
+        };
+
+        let block_status = blocking_client.get_block_status(&block_hash).unwrap();
+        let block_status_async = async_client.get_block_status(&block_hash).await.unwrap();
+        assert_eq!(expected, block_status);
+        assert_eq!(expected, block_status_async);
+    }
+
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[tokio::test]
     async fn test_get_merkle_proof() {
         let (blocking_client, async_client) = setup_clients().await;
 
