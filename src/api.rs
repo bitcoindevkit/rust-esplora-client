@@ -83,7 +83,7 @@ impl Tx {
     pub fn to_tx(&self) -> Transaction {
         Transaction {
             version: self.version,
-            lock_time: self.locktime,
+            lock_time: bitcoin::PackedLockTime(self.locktime),
             input: self
                 .vin
                 .iter()
@@ -94,7 +94,7 @@ impl Tx {
                         vout: vin.vout,
                     },
                     script_sig: vin.scriptsig,
-                    sequence: vin.sequence,
+                    sequence: bitcoin::Sequence(vin.sequence),
                     witness: Witness::from_vec(vin.witness),
                 })
                 .collect(),

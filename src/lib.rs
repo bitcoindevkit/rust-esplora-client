@@ -204,6 +204,7 @@ mod test {
     use tokio::sync::Mutex;
     #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
     use {
+        bitcoin::hashes::Hash,
         bitcoin::Amount,
         electrsd::{
             bitcoind::bitcoincore_rpc::bitcoincore_rpc_json::AddressType,
@@ -491,7 +492,7 @@ mod test {
 
         let (blocking_client, async_client) = setup_clients().await;
 
-        let block_hash = BlockHash::default();
+        let block_hash = BlockHash::all_zeros();
 
         let expected = BlockStatus {
             in_best_chain: false,
