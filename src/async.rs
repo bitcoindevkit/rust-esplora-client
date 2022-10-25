@@ -114,7 +114,7 @@ impl AsyncClient {
     }
 
     #[deprecated(
-        since = "0.1.2",
+        since = "0.2.0",
         note = "Deprecated to improve alignment with Esplora API. Users should use `get_block_hash` and `get_header_by_hash` methods directly."
     )]
     /// Get a [`BlockHeader`] given a particular block height.
