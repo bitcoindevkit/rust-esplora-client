@@ -17,7 +17,7 @@ use std::str::FromStr;
 use bitcoin::consensus::{deserialize, serialize};
 use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::{sha256, Hash};
-use bitcoin::{BlockHash, BlockHeader, Script, Transaction, Txid};
+use bitcoin::{Block, BlockHash, BlockHeader, Script, Transaction, Txid};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
@@ -145,6 +145,20 @@ impl AsyncClient {
             .await?;
 
         Ok(resp.error_for_status()?.json().await?)
+    }
+
+    /// Get a [`Block`] given a particular [`BlockHash`].
+    pub async fn get_block_by_hash(&self, block_hash: &BlockHash) -> Result<Option<Block>, Error> {
+        let resp = self
+            .client
+            .get(&format!("{}/block/{}/raw", self.url, block_hash))
+            .send()
+            .await?;
+
+        if let StatusCode::NOT_FOUND = resp.status() {
+            return Ok(None);
+        }
+        Ok(Some(deserialize(&resp.error_for_status()?.bytes().await?)?))
     }
 
     /// Get a merkle inclusion proof for a [`Transaction`] with the given [`Txid`].
