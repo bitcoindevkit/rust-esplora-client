@@ -27,7 +27,7 @@ use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::{Block, BlockHash, BlockHeader, MerkleBlock, Script, Transaction, Txid};
 
-use crate::{BlockStatus, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
+use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
 #[derive(Debug, Clone)]
 pub struct BlockingClient {
@@ -342,6 +342,19 @@ impl BlockingClient {
             ),
             None => format!("{}/scripthash/{}/txs", self.url, script_hash),
         };
+        Ok(self.agent.get(&url).call()?.into_json()?)
+    }
+
+    /// Gets some recent block summaries starting at the tip or at `height` if provided.
+    ///
+    /// The maximum number of summaries returned depends on the backend itself: esplora returns `10`
+    /// while [mempool.space](https://mempool.space/docs/api) returns `15`.
+    pub fn get_blocks(&self, height: Option<u32>) -> Result<Vec<BlockSummary>, Error> {
+        let url = match height {
+            Some(height) => format!("{}/blocks/{}", self.url, height),
+            None => format!("{}/blocks", self.url),
+        };
+
         Ok(self.agent.get(&url).call()?.into_json()?)
     }
 }
