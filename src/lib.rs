@@ -508,6 +508,37 @@ mod test {
 
     #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
     #[tokio::test]
+    async fn test_get_block_by_hash() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let block_hash = BITCOIND.client.get_block_hash(21).unwrap();
+
+        let expected = Some(BITCOIND.client.get_block(&block_hash).unwrap());
+
+        let block = blocking_client.get_block_by_hash(&block_hash).unwrap();
+        let block_async = async_client.get_block_by_hash(&block_hash).await.unwrap();
+        assert_eq!(expected, block);
+        assert_eq!(expected, block_async);
+    }
+
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[tokio::test]
+    async fn test_get_block_by_hash_not_existing() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let block = blocking_client
+            .get_block_by_hash(&BlockHash::all_zeros())
+            .unwrap();
+        let block_async = async_client
+            .get_block_by_hash(&BlockHash::all_zeros())
+            .await
+            .unwrap();
+        assert!(block.is_none());
+        assert!(block_async.is_none());
+    }
+
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[tokio::test]
     async fn test_get_merkle_proof() {
         let (blocking_client, async_client) = setup_clients().await;
 

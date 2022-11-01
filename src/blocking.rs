@@ -25,7 +25,7 @@ use ureq::{Agent, Proxy, Response};
 use bitcoin::consensus::{deserialize, serialize};
 use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::{sha256, Hash};
-use bitcoin::{BlockHash, BlockHeader, Script, Transaction, Txid};
+use bitcoin::{Block, BlockHash, BlockHeader, Script, Transaction, Txid};
 
 use crate::{BlockStatus, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
@@ -160,6 +160,25 @@ impl BlockingClient {
         match resp {
             Ok(resp) => Ok(resp.into_json()?),
             Err(ureq::Error::Status(code, _)) => Err(Error::HttpResponse(code)),
+            Err(e) => Err(Error::Ureq(e)),
+        }
+    }
+
+    /// Get a [`Block`] given a particular [`BlockHash`].
+    pub fn get_block_by_hash(&self, block_hash: &BlockHash) -> Result<Option<Block>, Error> {
+        let resp = self
+            .agent
+            .get(&format!("{}/block/{}/raw", self.url, block_hash))
+            .call();
+
+        match resp {
+            Ok(resp) => Ok(Some(deserialize(&into_bytes(resp)?)?)),
+            Err(ureq::Error::Status(code, _)) => {
+                if is_status_not_found(code) {
+                    return Ok(None);
+                }
+                Err(Error::HttpResponse(code))
+            }
             Err(e) => Err(Error::Ureq(e)),
         }
     }
