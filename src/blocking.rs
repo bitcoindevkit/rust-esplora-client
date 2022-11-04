@@ -25,7 +25,7 @@ use ureq::{Agent, Proxy, Response};
 use bitcoin::consensus::{deserialize, serialize};
 use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::{sha256, Hash};
-use bitcoin::{Block, BlockHash, BlockHeader, Script, Transaction, Txid};
+use bitcoin::{Block, BlockHash, BlockHeader, MerkleBlock, Script, Transaction, Txid};
 
 use crate::{BlockStatus, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
@@ -192,6 +192,25 @@ impl BlockingClient {
 
         match resp {
             Ok(resp) => Ok(Some(resp.into_json()?)),
+            Err(ureq::Error::Status(code, _)) => {
+                if is_status_not_found(code) {
+                    return Ok(None);
+                }
+                Err(Error::HttpResponse(code))
+            }
+            Err(e) => Err(Error::Ureq(e)),
+        }
+    }
+
+    /// Get a [`MerkleBlock`] inclusion proof for a [`Transaction`] with the given [`Txid`].
+    pub fn get_merkle_block(&self, txid: &Txid) -> Result<Option<MerkleBlock>, Error> {
+        let resp = self
+            .agent
+            .get(&format!("{}/tx/{}/merkleblock-proof", self.url, txid))
+            .call();
+
+        match resp {
+            Ok(resp) => Ok(Some(deserialize(&Vec::from_hex(&resp.into_string()?)?)?)),
             Err(ureq::Error::Status(code, _)) => {
                 if is_status_not_found(code) {
                     return Ok(None);
