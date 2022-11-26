@@ -150,6 +150,21 @@ impl BlockingClient {
         }
     }
 
+    /// Returns the 10 newest blocks starting at the tip or at start_height if specified.
+    pub fn get_recent_blocks(
+        &self,
+        start_height: Option<u32>,
+    ) -> Result<Vec<crate::api::Block>, Error> {
+        let url = if let Some(start_height) = start_height {
+            format!("{}/blocks/{}", &self.url, start_height)
+        } else {
+            format!("{}/blocks", &self.url)
+        };
+        let response = self.agent.get(&url).call()?;
+        let blocks: Vec<crate::api::Block> = response.into_json()?;
+        Ok(blocks)
+    }
+
     /// Get the [`BlockStatus`] given a particular [`BlockHash`].
     pub fn get_block_status(&self, block_hash: &BlockHash) -> Result<BlockStatus, Error> {
         let resp = self

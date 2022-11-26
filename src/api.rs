@@ -79,6 +79,12 @@ pub struct BlockTime {
     pub height: u32,
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct Block {
+    pub id: BlockHash,
+    pub height: u32,
+}
+
 impl Tx {
     pub fn to_tx(&self) -> Transaction {
         Transaction {

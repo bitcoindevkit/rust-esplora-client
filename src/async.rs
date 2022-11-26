@@ -136,6 +136,20 @@ impl AsyncClient {
         Ok(header)
     }
 
+    /// Returns the 10 newest blocks starting at the tip or at start_height if specified.
+    pub async fn get_recent_blocks(
+        &self,
+        start_height: Option<u32>,
+    ) -> Result<Vec<crate::api::Block>, Error> {
+        let url = if let Some(start_height) = start_height {
+            format!("{}/blocks/{}", &self.url, start_height)
+        } else {
+            format!("{}/blocks", &self.url)
+        };
+        let response = self.client.get(&url).send().await?;
+        Ok(response.error_for_status()?.json().await?)
+    }
+
     /// Get the [`BlockStatus`] given a particular [`BlockHash`].
     pub async fn get_block_status(&self, block_hash: &BlockHash) -> Result<BlockStatus, Error> {
         let resp = self
