@@ -26,13 +26,13 @@ jobs:
       run: cargo fmt -- --check --verbose
     - name: Build
       run: cargo build --verbose --all-features
-    - name: Test
-      run: cargo test --verbose --all-features
-    - run: cargo check --verbose --no-default-features --features=blocking
-    - run: cargo check --verbose --no-default-features --features=async
-    - run: cargo check --verbose --no-default-features --features=async-https
+    - name: Test all features
+      run: cargo test --verbose --all-features -- --test-threads=1
+    - name: Check only blocking feature
+      run: cargo check --verbose --no-default-features --features=blocking
+    - name: Check only async features
+      run: cargo check --verbose --no-default-features --features=async
+    - name: Check only async-http feature
+      run: cargo check --verbose --no-default-features --features=async-https
     - name: Clippy
       run: cargo clippy --all-targets --all-features -- -D warnings
-    - run: cargo clippy --all-targets --no-default-features --features=blocking -- -D warnings
-    - run: cargo clippy --all-targets --no-default-features --features=async -- -D warnings
-    - run: cargo clippy --all-targets --no-default-features --features=async-https -- -D warnings
