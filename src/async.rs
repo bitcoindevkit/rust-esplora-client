@@ -17,7 +17,7 @@ use std::str::FromStr;
 use bitcoin::consensus::{deserialize, serialize};
 use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::{sha256, Hash};
-use bitcoin::{Block, BlockHash, BlockHeader, Script, Transaction, Txid};
+use bitcoin::{Block, BlockHash, BlockHeader, MerkleBlock, Script, Transaction, Txid};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
@@ -174,6 +174,23 @@ impl AsyncClient {
         }
 
         Ok(Some(resp.error_for_status()?.json().await?))
+    }
+
+    /// Get a [`MerkleBlock`] inclusion proof for a [`Transaction`] with the given [`Txid`].
+    pub async fn get_merkle_block(&self, tx_hash: &Txid) -> Result<Option<MerkleBlock>, Error> {
+        let resp = self
+            .client
+            .get(&format!("{}/tx/{}/merkleblock-proof", self.url, tx_hash))
+            .send()
+            .await?;
+
+        if let StatusCode::NOT_FOUND = resp.status() {
+            return Ok(None);
+        }
+
+        let merkle_block = deserialize(&Vec::from_hex(&resp.text().await?)?)?;
+
+        Ok(Some(merkle_block))
     }
 
     /// Get the spending status of an output given a [`Txid`] and the output index.

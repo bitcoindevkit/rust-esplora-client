@@ -42,6 +42,9 @@
 //! * `async-https` enables [`reqwest`], the async client with support for proxying and TLS (SSL).
 //!
 //!
+
+#![allow(clippy::result_large_err)]
+
 use std::collections::HashMap;
 use std::fmt;
 use std::io;
@@ -566,6 +569,46 @@ mod test {
         let merkle_proof_async = async_client.get_merkle_proof(&txid).await.unwrap().unwrap();
         assert_eq!(merkle_proof, merkle_proof_async);
         assert!(merkle_proof.pos > 0);
+    }
+
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[tokio::test]
+    async fn test_get_merkle_block() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .get_new_address(Some("test"), Some(AddressType::Legacy))
+            .unwrap();
+        let txid = BITCOIND
+            .client
+            .send_to_address(
+                &address,
+                Amount::from_sat(1000),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+        let _miner = MINER.lock().await;
+        generate_blocks_and_wait(1);
+
+        let merkle_block = blocking_client.get_merkle_block(&txid).unwrap().unwrap();
+        let merkle_block_async = async_client.get_merkle_block(&txid).await.unwrap().unwrap();
+        assert_eq!(merkle_block, merkle_block_async);
+
+        let mut matches = vec![txid];
+        let mut indexes = vec![];
+        let root = merkle_block
+            .txn
+            .extract_matches(&mut matches, &mut indexes)
+            .unwrap();
+        assert_eq!(root, merkle_block.header.merkle_root);
+        assert_eq!(indexes.len(), 1);
+        assert!(indexes[0] > 0);
     }
 
     #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
