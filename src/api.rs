@@ -73,10 +73,20 @@ pub struct Tx {
     pub fee: u64,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug, PartialEq)]
 pub struct BlockTime {
     pub timestamp: u64,
     pub height: u32,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct BlockSummary {
+    pub id: BlockHash,
+    #[serde(flatten)]
+    pub time: BlockTime,
+    /// Hash of the previous block, will be `None` for the genesis block.
+    pub previousblockhash: Option<bitcoin::BlockHash>,
+    pub merkle_root: bitcoin::TxMerkleNode,
 }
 
 impl Tx {

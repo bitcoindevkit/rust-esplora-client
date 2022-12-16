@@ -24,7 +24,7 @@ use log::{debug, error, info, trace};
 
 use reqwest::{Client, StatusCode};
 
-use crate::{BlockStatus, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
+use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
 #[derive(Debug)]
 pub struct AsyncClient {
@@ -301,6 +301,26 @@ impl AsyncClient {
             .await?
             .error_for_status()?
             .json::<HashMap<String, f64>>()
+            .await?)
+    }
+
+    /// Gets some recent block summaries starting at the tip or at `height` if provided.
+    ///
+    /// The maximum number of summaries returned depends on the backend itself: esplora returns `10`
+    /// while [mempool.space](https://mempool.space/docs/api) returns `15`.
+    pub async fn get_blocks(&self, height: Option<u32>) -> Result<Vec<BlockSummary>, Error> {
+        let url = match height {
+            Some(height) => format!("{}/blocks/{}", self.url, height),
+            None => format!("{}/blocks", self.url),
+        };
+
+        Ok(self
+            .client
+            .get(&url)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
             .await?)
     }
 }
