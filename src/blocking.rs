@@ -357,6 +357,16 @@ impl BlockingClient {
 
         Ok(self.agent.get(&url).call()?.into_json()?)
     }
+
+    /// Get the underlying base URL.
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    /// Get the underlying [`Agent`].
+    pub fn agent(&self) -> &Agent {
+        &self.agent
+    }
 }
 
 fn is_status_not_found(status: u16) -> bool {

@@ -26,7 +26,7 @@ use reqwest::{Client, StatusCode};
 
 use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AsyncClient {
     url: String,
     client: Client,
@@ -322,5 +322,15 @@ impl AsyncClient {
             .error_for_status()?
             .json()
             .await?)
+    }
+
+    /// Get the underlying base URL.
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    /// Get the underlying [`Client`].
+    pub fn client(&self) -> &Client {
+        &self.client
     }
 }
