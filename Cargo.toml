@@ -31,6 +31,6 @@ lazy_static = "1.4.0"
 
 [features]
 default = ["blocking", "async", "async-https"]
-blocking = ["ureq", "ureq/socks"]
+blocking = ["ureq", "ureq/socks-proxy"]
 async = ["reqwest", "reqwest/socks"]
 async-https = ["reqwest/default-tls"]
