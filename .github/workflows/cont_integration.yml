@@ -13,26 +13,42 @@ jobs:
   build-test:
 
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        rust:
+          - version: 1.65.0 # STABLE
+            clippy: true
+          - version: 1.57.0 # MSRV
+        features:
+          - default
+          - blocking
+          - async
+          - async-https
     steps:
     - uses: actions/checkout@v3
-    - name: Install rustup
-      run: curl https://sh.rustup.rs -sSf | sh -s -- -y
+    - name: Generate cache key
+      run: echo "${{ matrix.rust.version }} ${{ matrix.features }}" | tee .cache_key
+    - name: cache
+      uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('.cache_key') }}-${{ hashFiles('**/Cargo.toml','**/Cargo.lock') }}
     - name: Set default toolchain
-      run: $HOME/.cargo/bin/rustup default stable
+      run: rustup default ${{ matrix.rust.version }}
     - name: Set profile
-      run: $HOME/.cargo/bin/rustup set profile minimal
-    - name: Fmt
-      run: cargo fmt -- --check --verbose
+      run: rustup set profile minimal
+    - name: Add clippy
+      if: ${{ matrix.rust.clippy }}
+      run: rustup component add clippy
+    - name: Update toolchain
+      run: rustup update
     - name: Build
-      run: cargo build --verbose --all-features
-    - name: Test all features
-      run: cargo test --verbose --all-features -- --test-threads=1
-    - name: Check only blocking feature
-      run: cargo check --verbose --no-default-features --features=blocking
-    - name: Check only async features
-      run: cargo check --verbose --no-default-features --features=async
-    - name: Check only async-http feature
-      run: cargo check --verbose --no-default-features --features=async-https
+      run: cargo build --features ${{ matrix.features }} --no-default-features
     - name: Clippy
-      run: cargo clippy --all-targets --all-features -- -D warnings
+      if: ${{ matrix.rust.clippy }}
+      run: cargo clippy --all-targets --features ${{ matrix.features }} --no-default-features -- -D warnings
+    - name: Test
+      run: cargo test --features ${{ matrix.features }} --no-default-features
