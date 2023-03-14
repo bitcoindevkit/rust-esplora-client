@@ -37,4 +37,4 @@ base64ct = "<1.6.0"
 default = ["blocking", "async", "async-https"]
 blocking = ["ureq", "ureq/socks-proxy"]
 async = ["reqwest", "reqwest/socks"]
-async-https = ["reqwest/default-tls"]
+async-https = ["async", "reqwest/default-tls"]
