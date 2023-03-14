@@ -73,13 +73,13 @@ pub struct Tx {
     pub fee: u64,
 }
 
-#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct BlockTime {
     pub timestamp: u64,
     pub height: u32,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct BlockSummary {
     pub id: BlockHash,
     #[serde(flatten)]

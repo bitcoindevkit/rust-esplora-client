@@ -14,19 +14,25 @@
 //! You can create a blocking client as follows:
 //!
 //! ```no_run
+//! # #[cfg(feature = "blocking")]
+//! # {
 //! use esplora_client::Builder;
 //! let builder = Builder::new("https://blockstream.info/testnet/api");
 //! let blocking_client = builder.build_blocking();
 //! # Ok::<(), esplora_client::Error>(());
+//! # }
 //! ```
 //!
 //! Here is an example of how to create an asynchronous client.
 //!
 //! ```no_run
+//! # #[cfg(feature = "async")]
+//! # {
 //! use esplora_client::Builder;
 //! let builder = Builder::new("https://blockstream.info/testnet/api");
 //! let async_client = builder.build_async();
 //! # Ok::<(), esplora_client::Error>(());
+//! # }
 //! ```
 //!
 //! ## Features
@@ -54,7 +60,7 @@ use bitcoin::{BlockHash, Txid};
 
 pub mod api;
 
-#[cfg(any(feature = "async", feature = "async-https"))]
+#[cfg(feature = "async")]
 pub mod r#async;
 #[cfg(feature = "blocking")]
 pub mod blocking;
@@ -62,7 +68,7 @@ pub mod blocking;
 pub use api::*;
 #[cfg(feature = "blocking")]
 pub use blocking::BlockingClient;
-#[cfg(any(feature = "async", feature = "async-https"))]
+#[cfg(feature = "async")]
 pub use r#async::AsyncClient;
 
 /// Get a fee value in sats/vbytes from the estimates
@@ -146,7 +152,7 @@ pub enum Error {
     #[cfg(feature = "blocking")]
     UreqTransport(::ureq::Transport),
     /// Error during reqwest HTTP request
-    #[cfg(any(feature = "async", feature = "async-https"))]
+    #[cfg(feature = "async")]
     Reqwest(::reqwest::Error),
     /// HTTP response error
     HttpResponse(u16),
@@ -191,7 +197,7 @@ macro_rules! impl_error {
 impl std::error::Error for Error {}
 #[cfg(feature = "blocking")]
 impl_error!(::ureq::Transport, UreqTransport, Error);
-#[cfg(any(feature = "async", feature = "async-https"))]
+#[cfg(feature = "async")]
 impl_error!(::reqwest::Error, Reqwest, Error);
 impl_error!(io::Error, Io, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
@@ -205,7 +211,7 @@ mod test {
     use lazy_static::lazy_static;
     use std::env;
     use tokio::sync::Mutex;
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     use {
         bitcoin::hashes::Hash,
         bitcoin::Amount,
@@ -243,10 +249,10 @@ mod test {
         static ref MINER: Mutex<()> = Mutex::new(());
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     static PREMINE: OnceCell<()> = OnceCell::const_new();
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     async fn setup_clients() -> (BlockingClient, AsyncClient) {
         PREMINE
             .get_or_init(|| async {
@@ -266,14 +272,14 @@ mod test {
         (blocking_client, async_client)
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     fn generate_blocks_and_wait(num: usize) {
         let cur_height = BITCOIND.client.get_block_count().unwrap();
         generate_blocks(num);
         wait_for_block(cur_height as usize + num);
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     fn generate_blocks(num: usize) {
         let address = BITCOIND
             .client
@@ -285,7 +291,7 @@ mod test {
             .unwrap();
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     fn wait_for_block(min_height: usize) {
         let mut header = ELECTRSD.client.block_headers_subscribe().unwrap();
         loop {
@@ -300,7 +306,7 @@ mod test {
         }
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     fn exponential_backoff_poll<T, F>(mut poll: F) -> T
     where
         F: FnMut() -> Option<T>,
@@ -361,7 +367,7 @@ mod test {
         );
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tx() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -391,7 +397,7 @@ mod test {
         assert_eq!(tx, tx_async);
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tx_no_opt() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -421,7 +427,7 @@ mod test {
         assert_eq!(tx_no_opt, tx_no_opt_async);
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tx_status() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -452,7 +458,7 @@ mod test {
         assert!(tx_status.confirmed);
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_header_by_hash() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -464,7 +470,7 @@ mod test {
         assert_eq!(block_header, block_header_async);
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_status() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -484,7 +490,7 @@ mod test {
         assert_eq!(expected, block_status_async);
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_non_existing_block_status() {
         // Esplora returns the same status for orphaned blocks as for non-existing blocks:
@@ -509,7 +515,7 @@ mod test {
         assert_eq!(expected, block_status_async);
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_by_hash() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -524,7 +530,7 @@ mod test {
         assert_eq!(expected, block_async);
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_by_hash_not_existing() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -540,7 +546,7 @@ mod test {
         assert!(block_async.is_none());
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_merkle_proof() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -571,7 +577,7 @@ mod test {
         assert!(merkle_proof.pos > 0);
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_merkle_block() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -611,7 +617,7 @@ mod test {
         assert!(indexes[0] > 0);
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_output_status() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -649,7 +655,7 @@ mod test {
         assert_eq!(output_status, output_status_async);
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_height() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -659,7 +665,7 @@ mod test {
         assert_eq!(block_height, block_height_async);
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tip_hash() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -668,7 +674,7 @@ mod test {
         assert_eq!(tip_hash, tip_hash_async);
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_hash() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -681,7 +687,7 @@ mod test {
         assert_eq!(block_hash, block_hash_async);
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_txid_at_block_index() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -700,7 +706,7 @@ mod test {
         assert_eq!(txid_at_block_index, txid_at_block_index_async);
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_fee_estimates() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -709,7 +715,7 @@ mod test {
         assert_eq!(fee_estimates.len(), fee_estimates_async.len());
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_scripthash_txs() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -757,7 +763,7 @@ mod test {
         assert_eq!(scripthash_txs_txids, scripthash_txs_txids_async);
     }
 
-    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-https")))]
+    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_blocks() {
         let (blocking_client, async_client) = setup_clients().await;
