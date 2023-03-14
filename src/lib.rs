@@ -14,19 +14,25 @@
 //! You can create a blocking client as follows:
 //!
 //! ```no_run
+//! # #[cfg(feature = "blocking")]
+//! # {
 //! use esplora_client::Builder;
 //! let builder = Builder::new("https://blockstream.info/testnet/api");
 //! let blocking_client = builder.build_blocking();
 //! # Ok::<(), esplora_client::Error>(());
+//! # }
 //! ```
 //!
 //! Here is an example of how to create an asynchronous client.
 //!
 //! ```no_run
+//! # #[cfg(any(feature = "async", feature = "async-https"))]
+//! # {
 //! use esplora_client::Builder;
 //! let builder = Builder::new("https://blockstream.info/testnet/api");
 //! let async_client = builder.build_async();
 //! # Ok::<(), esplora_client::Error>(());
+//! # }
 //! ```
 //!
 //! ## Features
