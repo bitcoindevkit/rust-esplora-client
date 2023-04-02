@@ -2,8 +2,9 @@
 //!
 //! see: <https://github.com/Blockstream/esplora/blob/master/API.md>
 
-use bitcoin::hashes::hex::FromHex;
-use bitcoin::{BlockHash, OutPoint, Script, Transaction, TxIn, TxOut, Txid, Witness};
+pub use bitcoin::consensus::{deserialize, serialize};
+pub use bitcoin::hashes::hex::FromHex;
+pub use bitcoin::{BlockHash, OutPoint, Script, Transaction, TxIn, TxOut, Txid, Witness};
 
 use serde::Deserialize;
 
