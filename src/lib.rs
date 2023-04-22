@@ -45,7 +45,15 @@
 //!
 //! * `blocking` enables [`ureq`], the blocking client with proxy and TLS (SSL) capabilities.
 //! * `async` enables [`reqwest`], the async client with proxy capabilities.
-//! * `async-https` enables [`reqwest`], the async client with support for proxying and TLS (SSL).
+//! * `async-https` enables [`reqwest`], the async client with support for proxying and TLS (SSL)
+//!   using the default [`reqwest`] TLS backend.
+//! * `async-https-native` enables [`reqwest`], the async client with support for proxying and TLS
+//!   (SSL) using the platform's native TLS backend (likely OpenSSL).
+//! * `async-https-rustls` enables [`reqwest`], the async client with support for proxying and TLS
+//!   (SSL) using the `rustls` TLS backend.
+//! * `async-https-rustls-manual-roots` enables [`reqwest`], the async client with support for
+//!   proxying and TLS (SSL) using the `rustls` TLS backend without using its the default root
+//!   certificates.
 //!
 //!
 

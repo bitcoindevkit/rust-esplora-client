@@ -24,6 +24,9 @@ jobs:
           - blocking
           - async
           - async-https
+          - async-https-native
+          - async-https-rustls
+          - async-https-rustls-manual-roots
     steps:
     - uses: actions/checkout@v3
     - name: Generate cache key
