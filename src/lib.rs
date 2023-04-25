@@ -460,10 +460,20 @@ mod test {
         let _miner = MINER.lock().await;
         generate_blocks_and_wait(1);
 
-        let tx_status = blocking_client.get_tx_status(&txid).unwrap().unwrap();
-        let tx_status_async = async_client.get_tx_status(&txid).await.unwrap().unwrap();
+        let tx_status = blocking_client.get_tx_status(&txid).unwrap();
+        let tx_status_async = async_client.get_tx_status(&txid).await.unwrap();
         assert_eq!(tx_status, tx_status_async);
         assert!(tx_status.confirmed);
+
+        // Bogus txid returns a TxStatus with false, None, None, None
+        let txid = Txid::hash(b"ayyyy lmao");
+        let tx_status = blocking_client.get_tx_status(&txid).unwrap();
+        let tx_status_async = async_client.get_tx_status(&txid).await.unwrap();
+        assert_eq!(tx_status, tx_status_async);
+        assert!(!tx_status.confirmed);
+        assert!(tx_status.block_height.is_none());
+        assert!(tx_status.block_hash.is_none());
+        assert!(tx_status.block_time.is_none());
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
