@@ -99,18 +99,14 @@ impl AsyncClient {
     }
 
     /// Get the status of a [`Transaction`] given its [`Txid`].
-    pub async fn get_tx_status(&self, txid: &Txid) -> Result<Option<TxStatus>, Error> {
+    pub async fn get_tx_status(&self, txid: &Txid) -> Result<TxStatus, Error> {
         let resp = self
             .client
             .get(&format!("{}/tx/{}/status", self.url, txid))
             .send()
             .await?;
 
-        if let StatusCode::NOT_FOUND = resp.status() {
-            return Ok(None);
-        }
-
-        Ok(Some(resp.error_for_status()?.json().await?))
+        Ok(resp.error_for_status()?.json().await?)
     }
 
     #[deprecated(

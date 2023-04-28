@@ -108,20 +108,15 @@ impl BlockingClient {
     }
 
     /// Get the status of a [`Transaction`] given its [`Txid`].
-    pub fn get_tx_status(&self, txid: &Txid) -> Result<Option<TxStatus>, Error> {
+    pub fn get_tx_status(&self, txid: &Txid) -> Result<TxStatus, Error> {
         let resp = self
             .agent
             .get(&format!("{}/tx/{}/status", self.url, txid))
             .call();
 
         match resp {
-            Ok(resp) => Ok(Some(resp.into_json()?)),
-            Err(ureq::Error::Status(code, _)) => {
-                if is_status_not_found(code) {
-                    return Ok(None);
-                }
-                Err(Error::HttpResponse(code))
-            }
+            Ok(resp) => Ok(resp.into_json()?),
+            Err(ureq::Error::Status(code, _)) => Err(Error::HttpResponse(code)),
             Err(e) => Err(Error::Ureq(e)),
         }
     }
