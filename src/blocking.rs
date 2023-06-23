@@ -23,9 +23,11 @@ use log::{debug, error, info, trace};
 use ureq::{Agent, Proxy, Response};
 
 use bitcoin::consensus::{deserialize, serialize};
-use bitcoin::hashes::hex::{FromHex, ToHex};
+use bitcoin::hashes::hex::FromHex;
 use bitcoin::hashes::{sha256, Hash};
-use bitcoin::{Block, BlockHash, BlockHeader, MerkleBlock, Script, Transaction, Txid};
+use bitcoin::{Block, BlockHash, block::Header as BlockHeader, MerkleBlock, Script, Transaction, Txid};
+
+use bitcoin_internals::hex::display::DisplayHex;
 
 use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
@@ -244,7 +246,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .post(&format!("{}/tx", self.url))
-            .send_string(&serialize(transaction).to_hex());
+            .send_string(&serialize(transaction).to_lower_hex_string());
 
         match resp {
             Ok(_) => Ok(()), // We do not return the txid?
@@ -329,13 +331,13 @@ impl BlockingClient {
         script: &Script,
         last_seen: Option<Txid>,
     ) -> Result<Vec<Tx>, Error> {
-        let script_hash = sha256::Hash::hash(script.as_bytes()).into_inner().to_hex();
+        let script_hash = sha256::Hash::hash(script.as_bytes());
         let url = match last_seen {
             Some(last_seen) => format!(
-                "{}/scripthash/{}/txs/chain/{}",
+                "{}/scripthash/{:x}/txs/chain/{}",
                 self.url, script_hash, last_seen
             ),
-            None => format!("{}/scripthash/{}/txs", self.url, script_hash),
+            None => format!("{}/scripthash/{:x}/txs", self.url, script_hash),
         };
         Ok(self.agent.get(&url).call()?.into_json()?)
     }

@@ -224,10 +224,10 @@ mod test {
         bitcoin::hashes::Hash,
         bitcoin::Amount,
         electrsd::{
-            bitcoind::bitcoincore_rpc::bitcoincore_rpc_json::AddressType,
+            bitcoind::bitcoincore_rpc::json::AddressType,
             bitcoind::bitcoincore_rpc::RpcApi,
+            electrum_client::ElectrumApi,
         },
-        electrum_client::ElectrumApi,
         std::time::Duration,
         tokio::sync::OnceCell,
     };
@@ -292,7 +292,8 @@ mod test {
         let address = BITCOIND
             .client
             .get_new_address(Some("test"), Some(AddressType::Legacy))
-            .unwrap();
+            .unwrap()
+            .assume_checked();
         let _block_hashes = BITCOIND
             .client
             .generate_to_address(num as u64, &address)
@@ -383,7 +384,8 @@ mod test {
         let address = BITCOIND
             .client
             .get_new_address(Some("test"), Some(AddressType::Legacy))
-            .unwrap();
+            .unwrap()
+            .assume_checked();
         let txid = BITCOIND
             .client
             .send_to_address(
@@ -413,7 +415,8 @@ mod test {
         let address = BITCOIND
             .client
             .get_new_address(Some("test"), Some(AddressType::Legacy))
-            .unwrap();
+            .unwrap()
+            .assume_checked();
         let txid = BITCOIND
             .client
             .send_to_address(
@@ -443,7 +446,8 @@ mod test {
         let address = BITCOIND
             .client
             .get_new_address(Some("test"), Some(AddressType::Legacy))
-            .unwrap();
+            .unwrap()
+            .assume_checked();
         let txid = BITCOIND
             .client
             .send_to_address(
@@ -572,7 +576,8 @@ mod test {
         let address = BITCOIND
             .client
             .get_new_address(Some("test"), Some(AddressType::Legacy))
-            .unwrap();
+            .unwrap()
+            .assume_checked();
         let txid = BITCOIND
             .client
             .send_to_address(
@@ -603,7 +608,8 @@ mod test {
         let address = BITCOIND
             .client
             .get_new_address(Some("test"), Some(AddressType::Legacy))
-            .unwrap();
+            .unwrap()
+            .assume_checked();
         let txid = BITCOIND
             .client
             .send_to_address(
@@ -643,7 +649,8 @@ mod test {
         let address = BITCOIND
             .client
             .get_new_address(Some("test"), Some(AddressType::Legacy))
-            .unwrap();
+            .unwrap()
+            .assume_checked();
         let txid = BITCOIND
             .client
             .send_to_address(
@@ -741,7 +748,8 @@ mod test {
         let address = BITCOIND
             .client
             .get_new_address(Some("test"), Some(AddressType::Legacy))
-            .unwrap();
+            .unwrap()
+            .assume_checked();
         let txid = BITCOIND
             .client
             .send_to_address(
