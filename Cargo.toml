@@ -28,7 +28,7 @@ reqwest = { version = "0.11", optional = true, default-features = false, feature
 serde_json = "1.0"
 tokio = { version = "1.20.1", features = ["full"] }
 electrsd = { version = "0.24.0", features = ["legacy", "esplora_a33e97e1", "bitcoind_22_0"] }
-electrum-client = "0.15.1"
+electrum-client = "0.15.1"      # When updating to 0.16 remove version number from rustls pin in CI.
 lazy_static = "1.4.0"
 # zip versions after 0.6.3 don't work with our MSRV 1.57.0
 zip = "=0.6.3"
