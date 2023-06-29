@@ -4,14 +4,14 @@
 
 pub use bitcoin::consensus::{deserialize, serialize};
 pub use bitcoin::hashes::hex::FromHex;
-pub use bitcoin::{BlockHash, OutPoint, Script, Transaction, TxIn, TxOut, Txid, Witness};
+pub use bitcoin::{BlockHash, OutPoint, ScriptBuf, Transaction, TxIn, TxOut, Txid, Witness};
 
 use serde::Deserialize;
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct PrevOut {
     pub value: u64,
-    pub scriptpubkey: Script,
+    pub scriptpubkey: ScriptBuf,
 }
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -20,7 +20,7 @@ pub struct Vin {
     pub vout: u32,
     // None if coinbase
     pub prevout: Option<PrevOut>,
-    pub scriptsig: Script,
+    pub scriptsig: ScriptBuf,
     #[serde(deserialize_with = "deserialize_witness", default)]
     pub witness: Vec<Vec<u8>>,
     pub sequence: u32,
@@ -30,7 +30,7 @@ pub struct Vin {
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Vout {
     pub value: u64,
-    pub scriptpubkey: Script,
+    pub scriptpubkey: ScriptBuf,
 }
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -87,14 +87,14 @@ pub struct BlockSummary {
     pub time: BlockTime,
     /// Hash of the previous block, will be `None` for the genesis block.
     pub previousblockhash: Option<bitcoin::BlockHash>,
-    pub merkle_root: bitcoin::TxMerkleNode,
+    pub merkle_root: bitcoin::hash_types::TxMerkleNode,
 }
 
 impl Tx {
     pub fn to_tx(&self) -> Transaction {
         Transaction {
             version: self.version,
-            lock_time: bitcoin::PackedLockTime(self.locktime),
+            lock_time: bitcoin::absolute::LockTime::from_consensus(self.locktime),
             input: self
                 .vin
                 .iter()
@@ -106,7 +106,7 @@ impl Tx {
                     },
                     script_sig: vin.scriptsig,
                     sequence: bitcoin::Sequence(vin.sequence),
-                    witness: Witness::from_vec(vin.witness),
+                    witness: Witness::from_slice(&vin.witness),
                 })
                 .collect(),
             output: self

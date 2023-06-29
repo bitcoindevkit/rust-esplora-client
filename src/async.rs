@@ -15,9 +15,10 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use bitcoin::consensus::{deserialize, serialize};
-use bitcoin::hashes::hex::{FromHex, ToHex};
+use bitcoin::hashes::hex::FromHex;
 use bitcoin::hashes::{sha256, Hash};
-use bitcoin::{Block, BlockHash, BlockHeader, MerkleBlock, Script, Transaction, Txid};
+use bitcoin::{Block, BlockHash, block::Header as BlockHeader, MerkleBlock, Script, Transaction, Txid};
+use bitcoin_internals::hex::display::DisplayHex;
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
@@ -212,7 +213,7 @@ impl AsyncClient {
     pub async fn broadcast(&self, transaction: &Transaction) -> Result<(), Error> {
         self.client
             .post(&format!("{}/tx", self.url))
-            .body(serialize(transaction).to_hex())
+            .body(serialize(transaction).to_lower_hex_string())
             .send()
             .await?
             .error_for_status()?;
@@ -269,13 +270,13 @@ impl AsyncClient {
         script: &Script,
         last_seen: Option<Txid>,
     ) -> Result<Vec<Tx>, Error> {
-        let script_hash = sha256::Hash::hash(script.as_bytes()).into_inner().to_hex();
+        let script_hash = sha256::Hash::hash(script.as_bytes());
         let url = match last_seen {
             Some(last_seen) => format!(
-                "{}/scripthash/{}/txs/chain/{}",
+                "{}/scripthash/{:x}/txs/chain/{}",
                 self.url, script_hash, last_seen
             ),
-            None => format!("{}/scripthash/{}/txs", self.url, script_hash),
+            None => format!("{}/scripthash/{:x}/txs", self.url, script_hash),
         };
         Ok(self
             .client
