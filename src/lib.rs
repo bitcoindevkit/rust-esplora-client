@@ -64,7 +64,6 @@ use std::fmt;
 use std::io;
 
 use bitcoin::consensus;
-use bitcoin::{BlockHash, Txid};
 
 pub mod api;
 
