@@ -162,7 +162,7 @@ pub enum Error {
     #[cfg(feature = "async")]
     Reqwest(::reqwest::Error),
     /// HTTP response error
-    HttpResponse(u16),
+    HttpResponse { status: u16, message: String },
     /// IO error during ureq response read
     Io(io::Error),
     /// No header found in ureq response
@@ -223,8 +223,7 @@ mod test {
         bitcoin::hashes::Hash,
         bitcoin::Amount,
         electrsd::{
-            bitcoind::bitcoincore_rpc::json::AddressType,
-            bitcoind::bitcoincore_rpc::RpcApi,
+            bitcoind::bitcoincore_rpc::json::AddressType, bitcoind::bitcoincore_rpc::RpcApi,
             electrum_client::ElectrumApi,
         },
         std::time::Duration,

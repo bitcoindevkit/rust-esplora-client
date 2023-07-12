@@ -25,7 +25,9 @@ use ureq::{Agent, Proxy, Response};
 use bitcoin::consensus::{deserialize, serialize};
 use bitcoin::hashes::hex::FromHex;
 use bitcoin::hashes::{sha256, Hash};
-use bitcoin::{Block, BlockHash, block::Header as BlockHeader, MerkleBlock, Script, Transaction, Txid};
+use bitcoin::{
+    block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
+};
 
 use bitcoin_internals::hex::display::DisplayHex;
 
@@ -67,11 +69,14 @@ impl BlockingClient {
 
         match resp {
             Ok(resp) => Ok(Some(deserialize(&into_bytes(resp)?)?)),
-            Err(ureq::Error::Status(code, _)) => {
+            Err(ureq::Error::Status(code, resp)) => {
                 if is_status_not_found(code) {
                     return Ok(None);
                 }
-                Err(Error::HttpResponse(code))
+                Err(Error::HttpResponse {
+                    status: code,
+                    message: resp.into_string()?,
+                })
             }
             Err(e) => Err(Error::Ureq(e)),
         }
@@ -99,11 +104,14 @@ impl BlockingClient {
 
         match resp {
             Ok(resp) => Ok(Some(Txid::from_str(&resp.into_string()?)?)),
-            Err(ureq::Error::Status(code, _)) => {
+            Err(ureq::Error::Status(code, resp)) => {
                 if is_status_not_found(code) {
                     return Ok(None);
                 }
-                Err(Error::HttpResponse(code))
+                Err(Error::HttpResponse {
+                    status: code,
+                    message: resp.into_string()?,
+                })
             }
             Err(e) => Err(Error::Ureq(e)),
         }
@@ -118,7 +126,10 @@ impl BlockingClient {
 
         match resp {
             Ok(resp) => Ok(resp.into_json()?),
-            Err(ureq::Error::Status(code, _)) => Err(Error::HttpResponse(code)),
+            Err(ureq::Error::Status(code, resp)) => Err(Error::HttpResponse {
+                status: code,
+                message: resp.into_string()?,
+            }),
             Err(e) => Err(Error::Ureq(e)),
         }
     }
@@ -142,7 +153,10 @@ impl BlockingClient {
 
         match resp {
             Ok(resp) => Ok(deserialize(&Vec::from_hex(&resp.into_string()?)?)?),
-            Err(ureq::Error::Status(code, _)) => Err(Error::HttpResponse(code)),
+            Err(ureq::Error::Status(code, resp)) => Err(Error::HttpResponse {
+                status: code,
+                message: resp.into_string()?,
+            }),
             Err(e) => Err(Error::Ureq(e)),
         }
     }
@@ -156,7 +170,10 @@ impl BlockingClient {
 
         match resp {
             Ok(resp) => Ok(resp.into_json()?),
-            Err(ureq::Error::Status(code, _)) => Err(Error::HttpResponse(code)),
+            Err(ureq::Error::Status(code, resp)) => Err(Error::HttpResponse {
+                status: code,
+                message: resp.into_string()?,
+            }),
             Err(e) => Err(Error::Ureq(e)),
         }
     }
@@ -170,11 +187,14 @@ impl BlockingClient {
 
         match resp {
             Ok(resp) => Ok(Some(deserialize(&into_bytes(resp)?)?)),
-            Err(ureq::Error::Status(code, _)) => {
+            Err(ureq::Error::Status(code, resp)) => {
                 if is_status_not_found(code) {
                     return Ok(None);
                 }
-                Err(Error::HttpResponse(code))
+                Err(Error::HttpResponse {
+                    status: code,
+                    message: resp.into_string()?,
+                })
             }
             Err(e) => Err(Error::Ureq(e)),
         }
@@ -189,11 +209,14 @@ impl BlockingClient {
 
         match resp {
             Ok(resp) => Ok(Some(resp.into_json()?)),
-            Err(ureq::Error::Status(code, _)) => {
+            Err(ureq::Error::Status(code, resp)) => {
                 if is_status_not_found(code) {
                     return Ok(None);
                 }
-                Err(Error::HttpResponse(code))
+                Err(Error::HttpResponse {
+                    status: code,
+                    message: resp.into_string()?,
+                })
             }
             Err(e) => Err(Error::Ureq(e)),
         }
@@ -208,11 +231,14 @@ impl BlockingClient {
 
         match resp {
             Ok(resp) => Ok(Some(deserialize(&Vec::from_hex(&resp.into_string()?)?)?)),
-            Err(ureq::Error::Status(code, _)) => {
+            Err(ureq::Error::Status(code, resp)) => {
                 if is_status_not_found(code) {
                     return Ok(None);
                 }
-                Err(Error::HttpResponse(code))
+                Err(Error::HttpResponse {
+                    status: code,
+                    message: resp.into_string()?,
+                })
             }
             Err(e) => Err(Error::Ureq(e)),
         }
@@ -231,11 +257,14 @@ impl BlockingClient {
 
         match resp {
             Ok(resp) => Ok(Some(resp.into_json()?)),
-            Err(ureq::Error::Status(code, _)) => {
+            Err(ureq::Error::Status(code, resp)) => {
                 if is_status_not_found(code) {
                     return Ok(None);
                 }
-                Err(Error::HttpResponse(code))
+                Err(Error::HttpResponse {
+                    status: code,
+                    message: resp.into_string()?,
+                })
             }
             Err(e) => Err(Error::Ureq(e)),
         }
@@ -250,7 +279,10 @@ impl BlockingClient {
 
         match resp {
             Ok(_) => Ok(()), // We do not return the txid?
-            Err(ureq::Error::Status(code, _)) => Err(Error::HttpResponse(code)),
+            Err(ureq::Error::Status(code, resp)) => Err(Error::HttpResponse {
+                status: code,
+                message: resp.into_string()?,
+            }),
             Err(e) => Err(Error::Ureq(e)),
         }
     }
@@ -264,7 +296,10 @@ impl BlockingClient {
 
         match resp {
             Ok(resp) => Ok(resp.into_string()?.parse()?),
-            Err(ureq::Error::Status(code, _)) => Err(Error::HttpResponse(code)),
+            Err(ureq::Error::Status(code, resp)) => Err(Error::HttpResponse {
+                status: code,
+                message: resp.into_string()?,
+            }),
             Err(e) => Err(Error::Ureq(e)),
         }
     }
@@ -298,7 +333,10 @@ impl BlockingClient {
     fn process_block_result(response: Result<Response, ureq::Error>) -> Result<BlockHash, Error> {
         match response {
             Ok(resp) => Ok(BlockHash::from_str(&resp.into_string()?)?),
-            Err(ureq::Error::Status(code, _)) => Err(Error::HttpResponse(code)),
+            Err(ureq::Error::Status(code, resp)) => Err(Error::HttpResponse {
+                status: code,
+                message: resp.into_string()?,
+            }),
             Err(e) => Err(Error::Ureq(e)),
         }
     }
@@ -316,7 +354,10 @@ impl BlockingClient {
                 let map: HashMap<String, f64> = resp.into_json()?;
                 Ok(map)
             }
-            Err(ureq::Error::Status(code, _)) => Err(Error::HttpResponse(code)),
+            Err(ureq::Error::Status(code, resp)) => Err(Error::HttpResponse {
+                status: code,
+                message: resp.into_string()?,
+            }),
             Err(e) => Err(Error::Ureq(e)),
         }?;
 
@@ -390,7 +431,13 @@ fn into_bytes(resp: Response) -> Result<Vec<u8>, io::Error> {
 impl From<ureq::Error> for Error {
     fn from(e: ureq::Error) -> Self {
         match e {
-            ureq::Error::Status(code, _) => Error::HttpResponse(code),
+            ureq::Error::Status(code, resp) => match resp.into_string() {
+                Ok(msg) => Error::HttpResponse {
+                    status: code,
+                    message: msg,
+                },
+                Err(e) => Error::Io(e),
+            },
             e => Error::Ureq(e),
         }
     }
