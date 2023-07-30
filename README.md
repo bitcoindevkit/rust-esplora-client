@@ -1,6 +1,6 @@
 # rust-esplora-client
 
-Bitcoin Esplora API client library. Supports plaintext, TLS and Onion servers. Blocking or async.
+Bitcoin Esplora API client library not using rust-bitcoin. Supports plaintext, TLS and Onion servers. Blocking or async.
 
 <p>
     <a href="https://crates.io/crates/esplora-client"><img alt="Crate Info" src="https://img.shields.io/crates/v/esplora-client.svg"/></a>
