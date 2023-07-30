@@ -2,11 +2,12 @@
 //!
 //! see: <https://github.com/Blockstream/esplora/blob/master/API.md>
 
+use amplify::confinement::Confined;
 use amplify::hex::FromHex;
-use amplify::Bytes32;
+use amplify::{confinement, Bytes32};
 use bp::{
     BlockHash, LockTime, Outpoint, ScriptPubkey, SeqNo, SigScript, Tx as Transaction, TxIn, TxOut,
-    Txid, Witness,
+    TxVer, Txid, Witness,
 };
 use serde::Deserialize;
 
@@ -93,31 +94,23 @@ pub struct BlockSummary {
 }
 
 impl Tx {
-    pub fn to_tx(&self) -> Transaction {
-        Transaction {
-            version: self.version.into(),
+    pub fn to_tx(&self) -> Result<Transaction, confinement::Error> {
+        let inputs = self.vin.iter().cloned().map(|vin| TxIn {
+            prev_output: Outpoint::new(vin.txid, vin.vout),
+            sig_script: vin.scriptsig,
+            sequence: SeqNo::from_consensus_u32(vin.sequence),
+            witness: Witness::from_consensus_stack(vin.witness),
+        });
+        let outputs = self.vout.iter().cloned().map(|vout| TxOut {
+            value: vout.value.into(),
+            script_pubkey: vout.scriptpubkey,
+        });
+        Ok(Transaction {
+            version: TxVer::from_consensus_i32(self.version),
             lock_time: LockTime::from_consensus_u32(self.locktime),
-            inputs: self
-                .vin
-                .iter()
-                .cloned()
-                .map(|vin| TxIn {
-                    prev_output: Outpoint::new(vin.txid, vin.vout),
-                    sig_script: vin.scriptsig,
-                    sequence: SeqNo::from_consensus_u32(vin.sequence),
-                    witness: Witness::from_consensus_stack(vin.witness),
-                })
-                .collect(),
-            outputs: self
-                .vout
-                .iter()
-                .cloned()
-                .map(|vout| TxOut {
-                    value: vout.value.into(),
-                    script_pubkey: vout.scriptpubkey,
-                })
-                .collect(),
-        }
+            inputs: Confined::try_from_iter(inputs)?,
+            outputs: Confined::try_from_iter(outputs)?,
+        })
     }
 
     pub fn confirmation_time(&self) -> Option<BlockTime> {

@@ -64,10 +64,10 @@ extern crate amplify;
 #[macro_use]
 extern crate serde;
 
+use amplify::{hex, IoError};
+use bp::{BlockHash, Txid};
 use std::collections::HashMap;
 use std::io;
-use amplify::hex;
-use bp::{BlockHash, Txid};
 
 pub mod api;
 
@@ -178,7 +178,8 @@ pub enum Error {
 
     /// IO error during ureq response read
     #[from]
-    Io(io::Error),
+    #[from(io::Error)]
+    Io(IoError),
 
     /// no header found in ureq response
     #[display(doc_comments)]
