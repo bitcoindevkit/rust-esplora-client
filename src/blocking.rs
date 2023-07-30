@@ -11,6 +11,8 @@
 
 //! Esplora by way of `ureq` HTTP client.
 
+use bp::hashes::{sha256, Hash};
+use bp::{BlockHash, BlockHeader, ScriptPubkey, Tx as Transaction, Txid};
 use std::collections::HashMap;
 use std::io;
 use std::io::Read;
@@ -21,13 +23,6 @@ use std::time::Duration;
 use log::{debug, error, info, trace};
 
 use ureq::{Agent, Proxy, Response};
-
-use bitcoin::consensus::{deserialize, serialize};
-use bitcoin::hashes::hex::FromHex;
-use bitcoin::hashes::{sha256, Hash};
-use bitcoin::{Block, BlockHash, block::Header as BlockHeader, MerkleBlock, Script, Transaction, Txid};
-
-use bitcoin_internals::hex::display::DisplayHex;
 
 use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
@@ -58,6 +53,7 @@ impl BlockingClient {
         BlockingClient { url, agent }
     }
 
+    /* Uncomment once `bp-primitives` will support consensus serialziation
     /// Get a [`Transaction`] option given its [`Txid`]
     pub fn get_tx(&self, txid: &Txid) -> Result<Option<Transaction>, Error> {
         let resp = self
@@ -76,6 +72,7 @@ impl BlockingClient {
             Err(e) => Err(Error::Ureq(e)),
         }
     }
+     */
 
     /// Get a [`Transaction`] given its [`Txid`].
     pub fn get_tx_no_opt(&self, txid: &Txid) -> Result<Transaction, Error> {
@@ -133,6 +130,7 @@ impl BlockingClient {
         self.get_header_by_hash(&block_hash)
     }
 
+    /* Uncomment once `bp-primitives` will support consensus serialziation
     /// Get a [`BlockHeader`] given a particular block hash.
     pub fn get_header_by_hash(&self, block_hash: &BlockHash) -> Result<BlockHeader, Error> {
         let resp = self
@@ -146,6 +144,7 @@ impl BlockingClient {
             Err(e) => Err(Error::Ureq(e)),
         }
     }
+     */
 
     /// Get the [`BlockStatus`] given a particular [`BlockHash`].
     pub fn get_block_status(&self, block_hash: &BlockHash) -> Result<BlockStatus, Error> {
@@ -161,6 +160,7 @@ impl BlockingClient {
         }
     }
 
+    /* TODO: Uncomment once `bp-primitives` will support blocks
     /// Get a [`Block`] given a particular [`BlockHash`].
     pub fn get_block_by_hash(&self, block_hash: &BlockHash) -> Result<Option<Block>, Error> {
         let resp = self
@@ -217,6 +217,7 @@ impl BlockingClient {
             Err(e) => Err(Error::Ureq(e)),
         }
     }
+     */
 
     /// Get the spending status of an output given a [`Txid`] and the output index.
     pub fn get_output_status(
@@ -241,6 +242,7 @@ impl BlockingClient {
         }
     }
 
+    /* Uncomment once `bp-primitives` will support consensus serialziation
     /// Broadcast a [`Transaction`] to Esplora
     pub fn broadcast(&self, transaction: &Transaction) -> Result<(), Error> {
         let resp = self
@@ -254,6 +256,7 @@ impl BlockingClient {
             Err(e) => Err(Error::Ureq(e)),
         }
     }
+    */
 
     /// Get the height of the current blockchain tip.
     pub fn get_height(&self) -> Result<u32, Error> {
@@ -328,7 +331,7 @@ impl BlockingClient {
     /// More can be requested by specifying the last txid seen by the previous query.
     pub fn scripthash_txs(
         &self,
-        script: &Script,
+        script: &ScriptPubkey,
         last_seen: Option<Txid>,
     ) -> Result<Vec<Tx>, Error> {
         let script_hash = sha256::Hash::hash(script.as_bytes());
