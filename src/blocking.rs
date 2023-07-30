@@ -11,13 +11,14 @@
 
 //! Esplora by way of `ureq` HTTP client.
 
-use bp::hashes::{sha256, Hash};
-use bp::{BlockHash, BlockHeader, ScriptPubkey, Tx as Transaction, Txid};
 use std::collections::HashMap;
 use std::io;
 use std::io::Read;
 use std::str::FromStr;
 use std::time::Duration;
+
+use bp::hashes::{sha256, Hash};
+use bp::{BlockHash, BlockHeader, ScriptPubkey, Tx as Transaction, Txid};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
@@ -72,7 +73,6 @@ impl BlockingClient {
             Err(e) => Err(Error::Ureq(e)),
         }
     }
-     */
 
     /// Get a [`Transaction`] given its [`Txid`].
     pub fn get_tx_no_opt(&self, txid: &Txid) -> Result<Transaction, Error> {
@@ -82,6 +82,7 @@ impl BlockingClient {
             Err(e) => Err(e),
         }
     }
+     */
 
     /// Get a [`Txid`] of a transaction given its index in a block with a given hash.
     pub fn get_txid_at_block_index(
@@ -118,16 +119,6 @@ impl BlockingClient {
             Err(ureq::Error::Status(code, _)) => Err(Error::HttpResponse(code)),
             Err(e) => Err(Error::Ureq(e)),
         }
-    }
-
-    /// Get a [`BlockHeader`] given a particular block height.
-    #[deprecated(
-        since = "0.2.0",
-        note = "Deprecated to improve alignment with Esplora API. Users should use `get_block_hash` and `get_header_by_hash` methods directly."
-    )]
-    pub fn get_header(&self, block_height: u32) -> Result<BlockHeader, Error> {
-        let block_hash = self.get_block_hash(block_height)?;
-        self.get_header_by_hash(&block_hash)
     }
 
     /* Uncomment once `bp-primitives` will support consensus serialziation
@@ -334,7 +325,7 @@ impl BlockingClient {
         script: &ScriptPubkey,
         last_seen: Option<Txid>,
     ) -> Result<Vec<Tx>, Error> {
-        let script_hash = sha256::Hash::hash(script.as_bytes());
+        let script_hash = sha256::Hash::hash(script.as_ref());
         let url = match last_seen {
             Some(last_seen) => format!(
                 "{}/scripthash/{:x}/txs/chain/{}",
@@ -388,13 +379,4 @@ fn into_bytes(resp: Response) -> Result<Vec<u8>, io::Error> {
     }
 
     Ok(buf)
-}
-
-impl From<ureq::Error> for Error {
-    fn from(e: ureq::Error) -> Self {
-        match e {
-            ureq::Error::Status(code, _) => Error::HttpResponse(code),
-            e => Error::Ureq(e),
-        }
-    }
 }

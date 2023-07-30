@@ -16,10 +16,10 @@
 //! ```no_run
 //! # #[cfg(feature = "blocking")]
 //! # {
-//! use esplora_client::Builder;
+//! use esplora::Builder;
 //! let builder = Builder::new("https://blockstream.info/testnet/api");
 //! let blocking_client = builder.build_blocking();
-//! # Ok::<(), esplora_client::Error>(());
+//! # Ok::<(), esplora::Error>(());
 //! # }
 //! ```
 //!
@@ -28,10 +28,10 @@
 //! ```no_run
 //! # #[cfg(feature = "async")]
 //! # {
-//! use esplora_client::Builder;
+//! use esplora::Builder;
 //! let builder = Builder::new("https://blockstream.info/testnet/api");
 //! let async_client = builder.build_async();
-//! # Ok::<(), esplora_client::Error>(());
+//! # Ok::<(), esplora::Error>(());
 //! # }
 //! ```
 //!
@@ -154,18 +154,14 @@ impl Builder {
 }
 
 /// Errors that can happen during a sync with `Esplora`
-#[derive(Clone, Eq, PartialEq, Debug, Display, Error, From)]
+#[derive(Debug, Display, Error, From)]
 #[display(inner)]
 pub enum Error {
     /// Error during ureq HTTP request
     #[cfg(feature = "blocking")]
     #[from]
+    #[from(ureq::Transport)]
     Ureq(ureq::Error),
-    /// Transport error during the ureq HTTP call
-
-    #[cfg(feature = "blocking")]
-    #[from]
-    UreqTransport(ureq::Transport),
 
     /// Error during reqwest HTTP request
     #[cfg(feature = "async")]
