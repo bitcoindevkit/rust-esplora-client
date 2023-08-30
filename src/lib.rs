@@ -41,7 +41,7 @@
 //! specific features, set `default-features` to `false` in your `Cargo.toml`
 //! and specify the features you want. This will look like this:
 //!
-//! `esplora_client = { version = "*", default-features = false, features = ["blocking"] }`
+//! `esplora-client = { version = "*", default-features = false, features = ["blocking"] }`
 //!
 //! * `blocking` enables [`ureq`], the blocking client with proxy and TLS (SSL) capabilities.
 //! * `async` enables [`reqwest`], the async client with proxy capabilities.
