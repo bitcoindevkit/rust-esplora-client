@@ -17,7 +17,9 @@ use std::str::FromStr;
 use bitcoin::consensus::{deserialize, serialize};
 use bitcoin::hashes::hex::FromHex;
 use bitcoin::hashes::{sha256, Hash};
-use bitcoin::{Block, BlockHash, block::Header as BlockHeader, MerkleBlock, Script, Transaction, Txid};
+use bitcoin::{
+    block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
+};
 use hex_conservative::DisplayHex;
 
 #[allow(unused_imports)]

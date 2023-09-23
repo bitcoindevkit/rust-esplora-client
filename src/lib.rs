@@ -62,6 +62,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::io;
+use std::num::TryFromIntError;
 
 use bitcoin::consensus;
 
@@ -104,7 +105,7 @@ pub struct Builder {
     /// The string should be formatted as: `<protocol>://<user>:<password>@host:<port>`.
     ///
     /// Note that the format of this value and the supported protocols change slightly between the
-    /// blocking version of the client (using `ureq`) and the async version (using `reqwest`). For more
+    /// blocking version of the client (using `minreq`) and the async version (using `reqwest`). For more
     /// details check with the documentation of the two crates. Both of them are compiled with
     /// the `socks` feature enabled.
     ///
@@ -138,7 +139,7 @@ impl Builder {
 
     /// build a blocking client from builder
     #[cfg(feature = "blocking")]
-    pub fn build_blocking(self) -> Result<BlockingClient, Error> {
+    pub fn build_blocking(self) -> BlockingClient {
         BlockingClient::from_builder(self)
     }
 
@@ -154,10 +155,7 @@ impl Builder {
 pub enum Error {
     /// Error during ureq HTTP request
     #[cfg(feature = "blocking")]
-    Ureq(::ureq::Error),
-    /// Transport error during the ureq HTTP call
-    #[cfg(feature = "blocking")]
-    UreqTransport(::ureq::Transport),
+    Minreq(::minreq::Error),
     /// Error during reqwest HTTP request
     #[cfg(feature = "async")]
     Reqwest(::reqwest::Error),
@@ -169,6 +167,8 @@ pub enum Error {
     NoHeader,
     /// Invalid number returned
     Parsing(std::num::ParseIntError),
+    /// Invalid status code, unable to convert to u16
+    StatusCode(TryFromIntError),
     /// Invalid Bitcoin data returned
     BitcoinEncoding(bitcoin::consensus::encode::Error),
     /// Invalid Hex data returned
@@ -203,7 +203,7 @@ macro_rules! impl_error {
 
 impl std::error::Error for Error {}
 #[cfg(feature = "blocking")]
-impl_error!(::ureq::Transport, UreqTransport, Error);
+impl_error!(::minreq::Error, Minreq, Error);
 #[cfg(feature = "async")]
 impl_error!(::reqwest::Error, Reqwest, Error);
 impl_error!(io::Error, Io, Error);
@@ -270,7 +270,7 @@ mod test {
         let esplora_url = ELECTRSD.esplora_url.as_ref().unwrap();
 
         let builder = Builder::new(&format!("http://{}", esplora_url));
-        let blocking_client = builder.build_blocking().unwrap();
+        let blocking_client = builder.build_blocking();
 
         let builder_async = Builder::new(&format!("http://{}", esplora_url));
         let async_client = builder_async.build_async().unwrap();
