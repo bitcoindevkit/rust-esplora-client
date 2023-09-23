@@ -22,6 +22,10 @@ jobs:
         features:
           - default
           - blocking
+          - blocking-https
+          - blocking-https-rustls
+          - blocking-https-native
+          - blocking-https-bundled
           - async
           - async-https
           - async-https-native

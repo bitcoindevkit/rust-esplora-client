@@ -4,7 +4,7 @@
 //! async Esplora client to query Esplora's backend.
 //!
 //! The library provides the possibility to build a blocking
-//! client using [`ureq`] and an async client using [`reqwest`].
+//! client using [`minreq`] and an async client using [`reqwest`].
 //! The library supports communicating to Esplora via a proxy
 //! and also using TLS (SSL) for secure communication.
 //!
@@ -43,7 +43,15 @@
 //!
 //! `esplora-client = { version = "*", default-features = false, features = ["blocking"] }`
 //!
-//! * `blocking` enables [`ureq`], the blocking client with proxy and TLS (SSL) capabilities.
+//! * `blocking` enables [`minreq`], the blocking client with proxy.
+//! * `blocking-https` enables [`minreq`], the blocking client with proxy and TLS (SSL)
+//!   capabilities using the default [`minreq`] backend.
+//! * `blocking-https-rustls` enables [`minreq`], the blocking client with proxy and TLS (SSL)
+//!   capabilities using the `rustls` backend.
+//! * `blocking-https-native` enables [`minreq`], the blocking client with proxy and TLS (SSL)
+//!   capabilities using the platform's native TLS backend (likely OpenSSL).
+//! * `blocking-https-bundled` enables [`minreq`], the blocking client with proxy and TLS (SSL)
+//!   capabilities using a bundled OpenSSL library backend.
 //! * `async` enables [`reqwest`], the async client with proxy capabilities.
 //! * `async-https` enables [`reqwest`], the async client with support for proxying and TLS (SSL)
 //!   using the default [`reqwest`] TLS backend.
@@ -61,7 +69,7 @@
 
 use std::collections::HashMap;
 use std::fmt;
-use std::io;
+use std::num::TryFromIntError;
 
 use bitcoin::consensus;
 
@@ -104,7 +112,7 @@ pub struct Builder {
     /// The string should be formatted as: `<protocol>://<user>:<password>@host:<port>`.
     ///
     /// Note that the format of this value and the supported protocols change slightly between the
-    /// blocking version of the client (using `ureq`) and the async version (using `reqwest`). For more
+    /// blocking version of the client (using `minreq`) and the async version (using `reqwest`). For more
     /// details check with the documentation of the two crates. Both of them are compiled with
     /// the `socks` feature enabled.
     ///
@@ -138,7 +146,7 @@ impl Builder {
 
     /// build a blocking client from builder
     #[cfg(feature = "blocking")]
-    pub fn build_blocking(self) -> Result<BlockingClient, Error> {
+    pub fn build_blocking(self) -> BlockingClient {
         BlockingClient::from_builder(self)
     }
 
@@ -152,30 +160,24 @@ impl Builder {
 /// Errors that can happen during a sync with `Esplora`
 #[derive(Debug)]
 pub enum Error {
-    /// Error during ureq HTTP request
+    /// Error during `minreq` HTTP request
     #[cfg(feature = "blocking")]
-    Ureq(::ureq::Error),
-    /// Transport error during the ureq HTTP call
-    #[cfg(feature = "blocking")]
-    UreqTransport(::ureq::Transport),
+    Minreq(::minreq::Error),
     /// Error during reqwest HTTP request
     #[cfg(feature = "async")]
     Reqwest(::reqwest::Error),
     /// HTTP response error
     HttpResponse { status: u16, message: String },
-    /// IO error during ureq response read
-    Io(io::Error),
-    /// No header found in ureq response
-    NoHeader,
     /// Invalid number returned
     Parsing(std::num::ParseIntError),
+    /// Invalid status code, unable to convert to `u16`
+    StatusCode(TryFromIntError),
     /// Invalid Bitcoin data returned
     BitcoinEncoding(bitcoin::consensus::encode::Error),
     /// Invalid hex data returned (attempting to create an array)
     HexToArray(bitcoin::hex::HexToArrayError),
     /// Invalid hex data returned (attempting to create a vector)
     HexToBytes(bitcoin::hex::HexToBytesError),
-
     /// Transaction not found
     TransactionNotFound(Txid),
     /// Header height not found
@@ -205,10 +207,9 @@ macro_rules! impl_error {
 
 impl std::error::Error for Error {}
 #[cfg(feature = "blocking")]
-impl_error!(::ureq::Transport, UreqTransport, Error);
+impl_error!(::minreq::Error, Minreq, Error);
 #[cfg(feature = "async")]
 impl_error!(::reqwest::Error, Reqwest, Error);
-impl_error!(io::Error, Io, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
 impl_error!(consensus::encode::Error, BitcoinEncoding, Error);
 impl_error!(bitcoin::hex::HexToArrayError, HexToArray, Error);
@@ -273,7 +274,7 @@ mod test {
         let esplora_url = ELECTRSD.esplora_url.as_ref().unwrap();
 
         let builder = Builder::new(&format!("http://{}", esplora_url));
-        let blocking_client = builder.build_blocking().unwrap();
+        let blocking_client = builder.build_blocking();
 
         let builder_async = Builder::new(&format!("http://{}", esplora_url));
         let async_client = builder_async.build_async().unwrap();
