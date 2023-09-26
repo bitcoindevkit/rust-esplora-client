@@ -552,6 +552,41 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
+    async fn test_that_errors_are_propagated() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .get_new_address(Some("test"), Some(AddressType::Legacy))
+            .unwrap()
+            .assume_checked();
+        let txid = BITCOIND
+            .client
+            .send_to_address(
+                &address,
+                Amount::from_sat(1000),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+        let _miner = MINER.lock().await;
+        generate_blocks_and_wait(1);
+
+        let tx = blocking_client.get_tx(&txid).unwrap();
+        let async_res = async_client.broadcast(tx.as_ref().unwrap()).await;
+        let blocking_res = blocking_client.broadcast(tx.as_ref().unwrap());
+        assert!(async_res.is_err());
+        assert_eq!(async_res.unwrap_err().to_string(),"HttpResponse { status: 400, message: \"sendrawtransaction RPC error: {\\\"code\\\":-27,\\\"message\\\":\\\"Transaction already in block chain\\\"}\" }");
+        assert!(blocking_res.is_err());
+        assert_eq!(blocking_res.unwrap_err().to_string(),"HttpResponse { status: 400, message: \"sendrawtransaction RPC error: {\\\"code\\\":-27,\\\"message\\\":\\\"Transaction already in block chain\\\"}\" }");
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
     async fn test_get_block_by_hash_not_existing() {
         let (blocking_client, async_client) = setup_clients().await;
 
