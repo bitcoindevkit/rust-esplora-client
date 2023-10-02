@@ -162,7 +162,7 @@ pub enum Error {
     #[cfg(feature = "async")]
     Reqwest(::reqwest::Error),
     /// HTTP response error
-    HttpResponse(u16),
+    HttpResponse { status: u16, message: String },
     /// IO error during ureq response read
     Io(io::Error),
     /// No header found in ureq response
@@ -223,8 +223,7 @@ mod test {
         bitcoin::hashes::Hash,
         bitcoin::Amount,
         electrsd::{
-            bitcoind::bitcoincore_rpc::json::AddressType,
-            bitcoind::bitcoincore_rpc::RpcApi,
+            bitcoind::bitcoincore_rpc::json::AddressType, bitcoind::bitcoincore_rpc::RpcApi,
             electrum_client::ElectrumApi,
         },
         std::time::Duration,
@@ -549,6 +548,41 @@ mod test {
         let block_async = async_client.get_block_by_hash(&block_hash).await.unwrap();
         assert_eq!(expected, block);
         assert_eq!(expected, block_async);
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_that_errors_are_propagated() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .get_new_address(Some("test"), Some(AddressType::Legacy))
+            .unwrap()
+            .assume_checked();
+        let txid = BITCOIND
+            .client
+            .send_to_address(
+                &address,
+                Amount::from_sat(1000),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+        let _miner = MINER.lock().await;
+        generate_blocks_and_wait(1);
+
+        let tx = blocking_client.get_tx(&txid).unwrap();
+        let async_res = async_client.broadcast(tx.as_ref().unwrap()).await;
+        let blocking_res = blocking_client.broadcast(tx.as_ref().unwrap());
+        assert!(async_res.is_err());
+        assert_eq!(async_res.unwrap_err().to_string(),"HttpResponse { status: 400, message: \"sendrawtransaction RPC error: {\\\"code\\\":-27,\\\"message\\\":\\\"Transaction already in block chain\\\"}\" }");
+        assert!(blocking_res.is_err());
+        assert_eq!(blocking_res.unwrap_err().to_string(),"HttpResponse { status: 400, message: \"sendrawtransaction RPC error: {\\\"code\\\":-27,\\\"message\\\":\\\"Transaction already in block chain\\\"}\" }");
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]

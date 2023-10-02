@@ -11,3 +11,25 @@ Bitcoin Esplora API client library. Supports plaintext, TLS and Onion servers. B
     <a href="https://blog.rust-lang.org/2021/12/02/Rust-1.57.0.html"><img alt="Rustc Version 1.57.0+" src="https://img.shields.io/badge/rustc-1.57.0%2B-lightgrey.svg"/></a>
     <a href="https://discord.gg/d7NkDKm"><img alt="Chat on Discord" src="https://img.shields.io/discord/753336465005608961?logo=discord"></a>
 </p>
+
+## Minimum Supported Rust Version (MSRV)
+This library should compile with any combination of features with Rust 1.57.0.
+
+To build with the MSRV you will need to pin dependencies as follows:
+
+```shell
+cargo update -p tokio --precise 1.29.1
+cargo update -p reqwest --precise 0.11.18
+cargo update -p rustls:0.20.9 --precise 0.20.8
+cargo update -p rustix --precise 0.38.6
+cargo update -p rustls:0.21.7 --precise 0.21.1
+cargo update -p hyper-rustls:0.24.1 --precise 0.24.0
+cargo update -p rustls-webpki:0.100.3 --precise 0.100.1
+cargo update -p rustls-webpki:0.101.6 --precise 0.101.1
+cargo update -p tempfile --precise 3.6.0
+cargo update -p h2 --precise 0.3.20
+cargo update -p flate2:1.0.27 --precise 1.0.26
+cargo update -p cc --precise 1.0.81
+cargo update -p tokio-util --precise 0.7.8
+cargo update -p time:0.3.15 --precise 0.3.13
+```

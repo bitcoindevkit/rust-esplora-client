@@ -17,7 +17,9 @@ use std::str::FromStr;
 use bitcoin::consensus::{deserialize, serialize};
 use bitcoin::hashes::hex::FromHex;
 use bitcoin::hashes::{sha256, Hash};
-use bitcoin::{Block, BlockHash, block::Header as BlockHeader, MerkleBlock, Script, Transaction, Txid};
+use bitcoin::{
+    block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
+};
 use bitcoin_internals::hex::display::DisplayHex;
 
 #[allow(unused_imports)]
@@ -68,7 +70,14 @@ impl AsyncClient {
             return Ok(None);
         }
 
-        Ok(Some(deserialize(&resp.error_for_status()?.bytes().await?)?))
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            Ok(Some(deserialize(&resp.bytes().await?)?))
+        }
     }
 
     /// Get a [`Transaction`] given its [`Txid`].
@@ -96,7 +105,14 @@ impl AsyncClient {
             return Ok(None);
         }
 
-        Ok(Some(Txid::from_str(&resp.text().await?)?))
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            Ok(Some(Txid::from_str(&resp.text().await?)?))
+        }
     }
 
     /// Get the status of a [`Transaction`] given its [`Txid`].
@@ -106,8 +122,14 @@ impl AsyncClient {
             .get(&format!("{}/tx/{}/status", self.url, txid))
             .send()
             .await?;
-
-        Ok(resp.error_for_status()?.json().await?)
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            Ok(resp.json().await?)
+        }
     }
 
     #[deprecated(
@@ -128,9 +150,15 @@ impl AsyncClient {
             .send()
             .await?;
 
-        let header = deserialize(&Vec::from_hex(&resp.text().await?)?)?;
-
-        Ok(header)
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            let header = deserialize(&Vec::from_hex(&resp.text().await?)?)?;
+            Ok(header)
+        }
     }
 
     /// Get the [`BlockStatus`] given a particular [`BlockHash`].
@@ -141,7 +169,14 @@ impl AsyncClient {
             .send()
             .await?;
 
-        Ok(resp.error_for_status()?.json().await?)
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            Ok(resp.json().await?)
+        }
     }
 
     /// Get a [`Block`] given a particular [`BlockHash`].
@@ -155,7 +190,15 @@ impl AsyncClient {
         if let StatusCode::NOT_FOUND = resp.status() {
             return Ok(None);
         }
-        Ok(Some(deserialize(&resp.error_for_status()?.bytes().await?)?))
+
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            Ok(Some(deserialize(&resp.bytes().await?)?))
+        }
     }
 
     /// Get a merkle inclusion proof for a [`Transaction`] with the given [`Txid`].
@@ -170,7 +213,14 @@ impl AsyncClient {
             return Ok(None);
         }
 
-        Ok(Some(resp.error_for_status()?.json().await?))
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            Ok(Some(resp.json().await?))
+        }
     }
 
     /// Get a [`MerkleBlock`] inclusion proof for a [`Transaction`] with the given [`Txid`].
@@ -185,9 +235,15 @@ impl AsyncClient {
             return Ok(None);
         }
 
-        let merkle_block = deserialize(&Vec::from_hex(&resp.text().await?)?)?;
-
-        Ok(Some(merkle_block))
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            let merkle_block = deserialize(&Vec::from_hex(&resp.text().await?)?)?;
+            Ok(Some(merkle_block))
+        }
     }
 
     /// Get the spending status of an output given a [`Txid`] and the output index.
@@ -206,19 +262,33 @@ impl AsyncClient {
             return Ok(None);
         }
 
-        Ok(Some(resp.error_for_status()?.json().await?))
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            Ok(Some(resp.json().await?))
+        }
     }
 
     /// Broadcast a [`Transaction`] to Esplora
     pub async fn broadcast(&self, transaction: &Transaction) -> Result<(), Error> {
-        self.client
+        let resp = self
+            .client
             .post(&format!("{}/tx", self.url))
             .body(serialize(transaction).to_lower_hex_string())
             .send()
-            .await?
-            .error_for_status()?;
+            .await?;
 
-        Ok(())
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            Ok(())
+        }
     }
 
     /// Get the current height of the blockchain tip
@@ -229,7 +299,14 @@ impl AsyncClient {
             .send()
             .await?;
 
-        Ok(resp.error_for_status()?.text().await?.parse()?)
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            Ok(resp.text().await?.parse()?)
+        }
     }
 
     /// Get the [`BlockHash`] of the current blockchain tip.
@@ -240,9 +317,14 @@ impl AsyncClient {
             .send()
             .await?;
 
-        Ok(BlockHash::from_str(
-            &resp.error_for_status()?.text().await?,
-        )?)
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            Ok(BlockHash::from_str(&resp.text().await?)?)
+        }
     }
 
     /// Get the [`BlockHash`] of a specific block height
@@ -257,9 +339,14 @@ impl AsyncClient {
             return Err(Error::HeaderHeightNotFound(block_height));
         }
 
-        Ok(BlockHash::from_str(
-            &resp.error_for_status()?.text().await?,
-        )?)
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            Ok(BlockHash::from_str(&resp.text().await?)?)
+        }
     }
 
     /// Get confirmed transaction history for the specified address/scripthash,
@@ -278,27 +365,36 @@ impl AsyncClient {
             ),
             None => format!("{}/scripthash/{:x}/txs", self.url, script_hash),
         };
-        Ok(self
-            .client
-            .get(url)
-            .send()
-            .await?
-            .error_for_status()?
-            .json::<Vec<Tx>>()
-            .await?)
+
+        let resp = self.client.get(url).send().await?;
+
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            Ok(resp.json::<Vec<Tx>>().await?)
+        }
     }
 
     /// Get an map where the key is the confirmation target (in number of blocks)
     /// and the value is the estimated feerate (in sat/vB).
     pub async fn get_fee_estimates(&self) -> Result<HashMap<String, f64>, Error> {
-        Ok(self
+        let resp = self
             .client
             .get(&format!("{}/fee-estimates", self.url,))
             .send()
-            .await?
-            .error_for_status()?
-            .json::<HashMap<String, f64>>()
-            .await?)
+            .await?;
+
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            Ok(resp.json::<HashMap<String, f64>>().await?)
+        }
     }
 
     /// Gets some recent block summaries starting at the tip or at `height` if provided.
@@ -311,14 +407,16 @@ impl AsyncClient {
             None => format!("{}/blocks", self.url),
         };
 
-        Ok(self
-            .client
-            .get(&url)
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?)
+        let resp = self.client.get(&url).send().await?;
+
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            Ok(resp.json::<Vec<BlockSummary>>().await?)
+        }
     }
 
     /// Get the underlying base URL.
