@@ -198,16 +198,6 @@ impl BlockingClient {
         self.get_response_json(&format!("/tx/{}/status", txid))
     }
 
-    /// Get a [`BlockHeader`] given a particular block height.
-    #[deprecated(
-        since = "0.2.0",
-        note = "Deprecated to improve alignment with Esplora API. Users should use `get_block_hash` and `get_header_by_hash` methods directly."
-    )]
-    pub fn get_header(&self, block_height: u32) -> Result<BlockHeader, Error> {
-        let block_hash = self.get_block_hash(block_height)?;
-        self.get_header_by_hash(&block_hash)
-    }
-
     /// Get a [`BlockHeader`] given a particular block hash.
     pub fn get_header_by_hash(&self, block_hash: &BlockHash) -> Result<BlockHeader, Error> {
         self.get_response_hex(&format!("/block/{}/header", block_hash))

@@ -131,16 +131,6 @@ impl AsyncClient {
         }
     }
 
-    #[deprecated(
-        since = "0.2.0",
-        note = "Deprecated to improve alignment with Esplora API. Users should use `get_block_hash` and `get_header_by_hash` methods directly."
-    )]
-    /// Get a [`BlockHeader`] given a particular block height.
-    pub async fn get_header(&self, block_height: u32) -> Result<BlockHeader, Error> {
-        let block_hash = self.get_block_hash(block_height).await?;
-        self.get_header_by_hash(&block_hash).await
-    }
-
     /// Get a [`BlockHeader`] given a particular block hash.
     pub async fn get_header_by_hash(&self, block_hash: &BlockHash) -> Result<BlockHeader, Error> {
         let resp = self
