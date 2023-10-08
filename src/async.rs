@@ -25,7 +25,9 @@ use bitcoin_internals::hex::display::DisplayHex;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
+use async_recursion::async_recursion;
 use reqwest::{Client, StatusCode};
+use tokio::time::{sleep, Duration};
 
 use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
@@ -352,6 +354,7 @@ impl AsyncClient {
     /// Get confirmed transaction history for the specified address/scripthash,
     /// sorted with newest first. Returns 25 transactions per page.
     /// More can be requested by specifying the last txid seen by the previous query.
+    #[async_recursion]
     pub async fn scripthash_txs(
         &self,
         script: &Script,
@@ -369,10 +372,16 @@ impl AsyncClient {
         let resp = self.client.get(url).send().await?;
 
         if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
+            if resp.status() == StatusCode::TOO_MANY_REQUESTS {
+                eprintln!("Too many requests, sleeping for 500 ms");
+                sleep(Duration::from_millis(500)).await;
+                self.scripthash_txs(script, last_seen).await
+            } else {
+                Err(Error::HttpResponse {
+                    status: resp.status().as_u16(),
+                    message: resp.text().await?,
+                })
+            }
         } else {
             Ok(resp.json::<Vec<Tx>>().await?)
         }

@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::io;
 use std::io::Read;
 use std::str::FromStr;
+use std::thread::sleep;
 use std::time::Duration;
 
 #[allow(unused_imports)]
@@ -380,7 +381,26 @@ impl BlockingClient {
             ),
             None => format!("{}/scripthash/{:x}/txs", self.url, script_hash),
         };
-        Ok(self.agent.get(&url).call()?.into_json()?)
+        let resp = self.agent.get(&url).call(); //?.into_json();
+        match resp {
+            Ok(resp) => {
+                let resp_json = resp.into_json()?;
+                Ok(resp_json)
+            }
+            Err(ureq::Error::Status(code, resp)) => {
+                if is_status_too_many_requests(code) {
+                    eprintln!("Too many requests, sleeping for 500 ms");
+                    sleep(Duration::from_millis(500));
+                    self.scripthash_txs(script, last_seen)
+                } else {
+                    Err(Error::HttpResponse {
+                        status: code,
+                        message: resp.into_string()?,
+                    })
+                }
+            }
+            Err(e) => Err(Error::Ureq(e)),
+        }
     }
 
     /// Gets some recent block summaries starting at the tip or at `height` if provided.
@@ -409,6 +429,10 @@ impl BlockingClient {
 
 fn is_status_not_found(status: u16) -> bool {
     status == 404
+}
+
+fn is_status_too_many_requests(status: u16) -> bool {
+    status == 429
 }
 
 fn into_bytes(resp: Response) -> Result<Vec<u8>, io::Error> {
