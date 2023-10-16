@@ -51,7 +51,11 @@ jobs:
     - name: pin dependencies
       if: matrix.rust.version == '1.63.0'
       run: |
+        cargo update -p zip --precise 0.6.0
+        cargo update -p time --precise 0.3.7
+        cargo update -p electrsd --precise 0.27.1
         cargo update -p home --precise 0.5.5
+        cargo update -p jobserver --precise 0.1.26
     - name: Build
       run: cargo build --features ${{ matrix.features }} --no-default-features
     - name: Clippy

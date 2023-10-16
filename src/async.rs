@@ -15,12 +15,9 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use bitcoin::consensus::{deserialize, serialize};
-use bitcoin::hashes::hex::FromHex;
+use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::hashes::{sha256, Hash};
-use bitcoin::{
-    block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
-};
-use bitcoin_internals::hex::display::DisplayHex;
+use bitcoin::{Block, BlockHash, block::Header as BlockHeader, MerkleBlock, Script, Transaction, Txid};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};

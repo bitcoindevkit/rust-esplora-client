@@ -23,13 +23,11 @@ use log::{debug, error, info, trace};
 use ureq::{Agent, Proxy, Response};
 
 use bitcoin::consensus::{deserialize, serialize};
-use bitcoin::hashes::hex::FromHex;
+use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::{
     block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
 };
-
-use bitcoin_internals::hex::display::DisplayHex;
 
 use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
