@@ -17,17 +17,28 @@ path = "src/lib.rs"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-bitcoin = { version = "0.30.0", features = ["serde", "std"], default-features = false }
+bitcoin = { version = "0.30.0", features = [
+  "serde",
+  "std",
+], default-features = false }
 # Temporary dependency on internals until the rust-bitcoin devs release the hex-conservative crate.
 bitcoin-internals = { version = "0.1.0", features = ["alloc"] }
 log = "^0.4"
 ureq = { version = "2.5.0", features = ["json"], optional = true }
-reqwest = { version = "0.11", optional = true, default-features = false, features = ["json"] }
+reqwest = { version = "0.11", optional = true, default-features = false, features = [
+  "json",
+] }
+# WASM specific fix
+getrandom = { version = "0.2", features = ["js"] }
 
 [dev-dependencies]
 serde_json = "1.0"
 tokio = { version = "1.20.1", features = ["full"] }
-electrsd = { version = "0.24.0", features = ["legacy", "esplora_a33e97e1", "bitcoind_22_0"] }
+electrsd = { version = "0.24.0", features = [
+  "legacy",
+  "esplora_a33e97e1",
+  "bitcoind_22_0",
+] }
 electrum-client = "0.16.0"
 lazy_static = "1.4.0"
 # zip versions after 0.6.3 don't work with our MSRV 1.57.0

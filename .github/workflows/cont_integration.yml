@@ -28,7 +28,7 @@ jobs:
           - async-https-rustls
           - async-https-rustls-manual-roots
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Generate cache key
       run: echo "${{ matrix.rust.version }} ${{ matrix.features }}" | tee .cache_key
     - name: cache
@@ -72,3 +72,12 @@ jobs:
       run: cargo clippy --all-targets --features ${{ matrix.features }} --no-default-features -- -D warnings
     - name: Test
       run: cargo test --features ${{ matrix.features }} --no-default-features
+
+  check-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - run: cargo check --target wasm32-unknown-unknown --no-default-features --features bitcoin/no-std
