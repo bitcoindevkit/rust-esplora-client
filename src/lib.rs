@@ -88,16 +88,13 @@ pub use r#async::AsyncClient;
 
 /// Get a fee value in sats/vbytes from the estimates
 /// that matches the confirmation target set as parameter.
-pub fn convert_fee_rate(target: usize, estimates: HashMap<String, f64>) -> Result<f32, Error> {
+pub fn convert_fee_rate(target: usize, estimates: HashMap<u16, f64>) -> Result<f32, Error> {
     let fee_val = {
-        let mut pairs = estimates
-            .into_iter()
-            .filter_map(|(k, v)| Some((k.parse::<usize>().ok()?, v)))
-            .collect::<Vec<_>>();
+        let mut pairs = estimates.into_iter().collect::<Vec<(u16, f64)>>();
         pairs.sort_unstable_by_key(|(k, _)| std::cmp::Reverse(*k));
         pairs
             .into_iter()
-            .find(|(k, _)| k <= &target)
+            .find(|(k, _)| *k as usize <= target)
             .map(|(_, v)| v)
             .unwrap_or(1.0)
     };
@@ -336,7 +333,7 @@ mod test {
 
     #[test]
     fn feerate_parsing() {
-        let esplora_fees = serde_json::from_str::<HashMap<String, f64>>(
+        let esplora_fees = serde_json::from_str::<HashMap<u16, f64>>(
             r#"{
   "25": 1.015,
   "5": 2.3280000000000003,
