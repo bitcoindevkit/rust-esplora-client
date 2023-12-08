@@ -31,6 +31,9 @@ jobs:
           - async-https-native
           - async-https-rustls
           - async-https-rustls-manual-roots
+          - async-arti-hyper
+          - async-arti-hyper-native
+          - async-arti-hyper-rustls
     steps:
     - uses: actions/checkout@v3
     - name: Generate cache key
@@ -58,10 +61,11 @@ jobs:
         cargo update -p zstd-sys --precise "2.0.8+zstd.1.5.5"
         cargo update -p time --precise "0.3.20"
         cargo update -p home --precise 0.5.5
+        cargo update -p tor-error --precise 0.4.1
     - name: Build
       run: cargo build --features ${{ matrix.features }} --no-default-features
     - name: Clippy
       if: ${{ matrix.rust.clippy }}
       run: cargo clippy --all-targets --features ${{ matrix.features }} --no-default-features -- -D warnings
     - name: Test
-      run: cargo test --features ${{ matrix.features }} --no-default-features -- --test-threads=1
+      run: cargo test --features ${{ matrix.features }} --no-default-features -- --test-threads=1 --include-ignored
