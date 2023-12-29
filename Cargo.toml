@@ -30,10 +30,6 @@ tokio = { version = "1.20.1", features = ["full"] }
 electrsd = { version = "0.24.0", features = ["legacy", "esplora_a33e97e1", "bitcoind_22_0"] }
 electrum-client = "0.16.0"
 lazy_static = "1.4.0"
-# zip versions after 0.6.3 don't work with our MSRV 1.57.0
-zip = "=0.6.3"
-# base64ct versions at 1.6.0 and higher have MSRV 1.60.0
-base64ct = "<1.6.0"
 
 [features]
 default = ["blocking", "async", "async-https"]
