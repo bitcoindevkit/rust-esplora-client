@@ -10,6 +10,7 @@ documentation = "https://docs.rs/esplora-client/"
 description = "Bitcoin Esplora API client library. Supports plaintext, TLS and Onion servers. Blocking or async"
 keywords = ["bitcoin", "esplora"]
 readme = "README.md"
+rust-version = "1.63.0"
 
 [lib]
 name = "esplora_client"
