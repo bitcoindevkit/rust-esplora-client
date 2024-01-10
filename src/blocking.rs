@@ -31,6 +31,7 @@ use bitcoin::{
 
 use bitcoin_internals::hex::display::DisplayHex;
 
+use crate::retryable::{SyncRetryable, RETRY_TOO_MANY_REQUEST_ONLY};
 use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
 #[derive(Debug, Clone)]
@@ -65,7 +66,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/tx/{}/raw", self.url, txid))
-            .call();
+            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(Some(deserialize(&into_bytes(resp)?)?)),
@@ -100,7 +101,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/block/{}/txid/{}", self.url, block_hash, index))
-            .call();
+            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(Some(Txid::from_str(&resp.into_string()?)?)),
@@ -122,7 +123,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/tx/{}/status", self.url, txid))
-            .call();
+            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(resp.into_json()?),
@@ -149,7 +150,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/block/{}/header", self.url, block_hash))
-            .call();
+            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(deserialize(&Vec::from_hex(&resp.into_string()?)?)?),
@@ -166,7 +167,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/block/{}/status", self.url, block_hash))
-            .call();
+            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(resp.into_json()?),
@@ -183,7 +184,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/block/{}/raw", self.url, block_hash))
-            .call();
+            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(Some(deserialize(&into_bytes(resp)?)?)),
@@ -205,7 +206,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/tx/{}/merkle-proof", self.url, txid))
-            .call();
+            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(Some(resp.into_json()?)),
@@ -227,7 +228,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/tx/{}/merkleblock-proof", self.url, txid))
-            .call();
+            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(Some(deserialize(&Vec::from_hex(&resp.into_string()?)?)?)),
@@ -253,7 +254,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/tx/{}/outspend/{}", self.url, txid, index))
-            .call();
+            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(Some(resp.into_json()?)),
@@ -292,7 +293,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/blocks/tip/height", self.url))
-            .call();
+            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(resp.into_string()?.parse()?),
@@ -309,7 +310,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/blocks/tip/hash", self.url))
-            .call();
+            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
 
         Self::process_block_result(resp)
     }
@@ -319,7 +320,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/block-height/{}", self.url, block_height))
-            .call();
+            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
 
         if let Err(ureq::Error::Status(code, _)) = resp {
             if is_status_not_found(code) {
@@ -347,7 +348,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/fee-estimates", self.url,))
-            .call();
+            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
 
         let map = match resp {
             Ok(resp) => {
@@ -380,7 +381,11 @@ impl BlockingClient {
             ),
             None => format!("{}/scripthash/{:x}/txs", self.url, script_hash),
         };
-        Ok(self.agent.get(&url).call()?.into_json()?)
+        Ok(self
+            .agent
+            .get(&url)
+            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)?
+            .into_json()?)
     }
 
     /// Gets some recent block summaries starting at the tip or at `height` if provided.
@@ -393,7 +398,11 @@ impl BlockingClient {
             None => format!("{}/blocks", self.url),
         };
 
-        Ok(self.agent.get(&url).call()?.into_json()?)
+        Ok(self
+            .agent
+            .get(&url)
+            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)?
+            .into_json()?)
     }
 
     /// Get the underlying base URL.
