@@ -8,6 +8,7 @@ use reqwest::{RequestBuilder, Response as ReqwestResponse, StatusCode};
 #[cfg(feature = "blocking")]
 use ureq::{Error as UReqError, Request, Response as UReqResponse};
 
+const SECOND: u64 = 1_000;
 const BASE_BACKOFF_MS: u64 = 5_000;
 const DEFAULT_MAX_RETRIES: u32 = 5;
 
@@ -33,7 +34,12 @@ fn compute_backoff(retry_after: Option<&str>, backoff: Duration) -> Duration {
     match retry_after {
         // If response has a Retry-After header, parse it and use it as backoff
         Some(retry_after) => {
-            return Duration::from_secs(retry_after.parse::<u64>().unwrap_or(BASE_BACKOFF_MS))
+            return Duration::from_millis(
+                retry_after
+                    .parse::<u64>()
+                    .map(|seconds| seconds * SECOND)
+                    .unwrap_or(BASE_BACKOFF_MS),
+            )
         }
         // Else, double previous backoff
         _ => return backoff * 2,
@@ -77,7 +83,7 @@ impl AsyncRetryable<ReqwestResponse> for RequestBuilder {
                 Ok(response) => {
                     return response
                         .error_for_status()
-                        .map_err(|error| crate::Error::Reqwest(error))
+                        .map_err(|error| crate::Error::Reqwest(error));
                 }
             }
         }

@@ -48,7 +48,10 @@ impl AsyncClient {
 
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(timeout) = builder.timeout {
-            client_builder = client_builder.timeout(core::time::Duration::from_secs(timeout));
+            client_builder = client_builder
+                // See <https://github.com/hyperium/hyper/issues/2312> for more details.
+                .pool_max_idle_per_host(0)
+                .timeout(core::time::Duration::from_secs(timeout));
         }
 
         Ok(Self::from_client(builder.base_url, client_builder.build()?))
