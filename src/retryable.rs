@@ -1,4 +1,10 @@
-use std::{future::Future, time::Duration};
+use std::{
+    future::Future,
+    time::{Duration, SystemTime},
+};
+
+#[cfg(test)]
+use std::time::UNIX_EPOCH;
 
 #[cfg(feature = "async")]
 use async_std::task::sleep;
@@ -12,7 +18,10 @@ const SECOND: u64 = 1_000;
 const BASE_BACKOFF_MS: u64 = 5_000;
 const DEFAULT_MAX_RETRIES: u32 = 5;
 
-pub const RETRY_TOO_MANY_REQUEST_ONLY: [StatusCode; 1] = [StatusCode::TOO_MANY_REQUESTS];
+pub const RETRY_TOO_MANY_REQUEST_ONLY: [StatusCode; 2] = [
+    StatusCode::TOO_MANY_REQUESTS,
+    StatusCode::SERVICE_UNAVAILABLE,
+];
 
 pub trait AsyncRetryable<R, E = crate::Error> {
     fn exec_with_retry(
@@ -30,19 +39,41 @@ pub trait SyncRetryable<R, E = crate::Error> {
     ) -> Result<R, E>;
 }
 
-fn compute_backoff(retry_after: Option<&str>, backoff: Duration) -> Duration {
-    match retry_after {
-        // If response has a Retry-After header, parse it and use it as backoff
-        Some(retry_after) => {
-            return Duration::from_millis(
-                retry_after
-                    .parse::<u64>()
-                    .map(|seconds| seconds * SECOND)
-                    .unwrap_or(BASE_BACKOFF_MS),
-            )
+fn now() -> SystemTime {
+    #[cfg(target_arch = "wasm32")]
+    let current_time = instant::SystemTime::now();
+    #[cfg(not(target_arch = "wasm32"))]
+    let current_time = SystemTime::now();
+    #[cfg(test)] // Mocks date to `Wed, 21 Oct 2015 07:28:00 GMT`
+    let current_time = SystemTime::from(UNIX_EPOCH + Duration::from_secs(1445412480u64));
+
+    current_time
+}
+
+pub(crate) fn compute_backoff(retry_after: Option<&str>, backoff: Duration) -> Duration {
+    // If response has a Retry-After header, we parse it and use it as backoff
+    let duration = retry_after.and_then(|retry_after| {
+        if let Ok(date) = retry_after.parse::<httpdate::HttpDate>() {
+            let retry_after_date = SystemTime::from(date);
+            let current = now();
+
+            if retry_after_date <= current {
+                Some(Duration::from_secs(0))
+            } else {
+                retry_after_date.duration_since(now()).ok()
+            }
+        } else {
+            retry_after
+                .parse::<u64>()
+                .map(|seconds| Duration::from_millis(seconds * SECOND))
+                .ok()
         }
-        // Else, double previous backoff
-        _ => return backoff * 2,
+    });
+
+    match duration {
+        Some(duration) => duration,
+        // If duration is None here, we might have no Retry-After or an invalid one. In any case, we fallback to doubling previous one
+        None => backoff * 2,
     }
 }
 
@@ -68,14 +99,12 @@ impl AsyncRetryable<ReqwestResponse> for RequestBuilder {
                     if retryable_error_codes.contains(&response.status())
                         && retry_count < max_retries =>
                 {
-                    backoff = compute_backoff(
-                        response
-                            .headers()
-                            .get("Retry-After")
-                            .map(|retry| retry.to_str().unwrap_or("0")),
-                        backoff,
-                    );
+                    let header_value = response
+                        .headers()
+                        .get("Retry-After")
+                        .and_then(|retry| retry.to_str().ok());
 
+                    backoff = compute_backoff(header_value, backoff);
                     retry_count += 1;
 
                     sleep(backoff).await;
@@ -115,8 +144,8 @@ impl SyncRetryable<UReqResponse, UReqError> for Request {
                 Err(ureq::Error::Status(code, resp)) => {
                     if retryable_error_codes.contains(&code) && retry_count < max_retries {
                         backoff = compute_backoff(resp.header("Retry-After"), backoff);
-
                         retry_count += 1;
+
                         std::thread::sleep(backoff);
                     }
                 }
@@ -124,5 +153,46 @@ impl SyncRetryable<UReqResponse, UReqError> for Request {
                 Ok(response) => return Ok(response),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_double_backoff_when_no_retry_after() {
+        let backoff = compute_backoff(None, Duration::from_secs(1));
+        assert_eq!(backoff.as_secs(), 2);
+    }
+
+    #[test]
+    fn should_parse_retry_after_date() {
+        let backoff = compute_backoff(
+            Some("Wed, 21 Oct 2015 09:28:00 GMT"),
+            Duration::from_secs(1),
+        );
+        assert_eq!(backoff.as_secs(), 7200);
+    }
+
+    #[test]
+    fn should_return_no_backoff_when_retry_after_is_past() {
+        let backoff = compute_backoff(
+            Some("Wed, 21 Oct 2015 06:28:00 GMT"),
+            Duration::from_secs(1),
+        );
+        assert_eq!(backoff.as_secs(), 0);
+    }
+
+    #[test]
+    fn should_parse_retry_after_timestamp() {
+        let backoff = compute_backoff(Some("3600"), Duration::from_secs(1));
+        assert_eq!(backoff.as_secs(), 3600);
+    }
+
+    #[test]
+    fn should_double_backoff_when_retry_after_is_not_parseable() {
+        let backoff = compute_backoff(Some("3600!"), Duration::from_secs(1));
+        assert_eq!(backoff.as_secs(), 2);
     }
 }
