@@ -136,13 +136,13 @@ impl SyncRetryable<UReqResponse, UReqError> for Request {
 
         loop {
             match self.clone().call() {
-                Err(ureq::Error::Status(code, resp)) => {
-                    if retryable_error_codes.contains(&code) && retry_count < max_retries {
-                        backoff = compute_backoff(resp.header("Retry-After"), backoff);
-                        retry_count += 1;
+                Err(ureq::Error::Status(code, resp))
+                    if retryable_error_codes.contains(&code) && retry_count < max_retries =>
+                {
+                    backoff = compute_backoff(resp.header("Retry-After"), backoff);
+                    retry_count += 1;
 
-                        std::thread::sleep(backoff);
-                    }
+                    std::thread::sleep(backoff);
                 }
                 Err(err) => return Err(err),
                 Ok(response) => return Ok(response),
