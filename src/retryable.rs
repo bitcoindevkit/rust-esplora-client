@@ -9,7 +9,7 @@ use std::time::UNIX_EPOCH;
 #[cfg(feature = "async")]
 use async_std::task::sleep;
 #[cfg(feature = "async")]
-use reqwest::{RequestBuilder, Response as ReqwestResponse, StatusCode};
+use reqwest::{RequestBuilder, Response as ReqwestResponse};
 
 #[cfg(feature = "blocking")]
 use ureq::{Error as UReqError, Request, Response as UReqResponse};
@@ -18,15 +18,15 @@ const SECOND: u64 = 1_000;
 const BASE_BACKOFF_MS: u64 = 5_000;
 const DEFAULT_MAX_RETRIES: u32 = 5;
 
-pub const RETRY_TOO_MANY_REQUEST_ONLY: [StatusCode; 2] = [
-    StatusCode::TOO_MANY_REQUESTS,
-    StatusCode::SERVICE_UNAVAILABLE,
+pub const RETRY_TOO_MANY_REQUEST_ONLY: [u16; 2] = [
+    429, // TOO_MANY_REQUESTS
+    503, // SERVICE_UNAVAILABLE,
 ];
 
 pub trait AsyncRetryable<R, E = crate::Error> {
     fn exec_with_retry(
         self,
-        retryable_error_codes: Vec<StatusCode>,
+        retryable_error_codes: Vec<u16>,
         max_retries: Option<u32>,
     ) -> impl Future<Output = Result<R, E>>;
 }
@@ -34,7 +34,7 @@ pub trait AsyncRetryable<R, E = crate::Error> {
 pub trait SyncRetryable<R, E = crate::Error> {
     fn exec_with_retry(
         self,
-        retryable_error_codes: Vec<StatusCode>,
+        retryable_error_codes: Vec<u16>,
         max_retries: Option<u32>,
     ) -> Result<R, E>;
 }
@@ -81,7 +81,7 @@ pub(crate) fn compute_backoff(retry_after: Option<&str>, backoff: Duration) -> D
 impl AsyncRetryable<ReqwestResponse> for RequestBuilder {
     async fn exec_with_retry(
         self,
-        retryable_error_codes: Vec<StatusCode>,
+        retryable_error_codes: Vec<u16>,
         max_retries: Option<u32>,
     ) -> Result<ReqwestResponse, crate::Error> {
         let mut backoff = Duration::from_millis(BASE_BACKOFF_MS);
@@ -96,7 +96,7 @@ impl AsyncRetryable<ReqwestResponse> for RequestBuilder {
             match self.try_clone().unwrap().send().await {
                 Err(err) => return Err(crate::Error::Reqwest(err)),
                 Ok(response)
-                    if retryable_error_codes.contains(&response.status())
+                    if retryable_error_codes.contains(&response.status().as_u16())
                         && retry_count < max_retries =>
                 {
                     let header_value = response
@@ -123,7 +123,7 @@ impl AsyncRetryable<ReqwestResponse> for RequestBuilder {
 impl SyncRetryable<UReqResponse, UReqError> for Request {
     fn exec_with_retry(
         self,
-        retryable_error_codes: Vec<StatusCode>,
+        retryable_error_codes: Vec<u16>,
         max_retries: Option<u32>,
     ) -> Result<UReqResponse, UReqError> {
         let mut backoff = Duration::from_millis(BASE_BACKOFF_MS);
@@ -133,11 +133,6 @@ impl SyncRetryable<UReqResponse, UReqError> for Request {
             Some(max_retries) => max_retries,
             None => DEFAULT_MAX_RETRIES,
         };
-
-        let retryable_error_codes = retryable_error_codes
-            .into_iter()
-            .map(|code| code.as_u16())
-            .collect::<Vec<_>>();
 
         loop {
             match self.clone().call() {
