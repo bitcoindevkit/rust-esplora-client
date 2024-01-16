@@ -30,7 +30,7 @@ arti-client = { version = "0.8.3", optional = true }
 tor-rtcompat = { version = "0.8.2", optional = true, features = ["tokio"]}
 tls-api = { version = "0.9.0", optional = true }
 tls-api-native-tls = { version = "0.9.0", optional = true }
-ahash = { version = "=0.8.6" } # ahash 0.8.7 version don't work with our MSRV on aarch64, check: https://github.com/tkaitchuck/aHash/issues/195
+ahash = { version = "=0.8.6", optional = true } # ahash 0.8.7 version don't work with our MSRV on aarch64, check: https://github.com/tkaitchuck/aHash/issues/195
 
 [target.'cfg(target_vendor="apple")'.dependencies]
 tls-api-openssl = { version = "0.9.0", optional = true }

@@ -61,7 +61,21 @@ jobs:
         cargo update -p zstd-sys --precise "2.0.8+zstd.1.5.5"
         cargo update -p time --precise "0.3.20"
         cargo update -p home --precise 0.5.5
+        cargo update -p tor-dirclient --precise 0.6.3
+        cargo update -p tor-config --precise 0.8.0
+        cargo update -p tor-netdoc --precise 0.6.3
+        cargo update -p tor-dirmgr --precise 0.9.3
+        cargo update -p regex --precise 1.9.6
+        cargo update -p zstd-sys --precise 2.0.8+zstd.1.5.5
+        cargo update -p time:0.3.31 --precise 0.3.20
         cargo update -p tor-error --precise 0.4.1
+        cargo update -p toml:0.7.8 --precise 0.7.3
+        cargo update -p toml_edit --precise 0.19.8
+        cargo update -p winnow --precise 0.4.1
+        cargo update -p serde_spanned --precise 0.6.1
+        cargo update -p backtrace --precise 0.3.68
+        cargo update -p toml_datetime --precise 0.6.1
+        cargo update -p tinystr --precise 0.7.1
     - name: Build
       run: cargo build --features ${{ matrix.features }} --no-default-features
     - name: Clippy
