@@ -27,7 +27,7 @@ use log::{debug, error, info, trace};
 
 use reqwest::{Client, StatusCode};
 
-use crate::retryable::{AsyncRetryable, RETRY_TOO_MANY_REQUEST_ONLY};
+use crate::retryable::{AsyncRetryable, RETRYABLE_ERROR_CODES};
 use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
 #[derive(Debug, Clone)]
@@ -67,7 +67,7 @@ impl AsyncClient {
         let resp = self
             .client
             .get(&format!("{}/tx/{}/raw", self.url, txid))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)
             .await?;
 
         if let StatusCode::NOT_FOUND = resp.status() {
@@ -102,7 +102,7 @@ impl AsyncClient {
         let resp = self
             .client
             .get(&format!("{}/block/{}/txid/{}", self.url, block_hash, index))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)
             .await?;
 
         if let StatusCode::NOT_FOUND = resp.status() {
@@ -124,7 +124,7 @@ impl AsyncClient {
         let resp = self
             .client
             .get(&format!("{}/tx/{}/status", self.url, txid))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)
             .await?;
         if resp.status().is_server_error() || resp.status().is_client_error() {
             Err(Error::HttpResponse {
@@ -151,7 +151,7 @@ impl AsyncClient {
         let resp = self
             .client
             .get(&format!("{}/block/{}/header", self.url, block_hash))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)
             .await?;
 
         if resp.status().is_server_error() || resp.status().is_client_error() {
@@ -170,7 +170,7 @@ impl AsyncClient {
         let resp = self
             .client
             .get(&format!("{}/block/{}/status", self.url, block_hash))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)
             .await?;
 
         if resp.status().is_server_error() || resp.status().is_client_error() {
@@ -188,7 +188,7 @@ impl AsyncClient {
         let resp = self
             .client
             .get(&format!("{}/block/{}/raw", self.url, block_hash))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)
             .await?;
 
         if let StatusCode::NOT_FOUND = resp.status() {
@@ -210,7 +210,7 @@ impl AsyncClient {
         let resp = self
             .client
             .get(&format!("{}/tx/{}/merkle-proof", self.url, tx_hash))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)
             .await?;
 
         if let StatusCode::NOT_FOUND = resp.status() {
@@ -232,7 +232,7 @@ impl AsyncClient {
         let resp = self
             .client
             .get(&format!("{}/tx/{}/merkleblock-proof", self.url, tx_hash))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)
             .await?;
 
         if let StatusCode::NOT_FOUND = resp.status() {
@@ -259,7 +259,7 @@ impl AsyncClient {
         let resp = self
             .client
             .get(&format!("{}/tx/{}/outspend/{}", self.url, txid, index))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)
             .await?;
 
         if let StatusCode::NOT_FOUND = resp.status() {
@@ -282,7 +282,7 @@ impl AsyncClient {
             .client
             .post(&format!("{}/tx", self.url))
             .body(serialize(transaction).to_lower_hex_string())
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)
             .await?;
 
         if resp.status().is_server_error() || resp.status().is_client_error() {
@@ -300,7 +300,7 @@ impl AsyncClient {
         let resp = self
             .client
             .get(&format!("{}/blocks/tip/height", self.url))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)
             .await?;
 
         if resp.status().is_server_error() || resp.status().is_client_error() {
@@ -318,7 +318,7 @@ impl AsyncClient {
         let resp = self
             .client
             .get(&format!("{}/blocks/tip/hash", self.url))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)
             .await?;
 
         if resp.status().is_server_error() || resp.status().is_client_error() {
@@ -336,7 +336,7 @@ impl AsyncClient {
         let resp = self
             .client
             .get(&format!("{}/block-height/{}", self.url, block_height))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)
             .await?;
 
         if let StatusCode::NOT_FOUND = resp.status() {
@@ -373,7 +373,7 @@ impl AsyncClient {
         let resp = self
             .client
             .get(url)
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)
             .await?;
 
         if resp.status().is_server_error() || resp.status().is_client_error() {
@@ -392,7 +392,7 @@ impl AsyncClient {
         let resp = self
             .client
             .get(&format!("{}/fee-estimates", self.url,))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)
             .await?;
 
         if resp.status().is_server_error() || resp.status().is_client_error() {
@@ -418,7 +418,7 @@ impl AsyncClient {
         let resp = self
             .client
             .get(&url)
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)
             .await?;
 
         if resp.status().is_server_error() || resp.status().is_client_error() {

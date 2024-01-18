@@ -31,7 +31,7 @@ use bitcoin::{
 
 use bitcoin_internals::hex::display::DisplayHex;
 
-use crate::retryable::{SyncRetryable, RETRY_TOO_MANY_REQUEST_ONLY};
+use crate::retryable::{SyncRetryable, RETRYABLE_ERROR_CODES};
 use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
 #[derive(Debug, Clone)]
@@ -66,7 +66,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/tx/{}/raw", self.url, txid))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(Some(deserialize(&into_bytes(resp)?)?)),
@@ -101,7 +101,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/block/{}/txid/{}", self.url, block_hash, index))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(Some(Txid::from_str(&resp.into_string()?)?)),
@@ -123,7 +123,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/tx/{}/status", self.url, txid))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(resp.into_json()?),
@@ -150,7 +150,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/block/{}/header", self.url, block_hash))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(deserialize(&Vec::from_hex(&resp.into_string()?)?)?),
@@ -167,7 +167,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/block/{}/status", self.url, block_hash))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(resp.into_json()?),
@@ -184,7 +184,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/block/{}/raw", self.url, block_hash))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(Some(deserialize(&into_bytes(resp)?)?)),
@@ -206,7 +206,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/tx/{}/merkle-proof", self.url, txid))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(Some(resp.into_json()?)),
@@ -228,7 +228,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/tx/{}/merkleblock-proof", self.url, txid))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(Some(deserialize(&Vec::from_hex(&resp.into_string()?)?)?)),
@@ -254,7 +254,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/tx/{}/outspend/{}", self.url, txid, index))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(Some(resp.into_json()?)),
@@ -293,7 +293,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/blocks/tip/height", self.url))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None);
 
         match resp {
             Ok(resp) => Ok(resp.into_string()?.parse()?),
@@ -310,7 +310,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/blocks/tip/hash", self.url))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None);
 
         Self::process_block_result(resp)
     }
@@ -320,7 +320,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/block-height/{}", self.url, block_height))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None);
 
         if let Err(ureq::Error::Status(code, _)) = resp {
             if is_status_not_found(code) {
@@ -348,7 +348,7 @@ impl BlockingClient {
         let resp = self
             .agent
             .get(&format!("{}/fee-estimates", self.url,))
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None);
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None);
 
         let map = match resp {
             Ok(resp) => {
@@ -384,7 +384,7 @@ impl BlockingClient {
         Ok(self
             .agent
             .get(&url)
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)?
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)?
             .into_json()?)
     }
 
@@ -401,7 +401,7 @@ impl BlockingClient {
         Ok(self
             .agent
             .get(&url)
-            .exec_with_retry(RETRY_TOO_MANY_REQUEST_ONLY.to_vec(), None)?
+            .exec_with_retry(RETRYABLE_ERROR_CODES.to_vec(), None)?
             .into_json()?)
     }
 

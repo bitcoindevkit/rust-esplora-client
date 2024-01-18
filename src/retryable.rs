@@ -1,7 +1,4 @@
-use std::{
-    future::Future,
-    time::{Duration, SystemTime},
-};
+use std::time::{Duration, SystemTime};
 
 #[cfg(test)]
 use std::time::UNIX_EPOCH;
@@ -14,21 +11,23 @@ use reqwest::{RequestBuilder, Response as ReqwestResponse};
 #[cfg(feature = "blocking")]
 use ureq::{Error as UReqError, Request, Response as UReqResponse};
 
-const SECOND: u64 = 1_000;
-const BASE_BACKOFF_MS: u64 = 5_000;
+use async_trait::async_trait;
+
+const BASE_BACKOFF_MILLIS: u64 = 5_000;
 const DEFAULT_MAX_RETRIES: u32 = 5;
 
-pub const RETRY_TOO_MANY_REQUEST_ONLY: [u16; 2] = [
+pub const RETRYABLE_ERROR_CODES: [u16; 2] = [
     429, // TOO_MANY_REQUESTS
     503, // SERVICE_UNAVAILABLE,
 ];
 
+#[async_trait]
 pub trait AsyncRetryable<R, E = crate::Error> {
-    fn exec_with_retry(
+    async fn exec_with_retry(
         self,
         retryable_error_codes: Vec<u16>,
         max_retries: Option<u32>,
-    ) -> impl Future<Output = Result<R, E>>;
+    ) -> Result<R, E>;
 }
 
 pub trait SyncRetryable<R, E = crate::Error> {
@@ -65,7 +64,7 @@ pub(crate) fn compute_backoff(retry_after: Option<&str>, backoff: Duration) -> D
         } else {
             retry_after
                 .parse::<u64>()
-                .map(|seconds| Duration::from_millis(seconds * SECOND))
+                .map(|seconds| Duration::from_secs(seconds))
                 .ok()
         }
     });
@@ -78,13 +77,14 @@ pub(crate) fn compute_backoff(retry_after: Option<&str>, backoff: Duration) -> D
 }
 
 #[cfg(feature = "async")]
+#[async_trait]
 impl AsyncRetryable<ReqwestResponse> for RequestBuilder {
     async fn exec_with_retry(
         self,
         retryable_error_codes: Vec<u16>,
         max_retries: Option<u32>,
     ) -> Result<ReqwestResponse, crate::Error> {
-        let mut backoff = Duration::from_millis(BASE_BACKOFF_MS);
+        let mut backoff = Duration::from_millis(BASE_BACKOFF_MILLIS);
         let mut retry_count = 0;
 
         let max_retries = match max_retries {
@@ -126,13 +126,10 @@ impl SyncRetryable<UReqResponse, UReqError> for Request {
         retryable_error_codes: Vec<u16>,
         max_retries: Option<u32>,
     ) -> Result<UReqResponse, UReqError> {
-        let mut backoff = Duration::from_millis(BASE_BACKOFF_MS);
+        let mut backoff = Duration::from_millis(BASE_BACKOFF_MILLIS);
         let mut retry_count = 0;
 
-        let max_retries = match max_retries {
-            Some(max_retries) => max_retries,
-            None => DEFAULT_MAX_RETRIES,
-        };
+        let max_retries = max_retries.unwrap_or(DEFAULT_MAX_RETRIES);
 
         loop {
             match self.clone().call() {
