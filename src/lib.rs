@@ -64,7 +64,7 @@ use std::fmt;
 use std::io;
 
 use bitcoin::consensus;
-
+use hex_conservative::{HexToArrayError, HexToBytesError};
 pub mod api;
 
 #[cfg(feature = "async")]
@@ -171,8 +171,10 @@ pub enum Error {
     Parsing(std::num::ParseIntError),
     /// Invalid Bitcoin data returned
     BitcoinEncoding(bitcoin::consensus::encode::Error),
-    /// Invalid Hex data returned
-    Hex(bitcoin::hashes::hex::Error),
+    /// Invalid Hex Array returned
+    HexArray(HexToArrayError),
+    /// Invalid Hex Bytes returned
+    HexBytes(HexToBytesError),
 
     /// Transaction not found
     TransactionNotFound(Txid),
@@ -209,7 +211,8 @@ impl_error!(::reqwest::Error, Reqwest, Error);
 impl_error!(io::Error, Io, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
 impl_error!(consensus::encode::Error, BitcoinEncoding, Error);
-impl_error!(bitcoin::hashes::hex::Error, Hex, Error);
+impl_error!(HexToArrayError, HexArray, Error);
+impl_error!(HexToBytesError, HexBytes, Error);
 
 #[cfg(test)]
 mod test {

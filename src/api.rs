@@ -4,8 +4,8 @@
 
 pub use bitcoin::consensus::{deserialize, serialize};
 pub use bitcoin::hashes::hex::FromHex;
+use bitcoin::{blockdata::transaction::Version, Amount};
 pub use bitcoin::{BlockHash, OutPoint, ScriptBuf, Transaction, TxIn, TxOut, Txid, Witness};
-
 use serde::Deserialize;
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -93,7 +93,7 @@ pub struct BlockSummary {
 impl Tx {
     pub fn to_tx(&self) -> Transaction {
         Transaction {
-            version: self.version,
+            version: Version(self.version),
             lock_time: bitcoin::absolute::LockTime::from_consensus(self.locktime),
             input: self
                 .vin
@@ -114,7 +114,7 @@ impl Tx {
                 .iter()
                 .cloned()
                 .map(|vout| TxOut {
-                    value: vout.value,
+                    value: Amount::from_int_btc(vout.value),
                     script_pubkey: vout.scriptpubkey,
                 })
                 .collect(),
@@ -140,7 +140,7 @@ impl Tx {
             .map(|vin| {
                 vin.prevout.map(|po| TxOut {
                     script_pubkey: po.scriptpubkey,
-                    value: po.value,
+                    value: Amount::from_int_btc(po.value),
                 })
             })
             .collect()
