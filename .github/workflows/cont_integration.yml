@@ -61,4 +61,4 @@ jobs:
       if: ${{ matrix.rust.clippy }}
       run: cargo clippy --all-targets --features ${{ matrix.features }} --no-default-features -- -D warnings
     - name: Test
-      run: cargo test --features ${{ matrix.features }} --no-default-features
+      run: cargo test --features ${{ matrix.features }} --no-default-features -- --test-threads=1
