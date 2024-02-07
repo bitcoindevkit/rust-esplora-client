@@ -29,7 +29,7 @@ use bitcoin::{
     block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
 };
 
-use bitcoin_internals::hex::display::DisplayHex;
+use hex::display::DisplayHex;
 
 use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 

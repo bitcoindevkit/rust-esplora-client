@@ -20,7 +20,7 @@ use bitcoin::hashes::{sha256, Hash};
 use bitcoin::{
     block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
 };
-use bitcoin_internals::hex::display::DisplayHex;
+use hex::display::DisplayHex;
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};

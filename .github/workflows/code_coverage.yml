@@ -44,7 +44,7 @@ jobs:
         # For more info, see:
         # - https://github.com/bitcoindevkit/bdk/issues/696
         # - https://github.com/bitcoindevkit/bdk/pull/748#issuecomment-1242721040
-        run: cargo test
+        run: cargo test -- --test-threads=1
       - name: Run grcov
         run: mkdir coverage; grcov . --binary-path ./target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore '/*' -o ./coverage/lcov.info
       - name: Generate HTML coverage report
