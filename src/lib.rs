@@ -65,6 +65,8 @@ use std::io;
 
 use bitcoin::consensus;
 
+mod retryable;
+
 pub mod api;
 
 #[cfg(feature = "async")]
