@@ -3,8 +3,8 @@
 //! see: <https://github.com/Blockstream/esplora/blob/master/API.md>
 
 pub use bitcoin::consensus::{deserialize, serialize};
-pub use bitcoin::hashes::hex::FromHex;
-pub use bitcoin::{BlockHash, OutPoint, ScriptBuf, Transaction, TxIn, TxOut, Txid, Witness};
+pub use bitcoin::hex::FromHex;
+pub use bitcoin::{transaction, Amount, BlockHash, OutPoint, ScriptBuf, Transaction, TxIn, TxOut, Txid, Witness};
 
 use serde::Deserialize;
 
@@ -93,7 +93,7 @@ pub struct BlockSummary {
 impl Tx {
     pub fn to_tx(&self) -> Transaction {
         Transaction {
-            version: self.version,
+            version: transaction::Version::non_standard(self.version),
             lock_time: bitcoin::absolute::LockTime::from_consensus(self.locktime),
             input: self
                 .vin
@@ -114,7 +114,7 @@ impl Tx {
                 .iter()
                 .cloned()
                 .map(|vout| TxOut {
-                    value: vout.value,
+                    value: Amount::from_sat(vout.value),
                     script_pubkey: vout.scriptpubkey,
                 })
                 .collect(),
@@ -140,7 +140,7 @@ impl Tx {
             .map(|vin| {
                 vin.prevout.map(|po| TxOut {
                     script_pubkey: po.scriptpubkey,
-                    value: po.value,
+                    value: Amount::from_sat(po.value),
                 })
             })
             .collect()
