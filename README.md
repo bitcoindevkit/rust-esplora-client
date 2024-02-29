@@ -14,9 +14,3 @@ Bitcoin Esplora API client library. Supports plaintext, TLS and Onion servers. B
 
 ## Minimum Supported Rust Version (MSRV)
 This library should compile with any combination of features with Rust 1.63.0.
-
-To build with the MSRV you will need to pin dependencies as follows:
-
-```shell
-cargo update -p jobserver --precise "0.1.26"
-```
