@@ -21,7 +21,7 @@ serde = { version = "1.0", features = ["derive"] }
 bitcoin = { version = "0.31.0", features = ["serde", "std"], default-features = false }
 hex = { package = "hex-conservative", version = "*" }
 log = "^0.4"
-ureq = { version = "2.5.0", features = ["json"], optional = true }
+minreq = { version = "2.11.0", features = ["json-using-serde"], optional = true }
 reqwest = { version = "0.11", optional = true, default-features = false, features = ["json"] }
 
 [dev-dependencies]
@@ -32,7 +32,11 @@ lazy_static = "1.4.0"
 
 [features]
 default = ["blocking", "async", "async-https"]
-blocking = ["ureq", "ureq/socks-proxy"]
+blocking = ["minreq", "minreq/proxy"]
+blocking-https = ["blocking", "minreq/https"]
+blocking-https-rustls = ["blocking", "minreq/https-rustls"]
+blocking-https-native = ["blocking", "minreq/https-native"]
+blocking-https-bundled = ["blocking", "minreq/https-bundled"]
 async = ["reqwest", "reqwest/socks"]
 async-https = ["async", "reqwest/default-tls"]
 async-https-native = ["async", "reqwest/native-tls"]
