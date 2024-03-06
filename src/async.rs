@@ -369,7 +369,7 @@ impl AsyncClient {
 
     /// Get an map where the key is the confirmation target (in number of blocks)
     /// and the value is the estimated feerate (in sat/vB).
-    pub async fn get_fee_estimates(&self) -> Result<HashMap<String, f64>, Error> {
+    pub async fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
         let resp = self
             .client
             .get(&format!("{}/fee-estimates", self.url,))
@@ -382,7 +382,7 @@ impl AsyncClient {
                 message: resp.text().await?,
             })
         } else {
-            Ok(resp.json::<HashMap<String, f64>>().await?)
+            Ok(resp.json::<HashMap<u16, f64>>().await?)
         }
     }
 

@@ -281,7 +281,7 @@ impl BlockingClient {
 
     /// Get an map where the key is the confirmation target (in number of blocks)
     /// and the value is the estimated feerate (in sat/vB).
-    pub fn get_fee_estimates(&self) -> Result<HashMap<String, f64>, Error> {
+    pub fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
         self.get_response_json("/fee-estimates")
     }
 
