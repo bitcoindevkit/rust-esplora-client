@@ -24,7 +24,7 @@ use bitcoin::{
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
-use reqwest::{Client, StatusCode};
+use reqwest::{header, Client, StatusCode};
 
 use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
@@ -47,6 +47,18 @@ impl AsyncClient {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(timeout) = builder.timeout {
             client_builder = client_builder.timeout(core::time::Duration::from_secs(timeout));
+        }
+
+        if !builder.headers.is_empty() {
+            let mut headers = header::HeaderMap::new();
+            for (k, v) in builder.headers {
+                let header_name = header::HeaderName::from_lowercase(k.to_lowercase().as_bytes())
+                    .map_err(|_| Error::InvalidHttpHeaderName(k))?;
+                let header_value = header::HeaderValue::from_str(&v)
+                    .map_err(|_| Error::InvalidHttpHeaderValue(v))?;
+                headers.insert(header_name, header_value);
+            }
+            client_builder = client_builder.default_headers(headers);
         }
 
         Ok(Self::from_client(builder.base_url, client_builder.build()?))

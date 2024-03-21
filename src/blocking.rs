@@ -36,6 +36,8 @@ pub struct BlockingClient {
     pub proxy: Option<String>,
     /// Socket timeout.
     pub timeout: Option<u64>,
+    /// HTTP headers to set on every request made to Esplora server
+    pub headers: HashMap<String, String>,
 }
 
 impl BlockingClient {
@@ -45,6 +47,7 @@ impl BlockingClient {
             url: builder.base_url,
             proxy: builder.proxy,
             timeout: builder.timeout,
+            headers: builder.headers,
         }
     }
 
@@ -58,6 +61,12 @@ impl BlockingClient {
 
         if let Some(timeout) = &self.timeout {
             request = request.with_timeout(*timeout);
+        }
+
+        if !self.headers.is_empty() {
+            for (key, value) in &self.headers {
+                request = request.with_header(key, value);
+            }
         }
 
         Ok(request)

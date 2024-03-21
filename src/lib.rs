@@ -117,6 +117,8 @@ pub struct Builder {
     pub proxy: Option<String>,
     /// Socket timeout.
     pub timeout: Option<u64>,
+    /// HTTP headers to set on every request made to Esplora server
+    pub headers: HashMap<String, String>,
 }
 
 impl Builder {
@@ -126,6 +128,7 @@ impl Builder {
             base_url: base_url.to_string(),
             proxy: None,
             timeout: None,
+            headers: HashMap::new(),
         }
     }
 
@@ -138,6 +141,12 @@ impl Builder {
     /// Set the timeout of the builder
     pub fn timeout(mut self, timeout: u64) -> Self {
         self.timeout = Some(timeout);
+        self
+    }
+
+    /// Add a header to set on each request
+    pub fn header(mut self, key: &str, value: &str) -> Self {
+        self.headers.insert(key.to_string(), value.to_string());
         self
     }
 
@@ -181,6 +190,10 @@ pub enum Error {
     HeaderHeightNotFound(u32),
     /// Header hash not found
     HeaderHashNotFound(BlockHash),
+    /// Invalid HTTP Header name specified
+    InvalidHttpHeaderName(String),
+    /// Invalid HTTP Header value specified
+    InvalidHttpHeaderValue(String),
 }
 
 impl fmt::Display for Error {
@@ -261,6 +274,13 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     async fn setup_clients() -> (BlockingClient, AsyncClient) {
+        setup_clients_with_headers(HashMap::new()).await
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    async fn setup_clients_with_headers(
+        headers: HashMap<String, String>,
+    ) -> (BlockingClient, AsyncClient) {
         PREMINE
             .get_or_init(|| async {
                 let _miner = MINER.lock().await;
@@ -270,7 +290,11 @@ mod test {
 
         let esplora_url = ELECTRSD.esplora_url.as_ref().unwrap();
 
-        let builder = Builder::new(&format!("http://{}", esplora_url));
+        let mut builder = Builder::new(&format!("http://{}", esplora_url));
+        if !headers.is_empty() {
+            builder.headers = headers;
+        }
+
         let blocking_client = builder.build_blocking();
 
         let builder_async = Builder::new(&format!("http://{}", esplora_url));
@@ -850,5 +874,41 @@ mod test {
         let blocks_genesis = blocking_client.get_blocks(Some(0)).unwrap();
         let blocks_genesis_async = async_client.get_blocks(Some(0)).await.unwrap();
         assert_eq!(blocks_genesis, blocks_genesis_async);
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_get_tx_with_http_header() {
+        let headers = [(
+            "Authorization".to_string(),
+            "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==".to_string(),
+        )]
+        .into();
+        let (blocking_client, async_client) = setup_clients_with_headers(headers).await;
+
+        let address = BITCOIND
+            .client
+            .get_new_address(Some("test"), Some(AddressType::Legacy))
+            .unwrap()
+            .assume_checked();
+        let txid = BITCOIND
+            .client
+            .send_to_address(
+                &address,
+                Amount::from_sat(1000),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+        let _miner = MINER.lock().await;
+        generate_blocks_and_wait(1);
+
+        let tx = blocking_client.get_tx(&txid).unwrap();
+        let tx_async = async_client.get_tx(&txid).await.unwrap();
+        assert_eq!(tx, tx_async);
     }
 }
