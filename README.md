@@ -12,5 +12,8 @@ Bitcoin Esplora API client library. Supports plaintext, TLS and Onion servers. B
     <a href="https://discord.gg/d7NkDKm"><img alt="Chat on Discord" src="https://img.shields.io/discord/753336465005608961?logo=discord"></a>
 </p>
 
+For example usage, see:
+- [esplora-cli](https://github.com/yancyribbens/esplora-cli)
+
 ## Minimum Supported Rust Version (MSRV)
 This library should compile with any combination of features with Rust 1.63.0.
