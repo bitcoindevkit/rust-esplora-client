@@ -505,6 +505,60 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
+    async fn test_get_tx_info() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .get_new_address(Some("test"), Some(AddressType::Legacy))
+            .unwrap()
+            .assume_checked();
+        let txid = BITCOIND
+            .client
+            .send_to_address(
+                &address,
+                Amount::from_sat(1000),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+        let _miner = MINER.lock().await;
+        generate_blocks_and_wait(1);
+
+        let tx_res = BITCOIND.client.get_transaction(&txid, None).unwrap();
+        let tx_exp = tx_res.transaction().expect("must decode");
+
+        let tx_info = blocking_client
+            .get_tx_info(&txid)
+            .unwrap()
+            .expect("must get tx");
+        let tx_info_async = async_client
+            .get_tx_info(&txid)
+            .await
+            .unwrap()
+            .expect("must get tx");
+        assert_eq!(tx_info, tx_info_async);
+        assert_eq!(tx_info.txid, txid);
+        assert_eq!(tx_info.to_tx(), tx_exp);
+        assert_eq!(tx_info.size, tx_exp.total_size());
+        assert_eq!(tx_info.weight(), tx_exp.weight());
+        assert_eq!(tx_info.fee(), tx_res.fee.unwrap().unsigned_abs());
+        assert!(tx_info.status.confirmed);
+        assert_eq!(tx_info.status.block_height, tx_res.info.blockheight);
+        assert_eq!(tx_info.status.block_hash, tx_res.info.blockhash);
+        assert_eq!(tx_info.status.block_time, tx_res.info.blocktime);
+
+        let txid = Txid::hash(b"not exist");
+        assert_eq!(blocking_client.get_tx_info(&txid).unwrap(), None);
+        assert_eq!(async_client.get_tx_info(&txid).await.unwrap(), None);
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
     async fn test_get_header_by_hash() {
         let (blocking_client, async_client) = setup_clients().await;
 

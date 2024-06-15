@@ -143,6 +143,26 @@ impl AsyncClient {
         }
     }
 
+    /// Get transaction info given it's [`Txid`].
+    pub async fn get_tx_info(&self, txid: &Txid) -> Result<Option<Tx>, Error> {
+        let resp = self
+            .client
+            .get(&format!("{}/tx/{}", self.url, txid))
+            .send()
+            .await?;
+        if resp.status() == StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            Ok(Some(resp.json().await?))
+        }
+    }
+
     /// Get a [`BlockHeader`] given a particular block hash.
     pub async fn get_header_by_hash(&self, block_hash: &BlockHash) -> Result<BlockHeader, Error> {
         let resp = self

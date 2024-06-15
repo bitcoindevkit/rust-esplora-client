@@ -51,7 +51,13 @@ impl BlockingClient {
         }
     }
 
-    fn get_request(&self, path: &str) -> Result<Request, Error> {
+    /// Get the underlying base URL.
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    /// Perform a raw HTTP GET request with the given URI `path`.
+    pub fn get_request(&self, path: &str) -> Result<Request, Error> {
         let mut request = minreq::get(format!("{}{}", self.url, path));
 
         if let Some(proxy) = &self.proxy {
@@ -205,6 +211,11 @@ impl BlockingClient {
     /// Get the status of a [`Transaction`] given its [`Txid`].
     pub fn get_tx_status(&self, txid: &Txid) -> Result<TxStatus, Error> {
         self.get_response_json(&format!("/tx/{}/status", txid))
+    }
+
+    /// Get transaction info given it's [`Txid`].
+    pub fn get_tx_info(&self, txid: &Txid) -> Result<Option<Tx>, Error> {
+        self.get_opt_response_json(&format!("/tx/{}", txid))
     }
 
     /// Get a [`BlockHeader`] given a particular block hash.
