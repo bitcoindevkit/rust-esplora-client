@@ -51,7 +51,13 @@ impl BlockingClient {
         }
     }
 
-    fn get_request(&self, path: &str) -> Result<Request, Error> {
+    /// Get the underlying base URL.
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    /// Perform a raw HTTP GET request with the given URI `path`.
+    pub fn get_request(&self, path: &str) -> Result<Request, Error> {
         let mut request = minreq::get(format!("{}{}", self.url, path));
 
         if let Some(proxy) = &self.proxy {
