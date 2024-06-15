@@ -4,6 +4,7 @@
 
 pub use bitcoin::consensus::{deserialize, serialize};
 pub use bitcoin::hex::FromHex;
+use bitcoin::Weight;
 pub use bitcoin::{
     transaction, Amount, BlockHash, OutPoint, ScriptBuf, Transaction, TxIn, TxOut, Txid, Witness,
 };
@@ -65,13 +66,17 @@ pub struct BlockStatus {
     pub next_best: Option<BlockHash>,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Tx {
     pub txid: Txid,
     pub version: i32,
     pub locktime: u32,
     pub vin: Vec<Vin>,
     pub vout: Vec<Vout>,
+    /// Transaction size in raw bytes (NOT virtual bytes).
+    pub size: usize,
+    /// Transaction weight units.
+    pub weight: u64,
     pub status: TxStatus,
     pub fee: u64,
 }
@@ -146,6 +151,14 @@ impl Tx {
                 })
             })
             .collect()
+    }
+
+    pub fn weight(&self) -> Weight {
+        Weight::from_wu(self.weight)
+    }
+
+    pub fn fee(&self) -> Amount {
+        Amount::from_sat(self.fee)
     }
 }
 

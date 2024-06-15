@@ -213,6 +213,11 @@ impl BlockingClient {
         self.get_response_json(&format!("/tx/{}/status", txid))
     }
 
+    /// Get transaction info given it's [`Txid`].
+    pub fn get_tx_info(&self, txid: &Txid) -> Result<Option<Tx>, Error> {
+        self.get_opt_response_json(&format!("/tx/{}", txid))
+    }
+
     /// Get a [`BlockHeader`] given a particular block hash.
     pub fn get_header_by_hash(&self, block_hash: &BlockHash) -> Result<BlockHeader, Error> {
         self.get_response_hex(&format!("/block/{}/header", block_hash))
