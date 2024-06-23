@@ -88,17 +88,14 @@ pub use r#async::AsyncClient;
 
 /// Get a fee value in sats/vbytes from the estimates
 /// that matches the confirmation target set as parameter.
-pub fn convert_fee_rate(target: usize, estimates: HashMap<u16, f64>) -> Result<f32, Error> {
-    let fee_val = {
-        let mut pairs = estimates.into_iter().collect::<Vec<(u16, f64)>>();
-        pairs.sort_unstable_by_key(|(k, _)| std::cmp::Reverse(*k));
-        pairs
-            .into_iter()
-            .find(|(k, _)| *k as usize <= target)
-            .map(|(_, v)| v)
-            .unwrap_or(1.0)
-    };
-    Ok(fee_val as f32)
+///
+/// Returns `None` if no feerate estimate is found at or below `target` confirmations.
+pub fn convert_fee_rate(target: usize, estimates: HashMap<u16, f64>) -> Option<f32> {
+    estimates
+        .into_iter()
+        .filter(|(k, _)| *k as usize <= target)
+        .max_by_key(|(k, _)| *k)
+        .map(|(_, v)| v as f32)
 }
 
 #[derive(Debug, Clone)]
