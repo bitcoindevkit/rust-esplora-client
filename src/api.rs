@@ -87,6 +87,17 @@ pub struct BlockTime {
     pub height: u32,
 }
 
+#[cfg(feature = "mempool")]
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RecommendedFees {
+    pub fastest_fee: f64,
+    pub half_hour_fee: f64,
+    pub hour_fee: f64,
+    pub economy_fee: f64,
+    pub minimum_fee: f64
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct BlockSummary {
     pub id: BlockHash,

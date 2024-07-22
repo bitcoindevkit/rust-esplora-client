@@ -852,6 +852,19 @@ mod test {
         assert_eq!(fee_estimates.len(), fee_estimates_async.len());
     }
 
+    #[cfg(all(feature = "mempool"))]
+    #[tokio::test]
+    #[ignore = "this should only be run if you have external mempool access"]
+    async fn test_get_recommended_fees() {
+        let builder = Builder::new("https://mempool.space/api");
+        let blocking_client = builder.clone().build_blocking();
+        let async_client = builder.build_async().unwrap();
+        let fee_estimates = dbg!(blocking_client.get_recommended_fees());
+        let fee_estimates_async = dbg!(async_client.get_recommended_fees().await);
+        assert!(fee_estimates.is_ok());
+        assert!(fee_estimates_async.is_ok());
+    }
+
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_scripthash_txs() {

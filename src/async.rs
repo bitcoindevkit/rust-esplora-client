@@ -27,6 +27,8 @@ use log::{debug, error, info, trace};
 use reqwest::{header, Client, StatusCode};
 
 use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
+#[cfg(feature = "mempool")]
+use crate::RecommendedFees;
 
 #[derive(Debug, Clone)]
 pub struct AsyncClient {
@@ -415,6 +417,25 @@ impl AsyncClient {
             })
         } else {
             Ok(resp.json::<HashMap<u16, f64>>().await?)
+        }
+    }
+
+    /// Get the currently suggested fees for new transactions.
+    #[cfg(feature = "mempool")]
+    pub async fn get_recommended_fees(&self) -> Result<RecommendedFees, Error> {
+        let resp = self
+            .client
+            .get(&format!("{}/v1/fees/recommended", self.url,))
+            .send()
+            .await?;
+
+        if resp.status().is_server_error() || resp.status().is_client_error() {
+            Err(Error::HttpResponse {
+                status: resp.status().as_u16(),
+                message: resp.text().await?,
+            })
+        } else {
+            Ok(resp.json::<RecommendedFees>().await?)
         }
     }
 

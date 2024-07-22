@@ -28,6 +28,8 @@ use bitcoin::{
 };
 
 use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
+#[cfg(feature = "mempool")]
+use crate::RecommendedFees;
 
 #[derive(Debug, Clone)]
 pub struct BlockingClient {
@@ -303,6 +305,12 @@ impl BlockingClient {
     /// and the value is the estimated feerate (in sat/vB).
     pub fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
         self.get_response_json("/fee-estimates")
+    }
+
+    /// Get the currently suggested fees for new transactions.
+    #[cfg(feature = "mempool")]
+    pub fn get_recommended_fees(&self) -> Result<RecommendedFees, Error> {
+        self.get_response_json("/v1/fees/recommended")
     }
 
     /// Get confirmed transaction history for the specified address/scripthash,
