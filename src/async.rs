@@ -30,12 +30,14 @@ use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus
 
 #[derive(Debug, Clone)]
 pub struct AsyncClient {
+    /// The URL of the Esplora Server.
     url: String,
+    /// The inner [`reqwest::Client`] to make HTTP requests.
     client: Client,
 }
 
 impl AsyncClient {
-    /// build an async client from a builder
+    /// Build an async client from a builder
     pub fn from_builder(builder: Builder) -> Result<Self, Error> {
         let mut client_builder = Client::builder();
 
@@ -64,7 +66,7 @@ impl AsyncClient {
         Ok(Self::from_client(builder.base_url, client_builder.build()?))
     }
 
-    /// build an async client from the base url and [`Client`]
+    /// Build an async client from the base url and [`Client`]
     pub fn from_client(url: String, client: Client) -> Self {
         AsyncClient { url, client }
     }

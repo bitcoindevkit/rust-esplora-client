@@ -72,8 +72,6 @@ use std::collections::HashMap;
 use std::fmt;
 use std::num::TryFromIntError;
 
-use bitcoin::consensus;
-
 pub mod api;
 
 #[cfg(feature = "async")]
@@ -102,6 +100,7 @@ pub fn convert_fee_rate(target: usize, estimates: HashMap<u16, f64>) -> Option<f
 
 #[derive(Debug, Clone)]
 pub struct Builder {
+    /// The URL of the Esplora server.
     pub base_url: String,
     /// Optional URL of the proxy to use to make requests to the Esplora server
     ///
@@ -118,7 +117,7 @@ pub struct Builder {
     pub proxy: Option<String>,
     /// Socket timeout.
     pub timeout: Option<u64>,
-    /// HTTP headers to set on every request made to Esplora server
+    /// HTTP headers to set on every request made to Esplora server.
     pub headers: HashMap<String, String>,
 }
 
@@ -151,20 +150,20 @@ impl Builder {
         self
     }
 
-    /// build a blocking client from builder
+    /// Build a blocking client from builder
     #[cfg(feature = "blocking")]
     pub fn build_blocking(self) -> BlockingClient {
         BlockingClient::from_builder(self)
     }
 
-    // build an asynchronous client from builder
+    // Build an asynchronous client from builder
     #[cfg(feature = "async")]
     pub fn build_async(self) -> Result<AsyncClient, Error> {
         AsyncClient::from_builder(self)
     }
 }
 
-/// Errors that can happen during a sync with `Esplora`
+/// Errors that can happen during a request to `Esplora` servers.
 #[derive(Debug)]
 pub enum Error {
     /// Error during `minreq` HTTP request
@@ -187,9 +186,9 @@ pub enum Error {
     HexToBytes(bitcoin::hex::HexToBytesError),
     /// Transaction not found
     TransactionNotFound(Txid),
-    /// Header height not found
+    /// Block Header height not found
     HeaderHeightNotFound(u32),
-    /// Header hash not found
+    /// Block Header hash not found
     HeaderHashNotFound(BlockHash),
     /// Invalid HTTP Header name specified
     InvalidHttpHeaderName(String),
@@ -222,7 +221,7 @@ impl_error!(::minreq::Error, Minreq, Error);
 #[cfg(feature = "async")]
 impl_error!(::reqwest::Error, Reqwest, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
-impl_error!(consensus::encode::Error, BitcoinEncoding, Error);
+impl_error!(bitcoin::consensus::encode::Error, BitcoinEncoding, Error);
 impl_error!(bitcoin::hex::HexToArrayError, HexToArray, Error);
 impl_error!(bitcoin::hex::HexToBytesError, HexToBytes, Error);
 
