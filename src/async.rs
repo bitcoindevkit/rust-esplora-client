@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use bitcoin::consensus::{deserialize, serialize};
+use bitcoin::consensus::{deserialize, serialize, Decodable, Encodable};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::{
@@ -24,7 +24,7 @@ use bitcoin::{
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
-use reqwest::{header, Client, StatusCode};
+use reqwest::{header, Client};
 
 use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
@@ -71,26 +71,203 @@ impl AsyncClient {
         AsyncClient { url, client }
     }
 
+    /// Make an HTTP GET request to given URL, deserializing to any `T` that
+    /// implement [`bitcoin::consensus::Decodable`].
+    ///
+    /// It should be used when requesting Esplora endpoints that can be directly
+    /// deserialized to native `rust-bitcoin` types, which implements
+    /// [`bitcoin::consensus::Decodable`] from `&[u8]`.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error either from the HTTP client, or the
+    /// [`bitcoin::consensus::Decodable`] deserialization.
+    async fn get_response<T: Decodable>(&self, path: &str) -> Result<T, Error> {
+        let url = format!("{}{}", self.url, path);
+        let response = self.client.get(url).send().await?;
+
+        match response.status().is_success() {
+            true => Ok(deserialize::<T>(&response.bytes().await?)?),
+            false => Err(Error::HttpResponse {
+                status: response.status().as_u16(),
+                message: response.text().await?,
+            }),
+        }
+    }
+
+    /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
+    ///
+    /// It uses [`AsyncEsploraClient::get_response`] internally.
+    ///
+    /// See [`AsyncEsploraClient::get_response`] above for full documentation.
+    async fn get_opt_response<T: Decodable>(&self, path: &str) -> Result<Option<T>, Error> {
+        match self.get_response::<T>(path).await {
+            Ok(res) => Ok(Some(res)),
+            Err(Error::HttpResponse { status, message }) => match status {
+                404 => Ok(None),
+                _ => Err(Error::HttpResponse { status, message }),
+            },
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Make an HTTP GET request to given URL, deserializing to any `T` that
+    /// implements [`serde::de::DeserializeOwned`].
+    ///
+    /// It should be used when requesting Esplora endpoints that have a specific
+    /// defined API, mostly defined in [`crate::api`].
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error either from the HTTP client, or the
+    /// [`serde::de::DeserializeOwned`] deserialization.
+    async fn get_response_json<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+    ) -> Result<T, Error> {
+        let url = format!("{}{}", self.url, path);
+        let response = self.client.get(url).send().await?;
+
+        match response.status().is_success() {
+            true => Ok(response.json::<T>().await.map_err(Error::Reqwest)?),
+            false => Err(Error::HttpResponse {
+                status: response.status().as_u16(),
+                message: response.text().await?,
+            }),
+        }
+    }
+
+    /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
+    ///
+    /// It uses [`AsyncEsploraClient::get_response_json`] internally.
+    ///
+    /// See [`AsyncEsploraClient::get_response_json`] above for full
+    /// documentation.
+    async fn get_opt_response_json<T: serde::de::DeserializeOwned>(
+        &self,
+        url: &str,
+    ) -> Result<Option<T>, Error> {
+        match self.get_response_json(url).await {
+            Ok(res) => Ok(Some(res)),
+            Err(Error::HttpResponse { status, message }) => match status {
+                404 => Ok(None),
+                _ => Err(Error::HttpResponse { status, message }),
+            },
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Make an HTTP GET request to given URL, deserializing to any `T` that
+    /// implement [`bitcoin::consensus::Decodable`] from Hex, [`Vec<u8>`].
+    ///
+    /// It should be used when requesting Esplora endpoints that can be directly
+    /// deserialized to native `rust-bitcoin` types, which implements
+    /// [`bitcoin::consensus::Decodable`] from Hex, `Vec<&u8>`.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error either from the HTTP client, or the
+    /// [`bitcoin::consensus::Decodable`] deserialization.
+    async fn get_response_hex<T: Decodable>(&self, path: &str) -> Result<T, Error> {
+        let url = format!("{}{}", self.url, path);
+        let response = self.client.get(url).send().await?;
+
+        match response.status().is_success() {
+            true => {
+                let hex_str = response.text().await?;
+                let hex_vec = Vec::from_hex(&hex_str)?;
+                Ok(deserialize(&hex_vec)?)
+            }
+            false => Err(Error::HttpResponse {
+                status: response.status().as_u16(),
+                message: response.text().await?,
+            }),
+        }
+    }
+
+    /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
+    ///
+    /// It uses [`AsyncEsploraClient::get_response_hex`] internally.
+    ///
+    /// See [`AsyncEsploraClient::get_response_hex`] above for full
+    /// documentation.
+    async fn get_opt_response_hex<T: Decodable>(&self, path: &str) -> Result<Option<T>, Error> {
+        match self.get_response_hex(path).await {
+            Ok(res) => Ok(Some(res)),
+            Err(Error::HttpResponse { status, message }) => match status {
+                404 => Ok(None),
+                _ => Err(Error::HttpResponse { status, message }),
+            },
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Make an HTTP GET request to given URL, deserializing to `String`.
+    ///
+    /// It should be used when requesting Esplora endpoints that can return
+    /// `String` formatted data that can be parsed downstream.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error either from the HTTP client.
+    async fn get_response_text(&self, path: &str) -> Result<String, Error> {
+        let url = format!("{}{}", self.url, path);
+        let response = self.client.get(url).send().await?;
+
+        match response.status().is_success() {
+            true => Ok(response.text().await?),
+            false => Err(Error::HttpResponse {
+                status: response.status().as_u16(),
+                message: response.text().await?,
+            }),
+        }
+    }
+
+    /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
+    ///
+    /// It uses [`AsyncEsploraClient::get_response_text`] internally.
+    ///
+    /// See [`AsyncEsploraClient::get_response_text`] above for full
+    /// documentation.
+    async fn get_opt_response_text(&self, path: &str) -> Result<Option<String>, Error> {
+        match self.get_response_text(path).await {
+            Ok(s) => Ok(Some(s)),
+            Err(Error::HttpResponse { status, message }) => match status {
+                404 => Ok(None),
+                _ => Err(Error::HttpResponse { status, message }),
+            },
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Make an HTTP POST request to given URL, serializing from any `T` that
+    /// implement [`bitcoin::consensus::Encodable`].
+    ///
+    /// It should be used when requesting Esplora endpoints that expected a
+    /// native bitcoin type serialized with [`bitcoin::consensus::Encodable`].
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error either from the HTTP client, or the
+    /// [`bitcoin::consensus::Encodable`] serialization.
+    async fn post_request_hex<T: Encodable>(&self, path: &str, body: T) -> Result<(), Error> {
+        let url = format!("{}{}", self.url, path);
+        let body = serialize::<T>(&body).to_lower_hex_string();
+
+        let response = self.client.post(url).body(body).send().await?;
+
+        match response.status().is_success() {
+            true => Ok(()),
+            false => Err(Error::HttpResponse {
+                status: response.status().as_u16(),
+                message: response.text().await?,
+            }),
+        }
+    }
+
     /// Get a [`Transaction`] option given its [`Txid`]
     pub async fn get_tx(&self, txid: &Txid) -> Result<Option<Transaction>, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/tx/{}/raw", self.url, txid))
-            .send()
-            .await?;
-
-        if let StatusCode::NOT_FOUND = resp.status() {
-            return Ok(None);
-        }
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(Some(deserialize(&resp.bytes().await?)?))
-        }
+        self.get_opt_response(&format!("/tx/{txid}/raw")).await
     }
 
     /// Get a [`Transaction`] given its [`Txid`].
@@ -109,167 +286,55 @@ impl AsyncClient {
         block_hash: &BlockHash,
         index: usize,
     ) -> Result<Option<Txid>, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/block/{}/txid/{}", self.url, block_hash, index))
-            .send()
-            .await?;
-
-        if let StatusCode::NOT_FOUND = resp.status() {
-            return Ok(None);
-        }
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(Some(Txid::from_str(&resp.text().await?)?))
+        match self
+            .get_opt_response_text(&format!("/block/{block_hash}/txid/{index}"))
+            .await?
+        {
+            Some(s) => Ok(Some(Txid::from_str(&s).map_err(Error::HexToArray)?)),
+            None => Ok(None),
         }
     }
 
     /// Get the status of a [`Transaction`] given its [`Txid`].
     pub async fn get_tx_status(&self, txid: &Txid) -> Result<TxStatus, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/tx/{}/status", self.url, txid))
-            .send()
-            .await?;
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(resp.json().await?)
-        }
+        self.get_response_json(&format!("/tx/{txid}/status")).await
     }
 
     /// Get transaction info given it's [`Txid`].
     pub async fn get_tx_info(&self, txid: &Txid) -> Result<Option<Tx>, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/tx/{}", self.url, txid))
-            .send()
-            .await?;
-        if resp.status() == StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(Some(resp.json().await?))
-        }
+        self.get_opt_response_json(&format!("/tx/{txid}")).await
     }
 
     /// Get a [`BlockHeader`] given a particular block hash.
     pub async fn get_header_by_hash(&self, block_hash: &BlockHash) -> Result<BlockHeader, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/block/{}/header", self.url, block_hash))
-            .send()
-            .await?;
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            let header = deserialize(&Vec::from_hex(&resp.text().await?)?)?;
-            Ok(header)
-        }
+        self.get_response_hex(&format!("/block/{block_hash}/header"))
+            .await
     }
 
     /// Get the [`BlockStatus`] given a particular [`BlockHash`].
     pub async fn get_block_status(&self, block_hash: &BlockHash) -> Result<BlockStatus, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/block/{}/status", self.url, block_hash))
-            .send()
-            .await?;
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(resp.json().await?)
-        }
+        self.get_response_json(&format!("/block/{block_hash}/status"))
+            .await
     }
 
     /// Get a [`Block`] given a particular [`BlockHash`].
     pub async fn get_block_by_hash(&self, block_hash: &BlockHash) -> Result<Option<Block>, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/block/{}/raw", self.url, block_hash))
-            .send()
-            .await?;
-
-        if let StatusCode::NOT_FOUND = resp.status() {
-            return Ok(None);
-        }
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(Some(deserialize(&resp.bytes().await?)?))
-        }
+        self.get_opt_response(&format!("/block/{block_hash}/raw"))
+            .await
     }
 
     /// Get a merkle inclusion proof for a [`Transaction`] with the given
     /// [`Txid`].
     pub async fn get_merkle_proof(&self, tx_hash: &Txid) -> Result<Option<MerkleProof>, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/tx/{}/merkle-proof", self.url, tx_hash))
-            .send()
-            .await?;
-
-        if let StatusCode::NOT_FOUND = resp.status() {
-            return Ok(None);
-        }
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(Some(resp.json().await?))
-        }
+        self.get_opt_response_json(&format!("/tx/{tx_hash}/merkle-proof"))
+            .await
     }
 
     /// Get a [`MerkleBlock`] inclusion proof for a [`Transaction`] with the
     /// given [`Txid`].
     pub async fn get_merkle_block(&self, tx_hash: &Txid) -> Result<Option<MerkleBlock>, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/tx/{}/merkleblock-proof", self.url, tx_hash))
-            .send()
-            .await?;
-
-        if let StatusCode::NOT_FOUND = resp.status() {
-            return Ok(None);
-        }
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            let merkle_block = deserialize(&Vec::from_hex(&resp.text().await?)?)?;
-            Ok(Some(merkle_block))
-        }
+        self.get_opt_response_hex(&format!("/tx/{tx_hash}/merkleblock-proof"))
+            .await
     }
 
     /// Get the spending status of an output given a [`Txid`] and the output
@@ -279,101 +344,34 @@ impl AsyncClient {
         txid: &Txid,
         index: u64,
     ) -> Result<Option<OutputStatus>, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/tx/{}/outspend/{}", self.url, txid, index))
-            .send()
-            .await?;
-
-        if let StatusCode::NOT_FOUND = resp.status() {
-            return Ok(None);
-        }
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(Some(resp.json().await?))
-        }
+        self.get_opt_response_json(&format!("/tx/{txid}/outspend/{index}"))
+            .await
     }
 
     /// Broadcast a [`Transaction`] to Esplora
     pub async fn broadcast(&self, transaction: &Transaction) -> Result<(), Error> {
-        let resp = self
-            .client
-            .post(&format!("{}/tx", self.url))
-            .body(serialize(transaction).to_lower_hex_string())
-            .send()
-            .await?;
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(())
-        }
+        self.post_request_hex("/tx", transaction).await
     }
 
     /// Get the current height of the blockchain tip
     pub async fn get_height(&self) -> Result<u32, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/blocks/tip/height", self.url))
-            .send()
-            .await?;
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(resp.text().await?.parse()?)
-        }
+        self.get_response_text("/blocks/tip/height")
+            .await
+            .map(|height| u32::from_str(&height).map_err(Error::Parsing))?
     }
 
     /// Get the [`BlockHash`] of the current blockchain tip.
     pub async fn get_tip_hash(&self) -> Result<BlockHash, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/blocks/tip/hash", self.url))
-            .send()
-            .await?;
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(BlockHash::from_str(&resp.text().await?)?)
-        }
+        self.get_response_text("/blocks/tip/hash")
+            .await
+            .map(|block_hash| BlockHash::from_str(&block_hash).map_err(Error::HexToArray))?
     }
 
     /// Get the [`BlockHash`] of a specific block height
     pub async fn get_block_hash(&self, block_height: u32) -> Result<BlockHash, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/block-height/{}", self.url, block_height))
-            .send()
-            .await?;
-
-        if let StatusCode::NOT_FOUND = resp.status() {
-            return Err(Error::HeaderHeightNotFound(block_height));
-        }
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(BlockHash::from_str(&resp.text().await?)?)
-        }
+        self.get_response_text(&format!("/block-height/{block_height}"))
+            .await
+            .map(|block_hash| BlockHash::from_str(&block_hash).map_err(Error::HexToArray))?
     }
 
     /// Get confirmed transaction history for the specified address/scripthash,
@@ -386,43 +384,18 @@ impl AsyncClient {
         last_seen: Option<Txid>,
     ) -> Result<Vec<Tx>, Error> {
         let script_hash = sha256::Hash::hash(script.as_bytes());
-        let url = match last_seen {
-            Some(last_seen) => format!(
-                "{}/scripthash/{:x}/txs/chain/{}",
-                self.url, script_hash, last_seen
-            ),
-            None => format!("{}/scripthash/{:x}/txs", self.url, script_hash),
+        let path = match last_seen {
+            Some(last_seen) => format!("/scripthash/{:x}/txs/chain/{}", script_hash, last_seen),
+            None => format!("/scripthash/{:x}/txs", script_hash),
         };
 
-        let resp = self.client.get(url).send().await?;
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(resp.json::<Vec<Tx>>().await?)
-        }
+        self.get_response_json(&path).await
     }
 
     /// Get an map where the key is the confirmation target (in number of
     /// blocks) and the value is the estimated feerate (in sat/vB).
     pub async fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/fee-estimates", self.url,))
-            .send()
-            .await?;
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(resp.json::<HashMap<u16, f64>>().await?)
-        }
+        self.get_response_json("/fee-estimates").await
     }
 
     /// Gets some recent block summaries starting at the tip or at `height` if
@@ -431,21 +404,11 @@ impl AsyncClient {
     /// The maximum number of summaries returned depends on the backend itself:
     /// esplora returns `10` while [mempool.space](https://mempool.space/docs/api) returns `15`.
     pub async fn get_blocks(&self, height: Option<u32>) -> Result<Vec<BlockSummary>, Error> {
-        let url = match height {
-            Some(height) => format!("{}/blocks/{}", self.url, height),
-            None => format!("{}/blocks", self.url),
+        let path = match height {
+            Some(height) => format!("/blocks/{height}"),
+            None => "/blocks".to_string(),
         };
-
-        let resp = self.client.get(&url).send().await?;
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(resp.json::<Vec<BlockSummary>>().await?)
-        }
+        self.get_response_json(&path).await
     }
 
     /// Get the underlying base URL.
