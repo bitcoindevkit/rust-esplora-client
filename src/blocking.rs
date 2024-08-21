@@ -31,6 +31,7 @@ use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus
 
 #[derive(Debug, Clone)]
 pub struct BlockingClient {
+    /// The URL of the Esplora server.
     url: String,
     /// The proxy is ignored when targeting `wasm32`.
     pub proxy: Option<String>,
@@ -41,7 +42,7 @@ pub struct BlockingClient {
 }
 
 impl BlockingClient {
-    /// build a blocking client from a [`Builder`]
+    /// Build a blocking client from a [`Builder`]
     pub fn from_builder(builder: Builder) -> Self {
         Self {
             url: builder.base_url,
