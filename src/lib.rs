@@ -388,11 +388,16 @@ mod test {
 "#,
         )
         .unwrap();
+        assert!(convert_fee_rate(1, HashMap::new()).is_none());
         assert_eq!(convert_fee_rate(6, esplora_fees.clone()).unwrap(), 2.236);
         assert_eq!(
-            convert_fee_rate(26, esplora_fees).unwrap(),
+            convert_fee_rate(26, esplora_fees.clone()).unwrap(),
             1.015,
             "should inherit from value for 25"
+        );
+        assert!(
+            convert_fee_rate(0, esplora_fees).is_none(),
+            "should not return feerate for 0 target"
         );
     }
 
