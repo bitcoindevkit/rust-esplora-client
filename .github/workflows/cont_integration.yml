@@ -1,4 +1,4 @@
-name: Rust
+name: CI
 
 on:
   push:
@@ -11,7 +11,7 @@ env:
 
 jobs:
   build-test:
-
+    name: Build & Test
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -32,10 +32,10 @@ jobs:
           - async-https-rustls
           - async-https-rustls-manual-roots
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Generate cache key
       run: echo "${{ matrix.rust.version }} ${{ matrix.features }}" | tee .cache_key
-    - name: cache
+    - name: Rust Cache
       uses: actions/cache@v3
       with:
         path: |
@@ -52,7 +52,7 @@ jobs:
       run: rustup component add clippy
     - name: Update toolchain
       run: rustup update
-    - name: pin dependencies
+    - name: Pin dependencies for MSRV
       if: matrix.rust.version == '1.63.0'
       run: |
         cargo update -p zstd-sys --precise "2.0.8+zstd.1.5.5"
