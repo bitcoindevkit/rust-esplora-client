@@ -4,8 +4,9 @@
 //! async Esplora client to query Esplora's backend.
 //!
 //! The library provides the possibility to build a blocking
-//! client using [`minreq`] and an async client using [`reqwest`].
-//! The library supports communicating to Esplora via a proxy
+//! client using [`minreq`] and an async client using [`reqwest`],
+//! and an anonymized async client using [`arti-hyper`].
+//! The library supports communicating to Esplora via a Tor, proxy,
 //! and also using TLS (SSL) for secure communication.
 //!
 //!
@@ -34,6 +35,30 @@
 //! # Ok::<(), esplora_client::Error>(());
 //! # }
 //! ```
+//!
+//! // FIXME: (@leonardo) fix this documentation
+//! Here is an example of how to create an anonymized (Tor) asynchronous client.
+//!
+//! ```no_run
+//! # #[cfg(feature = "async-arti-tor")]
+//! # {
+//! use esplora_client::Builder;
+//! let builder = Builder::new("https://blockstream.info/testnet/api");
+//! let async_tor_client = builder.build_async_tor();
+//! # Ok::<(), esplora_client::Error>(());
+//! # }
+//! ```
+//!
+//! ```no_run
+//! # #[cfg(feature = "async-arti-tor")]
+//! # {
+//! use esplora_client::Builder;
+//! let builder = Builder::new("http://explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion/testnet/api");
+//! let async_hs_client = builder.build_async_tor();
+//! # Ok::<(), esplora_client::Error>(());
+//! # }
+//! ```
+//!
 //!
 //! ## Features
 //!
@@ -65,6 +90,14 @@
 //! * `async-https-rustls-manual-roots` enables [`reqwest`], the async client
 //!   with support for proxying and TLS (SSL) using the `rustls` TLS backend
 //!   without using its the default root certificates.
+//! * `async-arti-tor` enables [`hyper`] and [`arti_client`], the async anonymized client support for TLS (SSL) over Tor,
+//!   using the default [`hyper`] and [`arti_client`] TLS backend.
+//! * `async-arti-tor-native` enables [`hyper`] and [`arti_client`], the async anonymized client support for TLS (SSL) over Tor,
+//!   using the platform's native TLS backend (likely OpenSSL).
+//! * `async-arti-tor-rustls` enables [`hyper`] and [`arti_client`], the async anonymized client support for TLS (SSL) over Tor,
+//!   using the `rustls` TLS backend without using its the default root certificates.
+//!
+//!
 
 #![allow(clippy::result_large_err)]
 
@@ -76,6 +109,8 @@ pub mod api;
 
 #[cfg(feature = "async")]
 pub mod r#async;
+#[cfg(feature = "async-tor")]
+pub mod r#async_tor;
 #[cfg(feature = "blocking")]
 pub mod blocking;
 
@@ -84,6 +119,8 @@ pub use api::*;
 pub use blocking::BlockingClient;
 #[cfg(feature = "async")]
 pub use r#async::AsyncClient;
+#[cfg(feature = "async-tor")]
+pub use r#async_tor::AsyncTorClient;
 
 /// Get a fee value in sats/vbytes from the estimates
 /// that matches the confirmation target set as parameter.
@@ -161,6 +198,12 @@ impl Builder {
     pub fn build_async(self) -> Result<AsyncClient, Error> {
         AsyncClient::from_builder(self)
     }
+
+    // Build an asynchronous Tor client from builder
+    #[cfg(feature = "async-tor")]
+    pub async fn build_async_tor(self) -> Result<AsyncTorClient, Error> {
+        AsyncTorClient::from_builder(self).await
+    }
 }
 
 /// Errors that can happen during a request to `Esplora` servers.
@@ -172,6 +215,30 @@ pub enum Error {
     /// Error during reqwest HTTP request
     #[cfg(feature = "async")]
     Reqwest(::reqwest::Error),
+    /// Error during `arti-client` connection establishment
+    #[cfg(feature = "async-tor")]
+    Arti(::arti_client::Error),
+    /// Error during hyper HTTP request
+    #[cfg(feature = "async-tor")]
+    Hyper(::hyper::Error),
+    /// Error during hyper HTTP connection
+    #[cfg(feature = "async-tor")]
+    Http(::http::Error),
+    /// Error during hyper HTTP connection
+    #[cfg(feature = "async-tor")]
+    InvalidUri,
+    // /// Error during hyper HTTP request body creation
+    // #[cfg(feature = "async-tor")]
+    // InvalidBody,
+    // /// Error during Tor client creation
+    // #[cfg(feature = "async-tor")]
+    // ArtiClient(::arti_client::Error),
+    // /// Error during [`TlsConnector`] building
+    // #[cfg(feature = "async-tor")]
+    // TlsConnector,
+    // /// Error during response decoding
+    // #[cfg(feature = "async-tor")]
+    // ResponseDecoding,
     /// HTTP response error
     HttpResponse { status: u16, message: String },
     /// Invalid number returned
@@ -220,6 +287,12 @@ impl std::error::Error for Error {}
 impl_error!(::minreq::Error, Minreq, Error);
 #[cfg(feature = "async")]
 impl_error!(::reqwest::Error, Reqwest, Error);
+#[cfg(feature = "async-tor")]
+impl_error!(::hyper::Error, Hyper, Error);
+#[cfg(feature = "async-tor")]
+impl_error!(::http::Error, Http, Error);
+#[cfg(feature = "async-tor")]
+impl_error!(::arti_client::Error, Arti, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
 impl_error!(bitcoin::consensus::encode::Error, BitcoinEncoding, Error);
 impl_error!(bitcoin::hex::HexToArrayError, HexToArray, Error);
@@ -228,13 +301,14 @@ impl_error!(bitcoin::hex::HexToBytesError, HexToBytes, Error);
 #[cfg(test)]
 mod test {
     use super::*;
+    #[allow(unused_imports)]
+    use bitcoin::hashes::Hash;
     use electrsd::{bitcoind, bitcoind::BitcoinD, ElectrsD};
     use lazy_static::lazy_static;
     use std::env;
     use tokio::sync::Mutex;
     #[cfg(all(feature = "blocking", feature = "async"))]
     use {
-        bitcoin::hashes::Hash,
         bitcoin::Amount,
         electrsd::{
             bitcoind::bitcoincore_rpc::json::AddressType, bitcoind::bitcoincore_rpc::RpcApi,
@@ -301,6 +375,20 @@ mod test {
         let async_client = builder_async.build_async().unwrap();
 
         (blocking_client, async_client)
+    }
+
+    #[cfg(feature = "async-tor")]
+    async fn setup_anonymized_tor_client() -> AsyncTorClient {
+        const ESPLORA_URL: &str = "https://mempool.space/api";
+        // const ESPLORA_URL: &str = "https://blockstream.info/testnet/api";
+        // const ESPLORA_URL: &str = "http://explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion/api";
+
+        let builder_async_anonymized_tor = Builder::new(ESPLORA_URL);
+
+        builder_async_anonymized_tor
+            .build_async_tor()
+            .await
+            .unwrap()
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
@@ -435,6 +523,24 @@ mod test {
         assert_eq!(tx, tx_async);
     }
 
+    #[cfg(feature = "async-tor")]
+    #[tokio::test]
+    #[ignore = "The `AsyncTorClient` tests are ignored as they rely on a remote server with available Esplora API"]
+    async fn test_anonymized_get_tx() {
+        let client = setup_anonymized_tor_client().await;
+
+        let network = bitcoin::Network::Bitcoin;
+        let genesis_block = bitcoin::blockdata::constants::genesis_block(network);
+        let coinbase_tx = genesis_block.coinbase().unwrap().to_owned();
+
+        let tx_async_anonymized = client
+            .get_tx(&coinbase_tx.compute_txid())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(coinbase_tx, tx_async_anonymized);
+    }
+
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tx_no_opt() {
@@ -464,6 +570,23 @@ mod test {
         let tx_no_opt = blocking_client.get_tx_no_opt(&txid).unwrap();
         let tx_no_opt_async = async_client.get_tx_no_opt(&txid).await.unwrap();
         assert_eq!(tx_no_opt, tx_no_opt_async);
+    }
+
+    #[cfg(feature = "async-tor")]
+    #[tokio::test]
+    #[ignore = "The `AsyncTorClient` tests are ignored as they rely on a remote server with available Esplora API"]
+    async fn test_anonymized_get_tx_no_opt() {
+        let client = setup_anonymized_tor_client().await;
+
+        let network = bitcoin::Network::Bitcoin;
+        let genesis_block = bitcoin::blockdata::constants::genesis_block(network);
+        let coinbase_tx = genesis_block.coinbase().unwrap().to_owned();
+
+        let tx_async_anonymized = client
+            .get_tx_no_opt(&coinbase_tx.compute_txid())
+            .await
+            .unwrap();
+        assert_eq!(coinbase_tx, tx_async_anonymized);
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
@@ -506,6 +629,28 @@ mod test {
         assert!(tx_status.block_height.is_none());
         assert!(tx_status.block_hash.is_none());
         assert!(tx_status.block_time.is_none());
+    }
+
+    #[cfg(feature = "async-tor")]
+    #[tokio::test]
+    #[ignore = "The `AsyncTorClient` tests are ignored as they rely on a remote server with available Esplora API"]
+    async fn test_anonymized_get_tx_status() {
+        let client = setup_anonymized_tor_client().await;
+
+        let network = bitcoin::Network::Bitcoin;
+        let genesis_block = bitcoin::blockdata::constants::genesis_block(network);
+        let coinbase_txid = genesis_block.coinbase().unwrap().compute_txid();
+
+        let tx_status_async_anonymized = client.get_tx_status(&coinbase_txid).await.unwrap();
+        assert!(tx_status_async_anonymized.confirmed);
+
+        // Bogus txid returns a TxStatus with false, None, None, None
+        let txid = Txid::hash(b"ayyyy lmao");
+        let tx_status_async_anonymized = client.get_tx_status(&txid).await.unwrap();
+        assert!(!tx_status_async_anonymized.confirmed);
+        assert!(tx_status_async_anonymized.block_height.is_none());
+        assert!(tx_status_async_anonymized.block_hash.is_none());
+        assert!(tx_status_async_anonymized.block_time.is_none());
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
@@ -574,6 +719,24 @@ mod test {
         assert_eq!(block_header, block_header_async);
     }
 
+    #[cfg(feature = "async-tor")]
+    #[tokio::test]
+    #[ignore = "The `AsyncTorClient` tests are ignored as they rely on a remote server with available Esplora API"]
+
+    async fn test_anonymized_get_header_by_hash() {
+        let client = setup_anonymized_tor_client().await;
+
+        let network = bitcoin::Network::Bitcoin;
+        let genesis_block = bitcoin::blockdata::constants::genesis_block(network);
+
+        let block_header_async_anonymized = client
+            .get_header_by_hash(&genesis_block.block_hash())
+            .await
+            .unwrap();
+
+        assert_eq!(genesis_block.header, block_header_async_anonymized);
+    }
+
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_status() {
@@ -592,6 +755,36 @@ mod test {
         let block_status_async = async_client.get_block_status(&block_hash).await.unwrap();
         assert_eq!(expected, block_status);
         assert_eq!(expected, block_status_async);
+    }
+
+    #[cfg(feature = "async-tor")]
+    #[tokio::test]
+    #[ignore = "The `AsyncTorClient` tests are ignored as they rely on a remote server with available Esplora API"]
+    async fn test_anonymized_get_block_status() {
+        use std::str::FromStr;
+
+        let client = setup_anonymized_tor_client().await;
+
+        let network = bitcoin::Network::Bitcoin;
+        let genesis_block = bitcoin::blockdata::constants::genesis_block(network);
+        let genesis_block_status = BlockStatus {
+            in_best_chain: true,
+            height: Some(0),
+            // https://mempool.space/block/00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048
+            next_best: Some(
+                BlockHash::from_str(
+                    "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048",
+                )
+                .unwrap(),
+            ),
+        };
+
+        let block_status_async_anonymized = client
+            .get_block_status(&genesis_block.block_hash())
+            .await
+            .unwrap();
+
+        assert_eq!(genesis_block_status, block_status_async_anonymized)
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
@@ -632,6 +825,24 @@ mod test {
         let block_async = async_client.get_block_by_hash(&block_hash).await.unwrap();
         assert_eq!(expected, block);
         assert_eq!(expected, block_async);
+    }
+
+    #[cfg(feature = "async-tor")]
+    #[tokio::test]
+    #[ignore = "The `AsyncTorClient` tests are ignored as they rely on a remote server with available Esplora API"]
+    async fn test_anonymized_get_block_by_hash() {
+        let client = setup_anonymized_tor_client().await;
+
+        let network = bitcoin::Network::Bitcoin;
+        let genesis_block = bitcoin::blockdata::constants::genesis_block(network);
+
+        let block_status_async_anonymized = client
+            .get_block_by_hash(&genesis_block.block_hash())
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(genesis_block, block_status_async_anonymized);
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
@@ -717,6 +928,26 @@ mod test {
         assert!(merkle_proof.pos > 0);
     }
 
+    #[cfg(feature = "async-tor")]
+    #[tokio::test]
+    #[ignore = "The `AsyncTorClient` tests are ignored as they rely on a remote server with available Esplora API"]
+    async fn test_anonymized_get_merkle_proof() {
+        let client = setup_anonymized_tor_client().await;
+
+        let network = bitcoin::Network::Bitcoin;
+        let genesis_block = bitcoin::blockdata::constants::genesis_block(network);
+
+        let coinbase_txid = genesis_block.coinbase().unwrap().compute_txid();
+        let merkle_proof = client
+            .get_merkle_proof(&coinbase_txid)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(merkle_proof.pos == 0);
+        assert!(merkle_proof.block_height == 0);
+    }
+
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_merkle_block() {
@@ -758,6 +989,34 @@ mod test {
         assert!(indexes[0] > 0);
     }
 
+    #[cfg(feature = "async-tor")]
+    #[tokio::test]
+    #[ignore = "The `AsyncTorClient` tests are ignored as they rely on a remote server with available Esplora API"]
+    async fn test_anonymized_get_merkle_block() {
+        let client = setup_anonymized_tor_client().await;
+
+        let network = bitcoin::Network::Bitcoin;
+        let genesis_block = bitcoin::blockdata::constants::genesis_block(network);
+
+        let coinbase_txid = genesis_block.coinbase().unwrap().compute_txid();
+
+        let merkle_block = client
+            .get_merkle_block(&coinbase_txid)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let mut matches = vec![coinbase_txid];
+        let mut indexes = vec![];
+        let root = merkle_block
+            .txn
+            .extract_matches(&mut matches, &mut indexes)
+            .unwrap();
+        assert_eq!(root, merkle_block.header.merkle_root);
+        assert_eq!(indexes.len(), 1);
+        assert!(indexes[0] == 0);
+    }
+
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_output_status() {
@@ -797,6 +1056,28 @@ mod test {
         assert_eq!(output_status, output_status_async);
     }
 
+    #[cfg(feature = "async-tor")]
+    #[tokio::test]
+    #[ignore = "The `AsyncTorClient` tests are ignored as they rely on a remote server with available Esplora API"]
+    async fn test_anonymized_get_output_status() {
+        let client = setup_anonymized_tor_client().await;
+
+        let network = bitcoin::Network::Bitcoin;
+        let genesis_block = bitcoin::blockdata::constants::genesis_block(network);
+        let coinbase_txid = genesis_block.coinbase().unwrap().compute_txid();
+
+        let tx_status_async_anonymized = client
+            .get_output_status(&coinbase_txid, 1)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(!tx_status_async_anonymized.spent);
+        assert!(tx_status_async_anonymized.txid.is_none());
+        assert!(tx_status_async_anonymized.vin.is_none());
+        assert!(tx_status_async_anonymized.status.is_none());
+    }
+
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_height() {
@@ -807,6 +1088,15 @@ mod test {
         assert_eq!(block_height, block_height_async);
     }
 
+    #[cfg(feature = "async-tor")]
+    #[tokio::test]
+    #[ignore = "The `AsyncTorClient` tests are ignored as they rely on a remote server with available Esplora API"]
+    async fn test_anonymized_get_height() {
+        let client = setup_anonymized_tor_client().await;
+        let block_height = client.get_height().await.unwrap();
+        assert!(block_height > 0);
+    }
+
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tip_hash() {
@@ -815,6 +1105,13 @@ mod test {
         let tip_hash_async = async_client.get_tip_hash().await.unwrap();
         assert_eq!(tip_hash, tip_hash_async);
     }
+
+    // #[cfg(feature = "async-tor")]
+    // #[tokio::test]
+    // #[ignore = "The `AsyncTorClient` tests are ignored as they rely on a remote server with available Esplora API"]
+    // async fn test_anonymized_get_tip_hash() {
+    //     unimplemented!()
+    // }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
@@ -827,6 +1124,19 @@ mod test {
         let block_hash_async = async_client.get_block_hash(21).await.unwrap();
         assert_eq!(block_hash, block_hash_blocking);
         assert_eq!(block_hash, block_hash_async);
+    }
+
+    #[cfg(feature = "async-tor")]
+    #[tokio::test]
+    #[ignore = "The `AsyncTorClient` tests are ignored as they rely on a remote server with available Esplora API"]
+    async fn test_anonymized_get_block_hash() {
+        let client = setup_anonymized_tor_client().await;
+
+        let network = bitcoin::Network::Bitcoin;
+        let genesis_block = bitcoin::blockdata::constants::genesis_block(network);
+
+        let block_hash = client.get_block_hash(0).await.unwrap();
+        assert_eq!(block_hash, genesis_block.block_hash());
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
@@ -848,6 +1158,27 @@ mod test {
         assert_eq!(txid_at_block_index, txid_at_block_index_async);
     }
 
+    #[cfg(feature = "async-tor")]
+    #[tokio::test]
+    #[ignore = "The `AsyncTorClient` tests are ignored as they rely on a remote server with available Esplora API"]
+    async fn test_anonymized_get_txid_at_block_index() {
+        let client = setup_anonymized_tor_client().await;
+
+        let network = bitcoin::Network::Bitcoin;
+        let genesis_block = bitcoin::blockdata::constants::genesis_block(network);
+
+        let genesis_block_hash = genesis_block.block_hash();
+        let coinbase_txid = genesis_block.coinbase().unwrap().compute_txid();
+
+        let txid_at_block_index_async_anonymized = client
+            .get_txid_at_block_index(&genesis_block_hash, 0)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(coinbase_txid, txid_at_block_index_async_anonymized);
+    }
+
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_fee_estimates() {
@@ -856,6 +1187,13 @@ mod test {
         let fee_estimates_async = async_client.get_fee_estimates().await.unwrap();
         assert_eq!(fee_estimates.len(), fee_estimates_async.len());
     }
+
+    // #[cfg(feature = "async-tor")]
+    // #[tokio::test]
+    // #[ignore = "The `AsyncTorClient` tests are ignored as they rely on a remote server with available Esplora API"]
+    // async fn test_anonymized_get_fee_estimates() {
+    //     todo!()
+    // }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
@@ -906,20 +1244,47 @@ mod test {
         assert_eq!(scripthash_txs_txids, scripthash_txs_txids_async);
     }
 
+    #[cfg(feature = "async-tor")]
+    #[tokio::test]
+    #[ignore = "The `AsyncTorClient` tests are ignored as they rely on a remote server with available Esplora API"]
+    async fn test_anonymized_scripthash_txs() {
+        let client = setup_anonymized_tor_client().await;
+
+        let network = bitcoin::Network::Bitcoin;
+        let genesis_block = bitcoin::blockdata::constants::genesis_block(network);
+
+        let coinbase_tx = genesis_block.coinbase().unwrap();
+
+        let script = &coinbase_tx.output[0].script_pubkey;
+        let scripthash_txs_txids: Vec<Txid> = client
+            .scripthash_txs(script, None)
+            .await
+            .unwrap()
+            .iter()
+            .map(|tx| tx.txid)
+            .collect();
+
+        assert!(scripthash_txs_txids.contains(&coinbase_tx.compute_txid()))
+    }
+
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_blocks() {
         let (blocking_client, async_client) = setup_clients().await;
         let start_height = BITCOIND.client.get_block_count().unwrap();
+
         let blocks1 = blocking_client.get_blocks(None).unwrap();
         let blocks_async1 = async_client.get_blocks(None).await.unwrap();
         assert_eq!(blocks1[0].time.height, start_height as u32);
         assert_eq!(blocks1, blocks_async1);
+
         generate_blocks_and_wait(10);
+
         let blocks2 = blocking_client.get_blocks(None).unwrap();
         let blocks_async2 = async_client.get_blocks(None).await.unwrap();
         assert_eq!(blocks2, blocks_async2);
         assert_ne!(blocks2, blocks1);
+
         let blocks3 = blocking_client
             .get_blocks(Some(start_height as u32))
             .unwrap();
@@ -930,9 +1295,36 @@ mod test {
         assert_eq!(blocks3, blocks_async3);
         assert_eq!(blocks3[0].time.height, start_height as u32);
         assert_eq!(blocks3, blocks1);
+
         let blocks_genesis = blocking_client.get_blocks(Some(0)).unwrap();
         let blocks_genesis_async = async_client.get_blocks(Some(0)).await.unwrap();
         assert_eq!(blocks_genesis, blocks_genesis_async);
+    }
+
+    #[cfg(feature = "async-tor")]
+    #[tokio::test]
+    #[ignore = "The `AsyncTorClient` tests are ignored as they rely on a remote server with available Esplora API"]
+    async fn test_anonymized_get_blocks() {
+        let client = setup_anonymized_tor_client().await;
+
+        let network = bitcoin::Network::Bitcoin;
+        let genesis_block = bitcoin::blockdata::constants::genesis_block(network);
+
+        let blocks = client.get_blocks(Some(1)).await.unwrap();
+
+        assert!(blocks.len() == 2);
+
+        assert_eq!(
+            blocks[0].id.to_string(),
+            "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048"
+        );
+        assert_eq!(
+            blocks[0].previousblockhash.unwrap(),
+            genesis_block.block_hash()
+        );
+
+        assert_eq!(blocks[1].id, genesis_block.block_hash());
+        assert_eq!(blocks[1].previousblockhash, None);
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]

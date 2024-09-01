@@ -24,21 +24,59 @@ log = "^0.4"
 minreq = { version = "2.11.0", features = ["json-using-serde"], optional = true }
 reqwest = { version = "0.11",  features = ["json"], default-features = false, optional = true }
 
+arti-client = { version = "0.21.0", default-features = false, optional = true }
+tor-rtcompat = { version = "0.21.0", default-features = false, optional = true }
+hyper = { version = "1.4.1", features = ["client", "http1"], default-features = false, optional = true }
+hyper-util = { version = "0.1.7", features = ["tokio"], default-features = false, optional = true }
+tokio = { version = "1.38.1", optional = true }
+http-body-util = { version = "0.1.2", optional = true}
+http = { version = "1.1.0", optional = true }
+serde_json = { version = "1.0.127", optional = true }
+tokio-rustls = { version = "0.26.0", default-features = false, features = [
+    "logging",
+    "tls12",
+    "ring",
+], optional = true }
+webpki-roots = { version = "0.26.3", optional = true }
+rustls-pki-types = { version = "1.8.0", optional = true }
+
 [dev-dependencies]
-serde_json = "1.0"
 tokio = { version = "1.20.1", features = ["full"] }
 electrsd = { version = "0.28.0", features = ["legacy", "esplora_a33e97e1", "bitcoind_25_0"] }
 lazy_static = "1.4.0"
 
 [features]
-default = ["blocking", "async", "async-https"]
+default = ["blocking", "async", "async-https", "async-tor"]
 blocking = ["minreq", "minreq/proxy"]
 blocking-https = ["blocking", "minreq/https"]
 blocking-https-rustls = ["blocking", "minreq/https-rustls"]
 blocking-https-native = ["blocking", "minreq/https-native"]
 blocking-https-bundled = ["blocking", "minreq/https-bundled"]
+
 async = ["reqwest", "reqwest/socks"]
 async-https = ["async", "reqwest/default-tls"]
 async-https-native = ["async", "reqwest/native-tls"]
 async-https-rustls = ["async", "reqwest/rustls-tls"]
 async-https-rustls-manual-roots = ["async", "reqwest/rustls-tls-manual-roots"]
+
+async-tor = [
+    "dep:arti-client",
+    "arti-client/tokio",
+    "arti-client/onion-service-client",
+    "arti-client/native-tls",
+
+    "dep:tor-rtcompat",
+    "tor-rtcompat/tokio",
+
+    "dep:hyper",
+    "dep:hyper-util",
+    "dep:tokio",
+    "dep:http-body-util",
+    "dep:http",
+    "dep:serde_json",
+    "dep:tokio-rustls",
+    "dep:webpki-roots",
+    "dep:rustls-pki-types"
+    ]
+async-tor-https-native = ["async-tor", "arti-client/native-tls"]
+async-tor-https-rustls = ["async-tor", "arti-client/rustls"]

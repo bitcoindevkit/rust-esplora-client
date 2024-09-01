@@ -11,6 +11,7 @@
 
 //! Esplora by way of `reqwest` HTTP client.
 
+use core::str;
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -28,6 +29,7 @@ use reqwest::{header, Client};
 
 use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
 
+#[cfg(feature = "async")]
 #[derive(Debug, Clone)]
 pub struct AsyncClient {
     /// The URL of the Esplora Server.
@@ -36,6 +38,7 @@ pub struct AsyncClient {
     client: Client,
 }
 
+#[cfg(feature = "async")]
 impl AsyncClient {
     /// Build an async client from a builder
     pub fn from_builder(builder: Builder) -> Result<Self, Error> {
@@ -84,7 +87,8 @@ impl AsyncClient {
     /// [`bitcoin::consensus::Decodable`] deserialization.
     async fn get_response<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         let url = format!("{}{}", self.url, path);
-        let response = self.client.get(url).send().await?;
+        let request = self.client.get(url);
+        let response = request.send().await?;
 
         match response.status().is_success() {
             true => Ok(deserialize::<T>(&response.bytes().await?)?),
