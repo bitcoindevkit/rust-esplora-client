@@ -1,4 +1,4 @@
-name: Rust
+name: CI
 
 on:
   push:
@@ -11,13 +11,12 @@ env:
 
 jobs:
   build-test:
-
+    name: Build & Test
     runs-on: ubuntu-latest
     strategy:
       matrix:
         rust:
           - version: stable # STABLE
-            clippy: true
           - version: 1.63.0 # MSRV
         features:
           - default
@@ -32,10 +31,11 @@ jobs:
           - async-https-rustls
           - async-https-rustls-manual-roots
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout
+      uses: actions/checkout@v4
     - name: Generate cache key
       run: echo "${{ matrix.rust.version }} ${{ matrix.features }}" | tee .cache_key
-    - name: cache
+    - name: Rust Cache
       uses: actions/cache@v3
       with:
         path: |
@@ -43,16 +43,15 @@ jobs:
           ~/.cargo/git
           target
         key: ${{ runner.os }}-cargo-${{ hashFiles('.cache_key') }}-${{ hashFiles('**/Cargo.toml','**/Cargo.lock') }}
-    - name: Set default toolchain
-      run: rustup default ${{ matrix.rust.version }}
+    - name: Install Rust Toolchain
+      uses: dtolnay/rust-toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust.version }}
     - name: Set profile
       run: rustup set profile minimal
-    - name: Add clippy
-      if: ${{ matrix.rust.clippy }}
-      run: rustup component add clippy
     - name: Update toolchain
       run: rustup update
-    - name: pin dependencies
+    - name: Pin dependencies for MSRV
       if: matrix.rust.version == '1.63.0'
       run: |
         cargo update -p zstd-sys --precise "2.0.8+zstd.1.5.5"
@@ -62,8 +61,44 @@ jobs:
         cargo update -p tokio --precise "1.38.1"
     - name: Build
       run: cargo build --features ${{ matrix.features }} --no-default-features
-    - name: Clippy
-      if: ${{ matrix.rust.clippy }}
-      run: cargo clippy --all-targets --features ${{ matrix.features }} --no-default-features -- -D warnings
     - name: Test
       run: cargo test --features ${{ matrix.features }} --no-default-features -- --test-threads=1
+
+  fmt:
+    name: Rust Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+            toolchain: stable
+            components: rustfmt
+      - name: Check fmt
+        run: cargo fmt --all -- --config format_code_in_doc_comments=true,wrap_comments=true --check
+
+  clippy:
+    name: Rust Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+            toolchain: stable
+            components: clippy
+      - name: Rust Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('.cache_key') }}-${{ hashFiles('**/Cargo.toml','**/Cargo.lock') }}
+      - name: Check clippy
+        uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features --all-targets -- -D warnings

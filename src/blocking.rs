@@ -31,6 +31,7 @@ use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus
 
 #[derive(Debug, Clone)]
 pub struct BlockingClient {
+    /// The URL of the Esplora server.
     url: String,
     /// The proxy is ignored when targeting `wasm32`.
     pub proxy: Option<String>,
@@ -41,7 +42,7 @@ pub struct BlockingClient {
 }
 
 impl BlockingClient {
-    /// build a blocking client from a [`Builder`]
+    /// Build a blocking client from a [`Builder`]
     pub fn from_builder(builder: Builder) -> Self {
         Self {
             url: builder.base_url,
@@ -199,7 +200,8 @@ impl BlockingClient {
         }
     }
 
-    /// Get a [`Txid`] of a transaction given its index in a block with a given hash.
+    /// Get a [`Txid`] of a transaction given its index in a block with a given
+    /// hash.
     pub fn get_txid_at_block_index(
         &self,
         block_hash: &BlockHash,
@@ -233,17 +235,20 @@ impl BlockingClient {
         self.get_opt_response(&format!("/block/{}/raw", block_hash))
     }
 
-    /// Get a merkle inclusion proof for a [`Transaction`] with the given [`Txid`].
+    /// Get a merkle inclusion proof for a [`Transaction`] with the given
+    /// [`Txid`].
     pub fn get_merkle_proof(&self, txid: &Txid) -> Result<Option<MerkleProof>, Error> {
         self.get_opt_response_json(&format!("/tx/{}/merkle-proof", txid))
     }
 
-    /// Get a [`MerkleBlock`] inclusion proof for a [`Transaction`] with the given [`Txid`].
+    /// Get a [`MerkleBlock`] inclusion proof for a [`Transaction`] with the
+    /// given [`Txid`].
     pub fn get_merkle_block(&self, txid: &Txid) -> Result<Option<MerkleBlock>, Error> {
         self.get_opt_response_hex(&format!("/tx/{}/merkleblock-proof", txid))
     }
 
-    /// Get the spending status of an output given a [`Txid`] and the output index.
+    /// Get the spending status of an output given a [`Txid`] and the output
+    /// index.
     pub fn get_output_status(
         &self,
         txid: &Txid,
@@ -299,15 +304,16 @@ impl BlockingClient {
             .map(|s| BlockHash::from_str(s.as_str()).map_err(Error::HexToArray))?
     }
 
-    /// Get an map where the key is the confirmation target (in number of blocks)
-    /// and the value is the estimated feerate (in sat/vB).
+    /// Get an map where the key is the confirmation target (in number of
+    /// blocks) and the value is the estimated feerate (in sat/vB).
     pub fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
         self.get_response_json("/fee-estimates")
     }
 
     /// Get confirmed transaction history for the specified address/scripthash,
     /// sorted with newest first. Returns 25 transactions per page.
-    /// More can be requested by specifying the last txid seen by the previous query.
+    /// More can be requested by specifying the last txid seen by the previous
+    /// query.
     pub fn scripthash_txs(
         &self,
         script: &Script,
@@ -321,10 +327,11 @@ impl BlockingClient {
         self.get_response_json(&path)
     }
 
-    /// Gets some recent block summaries starting at the tip or at `height` if provided.
+    /// Gets some recent block summaries starting at the tip or at `height` if
+    /// provided.
     ///
-    /// The maximum number of summaries returned depends on the backend itself: esplora returns `10`
-    /// while [mempool.space](https://mempool.space/docs/api) returns `15`.
+    /// The maximum number of summaries returned depends on the backend itself:
+    /// esplora returns `10` while [mempool.space](https://mempool.space/docs/api) returns `15`.
     pub fn get_blocks(&self, height: Option<u32>) -> Result<Vec<BlockSummary>, Error> {
         let path = match height {
             Some(height) => format!("/blocks/{}", height),
