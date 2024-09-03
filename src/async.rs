@@ -129,13 +129,14 @@ impl AsyncClient {
         let url = format!("{}{}", self.url, path);
         let response = self.client.get(url).send().await?;
 
-        match response.status().is_success() {
-            true => Ok(response.json::<T>().await.map_err(Error::Reqwest)?),
-            false => Err(Error::HttpResponse {
+        if !response.status().is_success() {
+            return Err(Error::HttpResponse {
                 status: response.status().as_u16(),
                 message: response.text().await?,
-            }),
+            });
         }
+
+        response.json::<T>().await.map_err(Error::Reqwest)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -173,17 +174,15 @@ impl AsyncClient {
         let url = format!("{}{}", self.url, path);
         let response = self.client.get(url).send().await?;
 
-        match response.status().is_success() {
-            true => {
-                let hex_str = response.text().await?;
-                let hex_vec = Vec::from_hex(&hex_str)?;
-                Ok(deserialize(&hex_vec)?)
-            }
-            false => Err(Error::HttpResponse {
+        if !response.status().is_success() {
+            return Err(Error::HttpResponse {
                 status: response.status().as_u16(),
                 message: response.text().await?,
-            }),
+            });
         }
+
+        let hex_str = response.text().await?;
+        Ok(deserialize(&Vec::from_hex(&hex_str)?)?)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -215,13 +214,14 @@ impl AsyncClient {
         let url = format!("{}{}", self.url, path);
         let response = self.client.get(url).send().await?;
 
-        match response.status().is_success() {
-            true => Ok(response.text().await?),
-            false => Err(Error::HttpResponse {
+        if !response.status().is_success() {
+            return Err(Error::HttpResponse {
                 status: response.status().as_u16(),
                 message: response.text().await?,
-            }),
+            });
         }
+
+        Ok(response.text().await?)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -257,13 +257,14 @@ impl AsyncClient {
 
         let response = self.client.post(url).body(body).send().await?;
 
-        match response.status().is_success() {
-            true => Ok(()),
-            false => Err(Error::HttpResponse {
+        if !response.status().is_success() {
+            return Err(Error::HttpResponse {
                 status: response.status().as_u16(),
                 message: response.text().await?,
-            }),
+            });
         }
+
+        Ok(())
     }
 
     /// Get a [`Transaction`] option given its [`Txid`]
