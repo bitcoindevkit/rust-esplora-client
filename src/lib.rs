@@ -41,11 +41,12 @@
 //! specific features, set `default-features` to `false` in your `Cargo.toml`
 //! and specify the features you want. This will look like this:
 //!
-//! `esplora-client = { version = "*", default-features = false, features = ["blocking"] }`
+//! `esplora-client = { version = "*", default-features = false, features =
+//! ["blocking"] }`
 //!
 //! * `blocking` enables [`minreq`], the blocking client with proxy.
-//! * `blocking-https` enables [`minreq`], the blocking client with proxy and TLS (SSL)
-//!   capabilities using the default [`minreq`] backend.
+//! * `blocking-https` enables [`minreq`], the blocking client with proxy and TLS (SSL) capabilities
+//!   using the default [`minreq`] backend.
 //! * `blocking-https-rustls` enables [`minreq`], the blocking client with proxy and TLS (SSL)
 //!   capabilities using the `rustls` backend.
 //! * `blocking-https-native` enables [`minreq`], the blocking client with proxy and TLS (SSL)
@@ -62,8 +63,6 @@
 //! * `async-https-rustls-manual-roots` enables [`reqwest`], the async client with support for
 //!   proxying and TLS (SSL) using the `rustls` TLS backend without using its the default root
 //!   certificates.
-//!
-//!
 
 #![allow(clippy::result_large_err)]
 
@@ -89,7 +88,8 @@ pub use r#async::AsyncClient;
 /// Get a fee value in sats/vbytes from the estimates
 /// that matches the confirmation target set as parameter.
 ///
-/// Returns `None` if no feerate estimate is found at or below `target` confirmations.
+/// Returns `None` if no feerate estimate is found at or below `target`
+/// confirmations.
 pub fn convert_fee_rate(target: usize, estimates: HashMap<u16, f64>) -> Option<f32> {
     estimates
         .into_iter()
@@ -103,11 +103,13 @@ pub struct Builder {
     pub base_url: String,
     /// Optional URL of the proxy to use to make requests to the Esplora server
     ///
-    /// The string should be formatted as: `<protocol>://<user>:<password>@host:<port>`.
+    /// The string should be formatted as:
+    /// `<protocol>://<user>:<password>@host:<port>`.
     ///
-    /// Note that the format of this value and the supported protocols change slightly between the
-    /// blocking version of the client (using `minreq`) and the async version (using `reqwest`). For more
-    /// details check with the documentation of the two crates. Both of them are compiled with
+    /// Note that the format of this value and the supported protocols change
+    /// slightly between the blocking version of the client (using `minreq`)
+    /// and the async version (using `reqwest`). For more details check with
+    /// the documentation of the two crates. Both of them are compiled with
     /// the `socks` feature enabled.
     ///
     /// The proxy is ignored when targeting `wasm32`.
@@ -594,8 +596,8 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_non_existing_block_status() {
-        // Esplora returns the same status for orphaned blocks as for non-existing blocks:
-        // non-existing: https://blockstream.info/api/block/0000000000000000000000000000000000000000000000000000000000000000/status
+        // Esplora returns the same status for orphaned blocks as for non-existing
+        // blocks: non-existing: https://blockstream.info/api/block/0000000000000000000000000000000000000000000000000000000000000000/status
         // orphaned: https://blockstream.info/api/block/000000000000000000181b1a2354620f66868a723c0c4d5b24e4be8bdfc35a7f/status
         // (Here the block is cited as orphaned: https://bitcoinchain.com/block_explorer/block/000000000000000000181b1a2354620f66868a723c0c4d5b24e4be8bdfc35a7f/ )
         // For this reason, we only test for the non-existing case here.

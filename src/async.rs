@@ -100,7 +100,8 @@ impl AsyncClient {
         }
     }
 
-    /// Get a [`Txid`] of a transaction given its index in a block with a given hash.
+    /// Get a [`Txid`] of a transaction given its index in a block with a given
+    /// hash.
     pub async fn get_txid_at_block_index(
         &self,
         block_hash: &BlockHash,
@@ -222,7 +223,8 @@ impl AsyncClient {
         }
     }
 
-    /// Get a merkle inclusion proof for a [`Transaction`] with the given [`Txid`].
+    /// Get a merkle inclusion proof for a [`Transaction`] with the given
+    /// [`Txid`].
     pub async fn get_merkle_proof(&self, tx_hash: &Txid) -> Result<Option<MerkleProof>, Error> {
         let resp = self
             .client
@@ -244,7 +246,8 @@ impl AsyncClient {
         }
     }
 
-    /// Get a [`MerkleBlock`] inclusion proof for a [`Transaction`] with the given [`Txid`].
+    /// Get a [`MerkleBlock`] inclusion proof for a [`Transaction`] with the
+    /// given [`Txid`].
     pub async fn get_merkle_block(&self, tx_hash: &Txid) -> Result<Option<MerkleBlock>, Error> {
         let resp = self
             .client
@@ -267,7 +270,8 @@ impl AsyncClient {
         }
     }
 
-    /// Get the spending status of an output given a [`Txid`] and the output index.
+    /// Get the spending status of an output given a [`Txid`] and the output
+    /// index.
     pub async fn get_output_status(
         &self,
         txid: &Txid,
@@ -372,7 +376,8 @@ impl AsyncClient {
 
     /// Get confirmed transaction history for the specified address/scripthash,
     /// sorted with newest first. Returns 25 transactions per page.
-    /// More can be requested by specifying the last txid seen by the previous query.
+    /// More can be requested by specifying the last txid seen by the previous
+    /// query.
     pub async fn scripthash_txs(
         &self,
         script: &Script,
@@ -399,8 +404,8 @@ impl AsyncClient {
         }
     }
 
-    /// Get an map where the key is the confirmation target (in number of blocks)
-    /// and the value is the estimated feerate (in sat/vB).
+    /// Get an map where the key is the confirmation target (in number of
+    /// blocks) and the value is the estimated feerate (in sat/vB).
     pub async fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
         let resp = self
             .client
@@ -418,10 +423,11 @@ impl AsyncClient {
         }
     }
 
-    /// Gets some recent block summaries starting at the tip or at `height` if provided.
+    /// Gets some recent block summaries starting at the tip or at `height` if
+    /// provided.
     ///
-    /// The maximum number of summaries returned depends on the backend itself: esplora returns `10`
-    /// while [mempool.space](https://mempool.space/docs/api) returns `15`.
+    /// The maximum number of summaries returned depends on the backend itself:
+    /// esplora returns `10` while [mempool.space](https://mempool.space/docs/api) returns `15`.
     pub async fn get_blocks(&self, height: Option<u32>) -> Result<Vec<BlockSummary>, Error> {
         let url = match height {
             Some(height) => format!("{}/blocks/{}", self.url, height),
