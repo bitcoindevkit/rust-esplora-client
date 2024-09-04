@@ -49,13 +49,12 @@ jobs:
         run: mkdir coverage; grcov . --binary-path ./target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore '/*' -o ./coverage/lcov.info
       - name: Generate HTML coverage report
         run: genhtml -o coverage-report.html ./coverage/lcov.info
-
       - name: Coveralls upload
         uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: coverage-report.html
