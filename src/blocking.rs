@@ -14,11 +14,12 @@
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::str::FromStr;
+use std::thread;
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
-use minreq::{Proxy, Request};
+use minreq::{Proxy, Request, Response};
 
 use bitcoin::consensus::{deserialize, serialize, Decodable};
 use bitcoin::hashes::{sha256, Hash};
@@ -27,7 +28,10 @@ use bitcoin::{
     block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
 };
 
-use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
+use crate::{
+    BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus,
+    BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
+};
 
 #[derive(Debug, Clone)]
 pub struct BlockingClient {
@@ -39,6 +43,8 @@ pub struct BlockingClient {
     pub timeout: Option<u64>,
     /// HTTP headers to set on every request made to Esplora server
     pub headers: HashMap<String, String>,
+    /// Number of times to retry a request
+    pub max_retries: usize,
 }
 
 impl BlockingClient {
@@ -49,6 +55,7 @@ impl BlockingClient {
             proxy: builder.proxy,
             timeout: builder.timeout,
             headers: builder.headers,
+            max_retries: builder.max_retries,
         }
     }
 
@@ -80,7 +87,7 @@ impl BlockingClient {
     }
 
     fn get_opt_response<T: Decodable>(&self, path: &str) -> Result<Option<T>, Error> {
-        match self.get_request(path)?.send() {
+        match self.get_with_retry(path) {
             Ok(resp) if is_status_not_found(resp.status_code) => Ok(None),
             Ok(resp) if !is_status_ok(resp.status_code) => {
                 let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
@@ -88,12 +95,12 @@ impl BlockingClient {
                 Err(Error::HttpResponse { status, message })
             }
             Ok(resp) => Ok(Some(deserialize::<T>(resp.as_bytes())?)),
-            Err(e) => Err(Error::Minreq(e)),
+            Err(e) => Err(e),
         }
     }
 
     fn get_opt_response_txid(&self, path: &str) -> Result<Option<Txid>, Error> {
-        match self.get_request(path)?.send() {
+        match self.get_with_retry(path) {
             Ok(resp) if is_status_not_found(resp.status_code) => Ok(None),
             Ok(resp) if !is_status_ok(resp.status_code) => {
                 let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
@@ -103,12 +110,12 @@ impl BlockingClient {
             Ok(resp) => Ok(Some(
                 Txid::from_str(resp.as_str().map_err(Error::Minreq)?).map_err(Error::HexToArray)?,
             )),
-            Err(e) => Err(Error::Minreq(e)),
+            Err(e) => Err(e),
         }
     }
 
     fn get_opt_response_hex<T: Decodable>(&self, path: &str) -> Result<Option<T>, Error> {
-        match self.get_request(path)?.send() {
+        match self.get_with_retry(path) {
             Ok(resp) if is_status_not_found(resp.status_code) => Ok(None),
             Ok(resp) if !is_status_ok(resp.status_code) => {
                 let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
@@ -122,12 +129,12 @@ impl BlockingClient {
                     .map_err(Error::BitcoinEncoding)
                     .map(|r| Some(r))
             }
-            Err(e) => Err(Error::Minreq(e)),
+            Err(e) => Err(e),
         }
     }
 
     fn get_response_hex<T: Decodable>(&self, path: &str) -> Result<T, Error> {
-        match self.get_request(path)?.send() {
+        match self.get_with_retry(path) {
             Ok(resp) if !is_status_ok(resp.status_code) => {
                 let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
                 let message = resp.as_str().unwrap_or_default().to_string();
@@ -138,7 +145,7 @@ impl BlockingClient {
                 let hex_vec = Vec::from_hex(hex_str).unwrap();
                 deserialize::<T>(&hex_vec).map_err(Error::BitcoinEncoding)
             }
-            Err(e) => Err(Error::Minreq(e)),
+            Err(e) => Err(e),
         }
     }
 
@@ -146,7 +153,7 @@ impl BlockingClient {
         &'a self,
         path: &'a str,
     ) -> Result<T, Error> {
-        let response = self.get_request(path)?.send();
+        let response = self.get_with_retry(path);
         match response {
             Ok(resp) if !is_status_ok(resp.status_code) => {
                 let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
@@ -154,7 +161,7 @@ impl BlockingClient {
                 Err(Error::HttpResponse { status, message })
             }
             Ok(resp) => Ok(resp.json::<T>().map_err(Error::Minreq)?),
-            Err(e) => Err(Error::Minreq(e)),
+            Err(e) => Err(e),
         }
     }
 
@@ -162,7 +169,7 @@ impl BlockingClient {
         &self,
         path: &str,
     ) -> Result<Option<T>, Error> {
-        match self.get_request(path)?.send() {
+        match self.get_with_retry(path) {
             Ok(resp) if is_status_not_found(resp.status_code) => Ok(None),
             Ok(resp) if !is_status_ok(resp.status_code) => {
                 let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
@@ -170,19 +177,19 @@ impl BlockingClient {
                 Err(Error::HttpResponse { status, message })
             }
             Ok(resp) => Ok(Some(resp.json::<T>()?)),
-            Err(e) => Err(Error::Minreq(e)),
+            Err(e) => Err(e),
         }
     }
 
     fn get_response_str(&self, path: &str) -> Result<String, Error> {
-        match self.get_request(path)?.send() {
+        match self.get_with_retry(path) {
             Ok(resp) if !is_status_ok(resp.status_code) => {
                 let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
                 let message = resp.as_str().unwrap_or_default().to_string();
                 Err(Error::HttpResponse { status, message })
             }
             Ok(resp) => Ok(resp.as_str()?.to_string()),
-            Err(e) => Err(Error::Minreq(e)),
+            Err(e) => Err(e),
         }
     }
 
@@ -339,6 +346,24 @@ impl BlockingClient {
         };
         self.get_response_json(&path)
     }
+
+    /// Sends a GET request to the given `url`, retrying failed attempts
+    /// for retryable error codes until max retries hit.
+    pub fn get_with_retry(&self, url: &str) -> Result<Response, Error> {
+        let mut delay = BASE_BACKOFF_MILLIS;
+        let mut attempts = 0;
+
+        loop {
+            match self.get_request(url)?.send()? {
+                resp if attempts < self.max_retries && is_status_retryable(resp.status_code) => {
+                    thread::sleep(delay);
+                    attempts += 1;
+                    delay *= 2;
+                }
+                resp => return Ok(resp),
+            }
+        }
+    }
 }
 
 fn is_status_ok(status: i32) -> bool {
@@ -347,4 +372,9 @@ fn is_status_ok(status: i32) -> bool {
 
 fn is_status_not_found(status: i32) -> bool {
     status == 404
+}
+
+fn is_status_retryable(status: i32) -> bool {
+    let status = status as u16;
+    RETRYABLE_ERROR_CODES.contains(&status)
 }

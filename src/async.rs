@@ -11,6 +11,7 @@
 
 //! Esplora by way of `reqwest` HTTP client.
 
+use async_std::task;
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -24,9 +25,12 @@ use bitcoin::{
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
-use reqwest::{header, Client};
+use reqwest::{header, Client, Response};
 
-use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
+use crate::{
+    BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus,
+    BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
+};
 
 #[derive(Debug, Clone)]
 pub struct AsyncClient {
@@ -34,6 +38,8 @@ pub struct AsyncClient {
     url: String,
     /// The inner [`reqwest::Client`] to make HTTP requests.
     client: Client,
+    /// Number of times to retry a request
+    max_retries: usize,
 }
 
 impl AsyncClient {
@@ -63,12 +69,20 @@ impl AsyncClient {
             client_builder = client_builder.default_headers(headers);
         }
 
-        Ok(Self::from_client(builder.base_url, client_builder.build()?))
+        Ok(AsyncClient {
+            url: builder.base_url,
+            client: client_builder.build()?,
+            max_retries: builder.max_retries,
+        })
     }
 
     /// Build an async client from the base url and [`Client`]
     pub fn from_client(url: String, client: Client) -> Self {
-        AsyncClient { url, client }
+        AsyncClient {
+            url,
+            client,
+            max_retries: crate::DEFAULT_MAX_RETRIES,
+        }
     }
 
     /// Make an HTTP GET request to given URL, deserializing to any `T` that
@@ -84,7 +98,7 @@ impl AsyncClient {
     /// [`bitcoin::consensus::Decodable`] deserialization.
     async fn get_response<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         let url = format!("{}{}", self.url, path);
-        let response = self.client.get(url).send().await?;
+        let response = self.get_with_retry(&url).await?;
 
         if !response.status().is_success() {
             return Err(Error::HttpResponse {
@@ -124,7 +138,7 @@ impl AsyncClient {
         path: &str,
     ) -> Result<T, Error> {
         let url = format!("{}{}", self.url, path);
-        let response = self.client.get(url).send().await?;
+        let response = self.get_with_retry(&url).await?;
 
         if !response.status().is_success() {
             return Err(Error::HttpResponse {
@@ -166,7 +180,7 @@ impl AsyncClient {
     /// [`bitcoin::consensus::Decodable`] deserialization.
     async fn get_response_hex<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         let url = format!("{}{}", self.url, path);
-        let response = self.client.get(url).send().await?;
+        let response = self.get_with_retry(&url).await?;
 
         if !response.status().is_success() {
             return Err(Error::HttpResponse {
@@ -203,7 +217,7 @@ impl AsyncClient {
     /// This function will return an error either from the HTTP client.
     async fn get_response_text(&self, path: &str) -> Result<String, Error> {
         let url = format!("{}{}", self.url, path);
-        let response = self.client.get(url).send().await?;
+        let response = self.get_with_retry(&url).await?;
 
         if !response.status().is_success() {
             return Err(Error::HttpResponse {
@@ -410,4 +424,26 @@ impl AsyncClient {
     pub fn client(&self) -> &Client {
         &self.client
     }
+
+    /// Sends a GET request to the given `url`, retrying failed attempts
+    /// for retryable error codes until max retries hit.
+    async fn get_with_retry(&self, url: &str) -> Result<Response, Error> {
+        let mut delay = BASE_BACKOFF_MILLIS;
+        let mut attempts = 0;
+
+        loop {
+            match self.client.get(url).send().await? {
+                resp if attempts < self.max_retries && is_status_retryable(resp.status()) => {
+                    task::sleep(delay).await;
+                    attempts += 1;
+                    delay *= 2;
+                }
+                resp => return Ok(resp),
+            }
+        }
+    }
+}
+
+fn is_status_retryable(status: reqwest::StatusCode) -> bool {
+    RETRYABLE_ERROR_CODES.contains(&status.as_u16())
 }
