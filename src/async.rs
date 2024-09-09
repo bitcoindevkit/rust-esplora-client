@@ -104,10 +104,7 @@ impl AsyncClient {
     async fn get_opt_response<T: Decodable>(&self, path: &str) -> Result<Option<T>, Error> {
         match self.get_response::<T>(path).await {
             Ok(res) => Ok(Some(res)),
-            Err(Error::HttpResponse { status, message }) => match status {
-                404 => Ok(None),
-                _ => Err(Error::HttpResponse { status, message }),
-            },
+            Err(Error::HttpResponse { status: 404, .. }) => Ok(None),
             Err(e) => Err(e),
         }
     }
@@ -151,20 +148,17 @@ impl AsyncClient {
     ) -> Result<Option<T>, Error> {
         match self.get_response_json(url).await {
             Ok(res) => Ok(Some(res)),
-            Err(Error::HttpResponse { status, message }) => match status {
-                404 => Ok(None),
-                _ => Err(Error::HttpResponse { status, message }),
-            },
+            Err(Error::HttpResponse { status: 404, .. }) => Ok(None),
             Err(e) => Err(e),
         }
     }
 
     /// Make an HTTP GET request to given URL, deserializing to any `T` that
-    /// implement [`bitcoin::consensus::Decodable`] from Hex, [`Vec<u8>`].
+    /// implements [`bitcoin::consensus::Decodable`].
     ///
-    /// It should be used when requesting Esplora endpoints that can be directly
-    /// deserialized to native `rust-bitcoin` types, which implements
-    /// [`bitcoin::consensus::Decodable`] from Hex, `Vec<&u8>`.
+    /// It should be used when requesting Esplora endpoints that are expected
+    /// to return a hex string decodable to native `rust-bitcoin` types which
+    /// implement [`bitcoin::consensus::Decodable`] from `&[u8]`.
     ///
     /// # Errors
     ///
@@ -194,10 +188,7 @@ impl AsyncClient {
     async fn get_opt_response_hex<T: Decodable>(&self, path: &str) -> Result<Option<T>, Error> {
         match self.get_response_hex(path).await {
             Ok(res) => Ok(Some(res)),
-            Err(Error::HttpResponse { status, message }) => match status {
-                404 => Ok(None),
-                _ => Err(Error::HttpResponse { status, message }),
-            },
+            Err(Error::HttpResponse { status: 404, .. }) => Ok(None),
             Err(e) => Err(e),
         }
     }
@@ -233,10 +224,7 @@ impl AsyncClient {
     async fn get_opt_response_text(&self, path: &str) -> Result<Option<String>, Error> {
         match self.get_response_text(path).await {
             Ok(s) => Ok(Some(s)),
-            Err(Error::HttpResponse { status, message }) => match status {
-                404 => Ok(None),
-                _ => Err(Error::HttpResponse { status, message }),
-            },
+            Err(Error::HttpResponse { status: 404, .. }) => Ok(None),
             Err(e) => Err(e),
         }
     }
