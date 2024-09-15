@@ -66,11 +66,10 @@
 
 #![allow(clippy::result_large_err)]
 
+use bitcoin::consensus;
 use std::collections::HashMap;
 use std::fmt;
 use std::num::TryFromIntError;
-
-use bitcoin::consensus;
 
 pub mod api;
 
@@ -167,12 +166,15 @@ impl Builder {
 pub enum Error {
     /// Error during `minreq` HTTP request
     #[cfg(feature = "blocking")]
-    Minreq(::minreq::Error),
+    Minreq(api::Error<::minreq::Error>),
     /// Error during reqwest HTTP request
     #[cfg(feature = "async")]
     Reqwest(::reqwest::Error),
     /// HTTP response error
-    HttpResponse { status: u16, message: String },
+    HttpResponse {
+        status: u16,
+        message: String,
+    },
     /// Invalid number returned
     Parsing(std::num::ParseIntError),
     /// Invalid status code, unable to convert to `u16`
@@ -193,6 +195,10 @@ pub enum Error {
     InvalidHttpHeaderName(String),
     /// Invalid HTTP Header value specified
     InvalidHttpHeaderValue(String),
+    // Invalid UTF-8 value in body.
+    InvalidUtf8InBody(core::str::Utf8Error),
+    /// Ran into a Serde error.
+    SerdeJsonError(serde_json::Error),
 }
 
 impl fmt::Display for Error {
@@ -216,7 +222,8 @@ macro_rules! impl_error {
 
 impl std::error::Error for Error {}
 #[cfg(feature = "blocking")]
-impl_error!(::minreq::Error, Minreq, Error);
+impl_error!(api::Error<minreq::Error>, Minreq, Error);
+// impl_error!(api::Error<minreq::Error>, Minreq, Error);
 #[cfg(feature = "async")]
 impl_error!(::reqwest::Error, Reqwest, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
