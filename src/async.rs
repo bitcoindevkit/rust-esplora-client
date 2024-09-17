@@ -14,9 +14,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use bitcoin::consensus::{deserialize, serialize};
 use bitcoin::hashes::{sha256, Hash};
-use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::{
     block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
 };
@@ -24,24 +22,53 @@ use bitcoin::{
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
-use reqwest::{header, Client, StatusCode};
+use reqwest::header;
 
-use crate::{BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus};
+use crate::{
+    AddressApi, BlockStatus, BlockSummary, BlocksApi, Builder, Client, Error, FeeEstimatesApi,
+    MerkleProof, OutputStatus, Response, TransactionApi, Tx, TxStatus,
+};
+
+pub(crate) async fn handler(
+    client: &reqwest::Client,
+    request: crate::Request,
+) -> Result<Response, reqwest::Error> {
+    let reqwest_req = match request.method {
+        crate::Method::Get => client.request(
+            reqwest::Method::GET,
+            reqwest::Url::from_str(&request.url).unwrap(),
+        ),
+        crate::Method::Post => client
+            .request(
+                reqwest::Method::POST,
+                reqwest::Url::from_str(&request.url).unwrap(),
+            )
+            .body(request.body.expect("It should've a non-empty body!")),
+    };
+
+    let response = reqwest_req.send().await?;
+
+    Ok(Response::new(
+        response.status().as_u16().into(),
+        response.bytes().await.unwrap().to_vec(),
+    ))
+}
 
 #[derive(Debug, Clone)]
 pub struct AsyncClient {
     url: String,
-    client: Client,
+    client: reqwest::Client,
 }
 
 impl AsyncClient {
     /// build an async client from a builder
     pub fn from_builder(builder: Builder) -> Result<Self, Error> {
-        let mut client_builder = Client::builder();
+        let mut client_builder = reqwest::Client::builder();
 
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(proxy) = &builder.proxy {
-            client_builder = client_builder.proxy(reqwest::Proxy::all(proxy)?);
+            client_builder = client_builder
+                .proxy(reqwest::Proxy::all(proxy).map_err(crate::api::Error::Client)?);
         }
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -61,33 +88,29 @@ impl AsyncClient {
             client_builder = client_builder.default_headers(headers);
         }
 
-        Ok(Self::from_client(builder.base_url, client_builder.build()?))
+        Ok(Self::from_client(
+            builder.base_url,
+            client_builder.build().map_err(crate::api::Error::Client)?,
+        ))
     }
 
-    /// build an async client from the base url and [`Client`]
-    pub fn from_client(url: String, client: Client) -> Self {
+    /// build an async client from the base url and [`reqwest::Client`]
+    pub fn from_client(url: String, client: reqwest::Client) -> Self {
         AsyncClient { url, client }
     }
 
     /// Get a [`Transaction`] option given its [`Txid`]
     pub async fn get_tx(&self, txid: &Txid) -> Result<Option<Transaction>, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/tx/{}/raw", self.url, txid))
-            .send()
-            .await?;
-
-        if let StatusCode::NOT_FOUND = resp.status() {
-            return Ok(None);
-        }
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
+        let tx_api = TransactionApi::Tx(*txid);
+        let response = tx_api
+            .send_async(&self.url, &mut move |request| {
+                handler(&self.client, request)
             })
-        } else {
-            Ok(Some(deserialize(&resp.bytes().await?)?))
+            .await?;
+        match tx_api.deserialize_decodable::<Transaction>(&response) {
+            Ok(transaction) => Ok(Some(transaction)),
+            Err(Error::HttpResponse { status: 404, .. }) => Ok(None),
+            Err(e) => Err(e),
         }
     }
 
@@ -100,6 +123,35 @@ impl AsyncClient {
         }
     }
 
+    /// Get the status of a [`Transaction`] given its [`Txid`].
+    pub async fn get_tx_status(&self, txid: &Txid) -> Result<TxStatus, Error> {
+        let tx_api = TransactionApi::TxStatus(*txid);
+        let response = tx_api
+            .send_async(&self.url, &mut move |request: crate::Request| {
+                handler(&self.client, request)
+            })
+            .await?;
+        match tx_api.deserialize_json::<TxStatus>(&response) {
+            Ok(tx_status) => Ok(tx_status),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Get transaction info given it's [`Txid`].
+    pub async fn get_tx_info(&self, txid: &Txid) -> Result<Option<Tx>, Error> {
+        let tx_api = TransactionApi::TxInfo(*txid);
+        let response = tx_api
+            .send_async(&self.url, &mut move |request: crate::Request| {
+                handler(&self.client, request)
+            })
+            .await?;
+        match tx_api.deserialize_json::<Tx>(&response) {
+            Ok(tx) => Ok(Some(tx)),
+            Err(Error::HttpResponse { status: 404, .. }) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
     /// Get a [`Txid`] of a transaction given its index in a block with a given
     /// hash.
     pub async fn get_txid_at_block_index(
@@ -107,166 +159,85 @@ impl AsyncClient {
         block_hash: &BlockHash,
         index: usize,
     ) -> Result<Option<Txid>, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/block/{}/txid/{}", self.url, block_hash, index))
-            .send()
-            .await?;
-
-        if let StatusCode::NOT_FOUND = resp.status() {
-            return Ok(None);
-        }
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
+        let api = BlocksApi::BlockTxIdAtIndex(*block_hash, index);
+        let response = api
+            .send_async(&self.url, &mut move |request: crate::Request| {
+                handler(&self.client, request)
             })
-        } else {
-            Ok(Some(Txid::from_str(&resp.text().await?)?))
-        }
-    }
-
-    /// Get the status of a [`Transaction`] given its [`Txid`].
-    pub async fn get_tx_status(&self, txid: &Txid) -> Result<TxStatus, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/tx/{}/status", self.url, txid))
-            .send()
             .await?;
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(resp.json().await?)
-        }
-    }
-
-    /// Get transaction info given it's [`Txid`].
-    pub async fn get_tx_info(&self, txid: &Txid) -> Result<Option<Tx>, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/tx/{}", self.url, txid))
-            .send()
-            .await?;
-        if resp.status() == StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(Some(resp.json().await?))
+        match api.deserialize_str::<Txid>(&response) {
+            Ok(txid) => Ok(Some(txid)),
+            Err(Error::HttpResponse { status: 404, .. }) => Ok(None),
+            Err(e) => Err(e),
         }
     }
 
     /// Get a [`BlockHeader`] given a particular block hash.
     pub async fn get_header_by_hash(&self, block_hash: &BlockHash) -> Result<BlockHeader, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/block/{}/header", self.url, block_hash))
-            .send()
-            .await?;
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
+        let api = BlocksApi::BlockHeader(*block_hash);
+        let response = api
+            .send_async(&self.url, &mut move |request: crate::Request| {
+                handler(&self.client, request)
             })
-        } else {
-            let header = deserialize(&Vec::from_hex(&resp.text().await?)?)?;
-            Ok(header)
-        }
+            .await?;
+        api.deserialize_decodable::<BlockHeader>(&response)
     }
 
     /// Get the [`BlockStatus`] given a particular [`BlockHash`].
     pub async fn get_block_status(&self, block_hash: &BlockHash) -> Result<BlockStatus, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/block/{}/status", self.url, block_hash))
-            .send()
-            .await?;
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
+        let api = BlocksApi::BlockStatus(*block_hash);
+        let response = api
+            .send_async(&self.url, &mut move |request: crate::Request| {
+                handler(&self.client, request)
             })
-        } else {
-            Ok(resp.json().await?)
-        }
+            .await?;
+        api.deserialize_json::<BlockStatus>(&response)
     }
 
     /// Get a [`Block`] given a particular [`BlockHash`].
     pub async fn get_block_by_hash(&self, block_hash: &BlockHash) -> Result<Option<Block>, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/block/{}/raw", self.url, block_hash))
-            .send()
-            .await?;
-
-        if let StatusCode::NOT_FOUND = resp.status() {
-            return Ok(None);
-        }
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
+        let api = BlocksApi::BlockRaw(*block_hash);
+        let response = api
+            .send_async(&self.url, &mut move |request: crate::Request| {
+                handler(&self.client, request)
             })
-        } else {
-            Ok(Some(deserialize(&resp.bytes().await?)?))
+            .await?;
+        match api.deserialize_decodable::<Block>(&response) {
+            Ok(block) => Ok(Some(block)),
+            Err(Error::HttpResponse { status: 404, .. }) => Ok(None),
+            Err(e) => Err(e),
         }
     }
 
     /// Get a merkle inclusion proof for a [`Transaction`] with the given
     /// [`Txid`].
-    pub async fn get_merkle_proof(&self, tx_hash: &Txid) -> Result<Option<MerkleProof>, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/tx/{}/merkle-proof", self.url, tx_hash))
-            .send()
-            .await?;
-
-        if let StatusCode::NOT_FOUND = resp.status() {
-            return Ok(None);
-        }
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
+    pub async fn get_merkle_proof(&self, txid: &Txid) -> Result<Option<MerkleProof>, Error> {
+        let tx_api = TransactionApi::TxMerkleProof(*txid);
+        let response = tx_api
+            .send_async(&self.url, &mut move |request: crate::Request| {
+                handler(&self.client, request)
             })
-        } else {
-            Ok(Some(resp.json().await?))
+            .await?;
+        match tx_api.deserialize_json::<MerkleProof>(&response) {
+            Ok(merkle_proof) => Ok(Some(merkle_proof)),
+            Err(Error::HttpResponse { status: 404, .. }) => Ok(None),
+            Err(e) => Err(e),
         }
     }
 
     /// Get a [`MerkleBlock`] inclusion proof for a [`Transaction`] with the
     /// given [`Txid`].
-    pub async fn get_merkle_block(&self, tx_hash: &Txid) -> Result<Option<MerkleBlock>, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/tx/{}/merkleblock-proof", self.url, tx_hash))
-            .send()
-            .await?;
-
-        if let StatusCode::NOT_FOUND = resp.status() {
-            return Ok(None);
-        }
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
+    pub async fn get_merkle_block(&self, txid: &Txid) -> Result<Option<MerkleBlock>, Error> {
+        let tx_api = TransactionApi::TxMerkeBlockProof(*txid);
+        let response = tx_api
+            .send_async(&self.url, &mut move |request: crate::Request| {
+                handler(&self.client, request)
             })
-        } else {
-            let merkle_block = deserialize(&Vec::from_hex(&resp.text().await?)?)?;
-            Ok(Some(merkle_block))
+            .await?;
+        match tx_api.deserialize_decodable::<MerkleBlock>(&response) {
+            Ok(merkle_block) => Ok(Some(merkle_block)),
+            Err(Error::HttpResponse { status: 404, .. }) => Ok(None),
+            Err(e) => Err(e),
         }
     }
 
@@ -277,101 +248,80 @@ impl AsyncClient {
         txid: &Txid,
         index: u64,
     ) -> Result<Option<OutputStatus>, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/tx/{}/outspend/{}", self.url, txid, index))
-            .send()
-            .await?;
-
-        if let StatusCode::NOT_FOUND = resp.status() {
-            return Ok(None);
-        }
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
+        let tx_api = TransactionApi::TxOutputStatus(*txid, index);
+        let response = tx_api
+            .send_async(&self.url, &mut move |request: crate::Request| {
+                handler(&self.client, request)
             })
-        } else {
-            Ok(Some(resp.json().await?))
+            .await?;
+        match tx_api.deserialize_json::<OutputStatus>(&response) {
+            Ok(output_status) => Ok(Some(output_status)),
+            Err(Error::HttpResponse { status: 404, .. }) => Ok(None),
+            Err(e) => Err(e),
         }
     }
 
     /// Broadcast a [`Transaction`] to Esplora
     pub async fn broadcast(&self, transaction: &Transaction) -> Result<(), Error> {
-        let resp = self
-            .client
-            .post(&format!("{}/tx", self.url))
-            .body(serialize(transaction).to_lower_hex_string())
-            .send()
+        let tx_api = TransactionApi::Broadcast(transaction.clone());
+        let response = tx_api
+            .send_async(&self.url, &mut move |request: crate::Request| {
+                handler(&self.client, request)
+            })
             .await?;
 
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(())
+        if !response.is_status_ok() {
+            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+            let message = response.as_str().unwrap_or_default().to_string();
+            return Err(Error::HttpResponse { status, message });
         }
+
+        Ok(())
     }
 
-    /// Get the current height of the blockchain tip
+    /// Get the height of the current blockchain tip.
     pub async fn get_height(&self) -> Result<u32, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/blocks/tip/height", self.url))
-            .send()
-            .await?;
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
+        let api = BlocksApi::BlockTipHeight;
+        let response = api
+            .send_async(&self.url, &mut move |request: crate::Request| {
+                handler(&self.client, request)
             })
-        } else {
-            Ok(resp.text().await?.parse()?)
-        }
+            .await?;
+        api.deserialize_str::<u32>(&response)
     }
 
     /// Get the [`BlockHash`] of the current blockchain tip.
     pub async fn get_tip_hash(&self) -> Result<BlockHash, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/blocks/tip/hash", self.url))
-            .send()
-            .await?;
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
+        let api = BlocksApi::BlockTipHash;
+        let response = api
+            .send_async(&self.url, &mut move |request: crate::Request| {
+                handler(&self.client, request)
             })
-        } else {
-            Ok(BlockHash::from_str(&resp.text().await?)?)
-        }
+            .await?;
+        api.deserialize_str::<BlockHash>(&response)
     }
 
     /// Get the [`BlockHash`] of a specific block height
     pub async fn get_block_hash(&self, block_height: u32) -> Result<BlockHash, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/block-height/{}", self.url, block_height))
-            .send()
-            .await?;
-
-        if let StatusCode::NOT_FOUND = resp.status() {
-            return Err(Error::HeaderHeightNotFound(block_height));
-        }
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
+        let api = BlocksApi::BlockHash(block_height);
+        let response = api
+            .send_async(&self.url, &mut move |request: crate::Request| {
+                handler(&self.client, request)
             })
-        } else {
-            Ok(BlockHash::from_str(&resp.text().await?)?)
-        }
+            .await?;
+        api.deserialize_str::<BlockHash>(&response)
+    }
+
+    /// Get an map where the key is the confirmation target (in number of
+    /// blocks) and the value is the estimated feerate (in sat/vB).
+    pub async fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
+        let api = FeeEstimatesApi::FeeRate;
+        let response = api
+            .send_async(&self.url, &mut move |request: crate::Request| {
+                handler(&self.client, request)
+            })
+            .await?;
+        api.deserialize_json::<HashMap<u16, f64>>(&response)
     }
 
     /// Get confirmed transaction history for the specified address/scripthash,
@@ -384,42 +334,18 @@ impl AsyncClient {
         last_seen: Option<Txid>,
     ) -> Result<Vec<Tx>, Error> {
         let script_hash = sha256::Hash::hash(script.as_bytes());
-        let url = match last_seen {
-            Some(last_seen) => format!(
-                "{}/scripthash/{:x}/txs/chain/{}",
-                self.url, script_hash, last_seen
-            ),
-            None => format!("{}/scripthash/{:x}/txs", self.url, script_hash),
+        let address_api = match last_seen {
+            Some(last_seen) => AddressApi::ScriptHashConfirmedTxHistory(script_hash, last_seen),
+            None => AddressApi::ScriptHashTxHistory(script_hash),
         };
-
-        let resp = self.client.get(url).send().await?;
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
+        let response = address_api
+            .send_async(&self.url, &mut move |request: crate::Request| {
+                handler(&self.client, request)
             })
-        } else {
-            Ok(resp.json::<Vec<Tx>>().await?)
-        }
-    }
-
-    /// Get an map where the key is the confirmation target (in number of
-    /// blocks) and the value is the estimated feerate (in sat/vB).
-    pub async fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
-        let resp = self
-            .client
-            .get(&format!("{}/fee-estimates", self.url,))
-            .send()
             .await?;
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
-            })
-        } else {
-            Ok(resp.json::<HashMap<u16, f64>>().await?)
+        match address_api.deserialize_json::<Vec<Tx>>(&response) {
+            Ok(txs) => Ok(txs),
+            Err(e) => Err(e),
         }
     }
 
@@ -429,21 +355,13 @@ impl AsyncClient {
     /// The maximum number of summaries returned depends on the backend itself:
     /// esplora returns `10` while [mempool.space](https://mempool.space/docs/api) returns `15`.
     pub async fn get_blocks(&self, height: Option<u32>) -> Result<Vec<BlockSummary>, Error> {
-        let url = match height {
-            Some(height) => format!("{}/blocks/{}", self.url, height),
-            None => format!("{}/blocks", self.url),
-        };
-
-        let resp = self.client.get(&url).send().await?;
-
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            Err(Error::HttpResponse {
-                status: resp.status().as_u16(),
-                message: resp.text().await?,
+        let api = BlocksApi::BlockSummaries(height);
+        let response = api
+            .send_async(&self.url, &mut move |request: crate::Request| {
+                handler(&self.client, request)
             })
-        } else {
-            Ok(resp.json::<Vec<BlockSummary>>().await?)
-        }
+            .await?;
+        api.deserialize_json::<Vec<BlockSummary>>(&response)
     }
 
     /// Get the underlying base URL.
@@ -451,8 +369,8 @@ impl AsyncClient {
         &self.url
     }
 
-    /// Get the underlying [`Client`].
-    pub fn client(&self) -> &Client {
+    /// Get the underlying [`reqwest::Client`].
+    pub fn client(&self) -> &reqwest::Client {
         &self.client
     }
 }

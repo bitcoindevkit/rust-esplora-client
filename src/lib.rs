@@ -169,7 +169,7 @@ pub enum Error {
     Minreq(api::Error<::minreq::Error>),
     /// Error during reqwest HTTP request
     #[cfg(feature = "async")]
-    Reqwest(::reqwest::Error),
+    Reqwest(api::Error<::reqwest::Error>),
     /// HTTP response error
     HttpResponse {
         status: u16,
@@ -225,7 +225,8 @@ impl std::error::Error for Error {}
 impl_error!(api::Error<minreq::Error>, Minreq, Error);
 // impl_error!(api::Error<minreq::Error>, Minreq, Error);
 #[cfg(feature = "async")]
-impl_error!(::reqwest::Error, Reqwest, Error);
+// impl_error!(::reqwest::Error, Reqwest, Error);
+impl_error!(api::Error<::reqwest::Error>, Reqwest, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
 impl_error!(consensus::encode::Error, BitcoinEncoding, Error);
 impl_error!(bitcoin::hex::HexToArrayError, HexToArray, Error);

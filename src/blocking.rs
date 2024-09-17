@@ -62,9 +62,9 @@ pub(crate) fn handler(
         let response = crate::Response::new(
             minreq_response.status_code,
             minreq_response.as_bytes().to_vec(),
-            minreq_response.reason_phrase,
-            minreq_response.headers,
-            minreq_response.url,
+            // minreq_response.reason_phrase,
+            // minreq_response.headers,
+            // minreq_response.url,
         );
 
         Ok(response)

@@ -3,8 +3,9 @@
 //! See: <https://github.com/Blockstream/esplora/blob/master/API.md>
 
 use core::str;
-use std::{collections::HashMap, str::FromStr};
+use std::{future::Future, str::FromStr};
 
+use async_trait::async_trait;
 use bitcoin::consensus::Decodable;
 pub use bitcoin::consensus::{deserialize, serialize};
 use bitcoin::hashes::sha256::Hash;
@@ -46,25 +47,25 @@ impl Request {
 pub struct Response {
     pub status_code: i32,
     pub body: Vec<u8>,
-    pub reason: String,
-    pub headers: HashMap<String, String>,
-    pub url: Url,
+    // pub reason: String,
+    // pub headers: HashMap<String, String>,
+    // pub url: Url,
 }
 
 impl Response {
     pub fn new(
         status_code: i32,
         body: Vec<u8>,
-        reason_phrase: String,
-        headers: HashMap<String, String>,
-        url: Url,
+        // reason_phrase: String,
+        // headers: HashMap<String, String>,
+        // url: Url,
     ) -> Self {
         Self {
             status_code,
             body,
-            reason: reason_phrase,
-            headers,
-            url,
+            // reason: reason_phrase,
+            // headers,
+            // url,
         }
     }
 
@@ -375,6 +376,7 @@ pub enum Error<E> {
     Client(E),
 }
 
+#[async_trait]
 pub trait Client {
     fn request(&self, base_url: &str) -> Request;
 
@@ -383,9 +385,21 @@ pub trait Client {
         F: FnMut(Request) -> Result<Response, E>,
     {
         let request = self.request(base_url);
-        let response = handler(request).map_err(Error::Client)?;
+        handler(request).map_err(Error::Client)
+    }
 
-        Ok(response)
+    async fn send_async<'a, F, Fut, E>(
+        &'a self,
+        base_url: &'a str,
+        handler: &'a mut F,
+    ) -> Result<Response, Error<E>>
+    where
+        F: FnMut(Request) -> Fut + Send,
+        Fut: Future<Output = Result<Response, E>> + Send + Sync,
+        Self: Sync,
+    {
+        let request = self.request(base_url);
+        handler(request).await.map_err(Error::Client)
     }
 
     fn deserialize_decodable<T: Decodable>(&self, response: &Response) -> Result<T, crate::Error>;
