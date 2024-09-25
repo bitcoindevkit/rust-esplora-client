@@ -69,6 +69,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::num::TryFromIntError;
+use std::time::Duration;
 
 pub mod api;
 
@@ -82,6 +83,19 @@ pub use api::*;
 pub use blocking::BlockingClient;
 #[cfg(feature = "async")]
 pub use r#async::AsyncClient;
+
+/// Response status codes for which the request may be retried.
+const RETRYABLE_ERROR_CODES: [u16; 3] = [
+    429, // TOO_MANY_REQUESTS
+    500, // INTERNAL_SERVER_ERROR
+    503, // SERVICE_UNAVAILABLE
+];
+
+/// Base backoff in milliseconds.
+const BASE_BACKOFF_MILLIS: Duration = Duration::from_millis(256);
+
+/// Default max retries.
+const DEFAULT_MAX_RETRIES: usize = 6;
 
 /// Get a fee value in sats/vbytes from the estimates
 /// that matches the confirmation target set as parameter.
@@ -117,6 +131,8 @@ pub struct Builder {
     pub timeout: Option<u64>,
     /// HTTP headers to set on every request made to Esplora server.
     pub headers: HashMap<String, String>,
+    /// Max retries
+    pub max_retries: usize,
 }
 
 impl Builder {
@@ -127,6 +143,7 @@ impl Builder {
             proxy: None,
             timeout: None,
             headers: HashMap::new(),
+            max_retries: DEFAULT_MAX_RETRIES,
         }
     }
 
@@ -145,6 +162,13 @@ impl Builder {
     /// Add a header to set on each request
     pub fn header(mut self, key: &str, value: &str) -> Self {
         self.headers.insert(key.to_string(), value.to_string());
+        self
+    }
+
+    /// Set the maximum number of times to retry a request if the response status
+    /// is one of [`RETRYABLE_ERROR_CODES`].
+    pub fn max_retries(mut self, count: usize) -> Self {
+        self.max_retries = count;
         self
     }
 
