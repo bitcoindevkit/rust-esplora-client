@@ -349,7 +349,7 @@ impl BlockingClient {
 
     /// Sends a GET request to the given `url`, retrying failed attempts
     /// for retryable error codes until max retries hit.
-    pub fn get_with_retry(&self, url: &str) -> Result<Response, Error> {
+    fn get_with_retry(&self, url: &str) -> Result<Response, Error> {
         let mut delay = BASE_BACKOFF_MILLIS;
         let mut attempts = 0;
 
