@@ -2,16 +2,16 @@ name: CI
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-test:
-    name: Build & Test
+  build-test-blocking:
+    name: Build & Test Blocking
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -25,45 +25,138 @@ jobs:
           - blocking-https-rustls
           - blocking-https-native
           - blocking-https-bundled
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Generate cache key
+        run: echo "${{ matrix.rust.version }} ${{ matrix.features }}" | tee .cache_key
+      - name: Rust Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('.cache_key') }}-${{ hashFiles('**/Cargo.toml','**/Cargo.lock') }}
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust.version }}
+      - name: Set profile
+        run: rustup set profile minimal
+      - name: Update toolchain
+        run: rustup update
+      - name: Pin dependencies for MSRV
+        if: matrix.rust.version == '1.63.0'
+        run: |
+          cargo update -p zstd-sys --precise "2.0.8+zstd.1.5.5"
+          cargo update -p time --precise "0.3.20"
+          cargo update -p home --precise 0.5.5
+          cargo update -p url --precise "2.5.0"
+          cargo update -p tokio --precise "1.38.1"
+          cargo update -p tokio-util --precise "0.7.11"
+      - name: Build
+        run: cargo build --features ${{ matrix.features }} --no-default-features
+      - name: Test
+        run: cargo test --features ${{ matrix.features }} --no-default-features -- --test-threads=1
+
+  build-test-tokio:
+    name: Build & Test Tokio
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - version: stable # STABLE
+          - version: 1.63.0 # MSRV
+        features:
           - async
           - async-https
           - async-https-native
           - async-https-rustls
           - async-https-rustls-manual-roots
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    - name: Generate cache key
-      run: echo "${{ matrix.rust.version }} ${{ matrix.features }}" | tee .cache_key
-    - name: Rust Cache
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('.cache_key') }}-${{ hashFiles('**/Cargo.toml','**/Cargo.lock') }}
-    - name: Install Rust Toolchain
-      uses: dtolnay/rust-toolchain@v1
-      with:
-        toolchain: ${{ matrix.rust.version }}
-    - name: Set profile
-      run: rustup set profile minimal
-    - name: Update toolchain
-      run: rustup update
-    - name: Pin dependencies for MSRV
-      if: matrix.rust.version == '1.63.0'
-      run: |
-        cargo update -p zstd-sys --precise "2.0.8+zstd.1.5.5"
-        cargo update -p time --precise "0.3.20"
-        cargo update -p home --precise 0.5.5
-        cargo update -p url --precise "2.5.0"
-        cargo update -p tokio --precise "1.38.1"
-        cargo update -p tokio-util --precise "0.7.11"
-    - name: Build
-      run: cargo build --features ${{ matrix.features }} --no-default-features
-    - name: Test
-      run: cargo test --features ${{ matrix.features }} --no-default-features -- --test-threads=1
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Generate cache key
+        run: echo "${{ matrix.rust.version }} ${{ matrix.features }}" | tee .cache_key
+      - name: Rust Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('.cache_key') }}-${{ hashFiles('**/Cargo.toml','**/Cargo.lock') }}
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust.version }}
+      - name: Set profile
+        run: rustup set profile minimal
+      - name: Update toolchain
+        run: rustup update
+      - name: Pin dependencies for MSRV
+        if: matrix.rust.version == '1.63.0'
+        run: |
+          cargo update -p zstd-sys --precise "2.0.8+zstd.1.5.5"
+          cargo update -p time --precise "0.3.20"
+          cargo update -p home --precise 0.5.5
+          cargo update -p url --precise "2.5.0"
+          cargo update -p tokio --precise "1.38.1"
+          cargo update -p tokio-util --precise "0.7.11"
+      - name: Build
+        run: cargo build --features ${{ matrix.features }} tokio --no-default-features
+      - name: Test
+        run: cargo test --features ${{ matrix.features }} tokio --no-default-features -- --test-threads=1
+
+  build-test-async-std:
+    name: Build & Test Async-std
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - version: stable # STABLE
+          - version: 1.63.0 # MSRV
+        features:
+          - async
+          - async-https
+          - async-https-native
+          - async-https-rustls
+          - async-https-rustls-manual-roots
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Generate cache key
+        run: echo "${{ matrix.rust.version }} ${{ matrix.features }}" | tee .cache_key
+      - name: Rust Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('.cache_key') }}-${{ hashFiles('**/Cargo.toml','**/Cargo.lock') }}
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust.version }}
+      - name: Set profile
+        run: rustup set profile minimal
+      - name: Update toolchain
+        run: rustup update
+      - name: Pin dependencies for MSRV
+        if: matrix.rust.version == '1.63.0'
+        run: |
+          cargo update -p zstd-sys --precise "2.0.8+zstd.1.5.5"
+          cargo update -p time --precise "0.3.20"
+          cargo update -p home --precise 0.5.5
+          cargo update -p url --precise "2.5.0"
+          cargo update -p tokio --precise "1.38.1"
+          cargo update -p tokio-util --precise "0.7.11"
+      - name: Build
+        run: cargo build --features ${{ matrix.features }} async-std --no-default-features
+      - name: Test
+        run: cargo test --features ${{ matrix.features }} async-std --no-default-features -- --test-threads=1
 
   fmt:
     name: Rust Formatting
@@ -74,8 +167,8 @@ jobs:
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-            toolchain: nightly
-            components: rustfmt
+          toolchain: nightly
+          components: rustfmt
       - name: Check fmt
         run: cargo fmt --all --check
 
@@ -88,8 +181,8 @@ jobs:
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-            toolchain: stable
-            components: clippy
+          toolchain: stable
+          components: clippy
       - name: Rust Cache
         uses: actions/cache@v3
         with:
