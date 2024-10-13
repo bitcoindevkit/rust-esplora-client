@@ -22,8 +22,11 @@ bitcoin = { version = "0.32", features = ["serde", "std"], default-features = fa
 hex = { version = "0.2", package = "hex-conservative" }
 log = "^0.4"
 minreq = { version = "2.11.0", features = ["json-using-serde"], optional = true }
-reqwest = { version = "0.11",  features = ["json"], default-features = false, optional = true }
-async-std = { version = "1.13.0", optional = true }
+reqwest = { version = "0.12",  features = ["json"], default-features = false, optional = true }
+
+# async runtime
+async-std = { version = "1.13", optional = true }
+tokio = { version = "1.40", features = ["time"], optional = true }
 
 [dev-dependencies]
 serde_json = "1.0"
@@ -38,7 +41,11 @@ blocking-https = ["blocking", "minreq/https"]
 blocking-https-rustls = ["blocking", "minreq/https-rustls"]
 blocking-https-native = ["blocking", "minreq/https-native"]
 blocking-https-bundled = ["blocking", "minreq/https-bundled"]
-async = ["async-std", "reqwest", "reqwest/socks"]
+
+tokio = ["dep:tokio", "async"]
+async-std = ["dep:async-std", "async"]
+
+async = ["reqwest", "reqwest/socks"]
 async-https = ["async", "reqwest/default-tls"]
 async-https-native = ["async", "reqwest/native-tls"]
 async-https-rustls = ["async", "reqwest/rustls-tls"]
