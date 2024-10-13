@@ -26,7 +26,7 @@
 //! Here is an example of how to create an asynchronous client.
 //!
 //! ```no_run
-//! # #[cfg(feature = "async")]
+//! # #[cfg(all(feature = "async", feature = "tokio"))]
 //! # {
 //! use esplora_client::Builder;
 //! let builder = Builder::new("https://blockstream.info/testnet/api");
@@ -71,8 +71,10 @@ use std::fmt;
 use std::num::TryFromIntError;
 use std::time::Duration;
 
-pub mod api;
+#[cfg(feature = "async")]
+use r#async::Sleeper;
 
+pub mod api;
 #[cfg(feature = "async")]
 pub mod r#async;
 #[cfg(feature = "blocking")]
@@ -178,9 +180,16 @@ impl Builder {
         BlockingClient::from_builder(self)
     }
 
-    // Build an asynchronous client from builder
-    #[cfg(feature = "async")]
+    /// Build an asynchronous client from builder
+    #[cfg(all(feature = "async", feature = "tokio"))]
     pub fn build_async(self) -> Result<AsyncClient, Error> {
+        AsyncClient::from_builder(self)
+    }
+
+    /// Build an asynchronous client from builder where the returned client uses a
+    /// user-defined [`Sleeper`].
+    #[cfg(feature = "async")]
+    pub fn build_async_with_sleeper<S: Sleeper>(self) -> Result<AsyncClient<S>, Error> {
         AsyncClient::from_builder(self)
     }
 }
@@ -320,7 +329,14 @@ mod test {
         let blocking_client = builder.build_blocking();
 
         let builder_async = Builder::new(&format!("http://{}", esplora_url));
+
+        #[cfg(feature = "tokio")]
         let async_client = builder_async.build_async().unwrap();
+
+        #[cfg(not(feature = "tokio"))]
+        let async_client = builder_async
+            .build_async_with_sleeper::<r#async::DefaultSleeper>()
+            .unwrap();
 
         (blocking_client, async_client)
     }
@@ -991,5 +1007,12 @@ mod test {
         let tx = blocking_client.get_tx(&txid).unwrap();
         let tx_async = async_client.get_tx(&txid).await.unwrap();
         assert_eq!(tx, tx_async);
+    }
+
+    #[cfg(all(feature = "async", feature = "tokio"))]
+    #[test]
+    fn use_builder_with_tokio_as_normal() {
+        let builder = Builder::new("https://blockstream.info/testnet/api");
+        let _client = builder.build_async().unwrap();
     }
 }

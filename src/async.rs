@@ -11,8 +11,8 @@
 
 //! Esplora by way of `reqwest` HTTP client.
 
-use async_std::task;
 use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::str::FromStr;
 
 use bitcoin::consensus::{deserialize, serialize, Decodable, Encodable};
@@ -33,16 +33,19 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct AsyncClient {
+pub struct AsyncClient<S = DefaultSleeper> {
     /// The URL of the Esplora Server.
     url: String,
     /// The inner [`reqwest::Client`] to make HTTP requests.
     client: Client,
     /// Number of times to retry a request
     max_retries: usize,
+
+    /// Marker for the type of sleeper used
+    marker: PhantomData<S>,
 }
 
-impl AsyncClient {
+impl<S: Sleeper> AsyncClient<S> {
     /// Build an async client from a builder
     pub fn from_builder(builder: Builder) -> Result<Self, Error> {
         let mut client_builder = Client::builder();
@@ -73,15 +76,16 @@ impl AsyncClient {
             url: builder.base_url,
             client: client_builder.build()?,
             max_retries: builder.max_retries,
+            marker: PhantomData,
         })
     }
 
-    /// Build an async client from the base url and [`Client`]
     pub fn from_client(url: String, client: Client) -> Self {
         AsyncClient {
             url,
             client,
             max_retries: crate::DEFAULT_MAX_RETRIES,
+            marker: PhantomData,
         }
     }
 
@@ -434,7 +438,7 @@ impl AsyncClient {
         loop {
             match self.client.get(url).send().await? {
                 resp if attempts < self.max_retries && is_status_retryable(resp.status()) => {
-                    task::sleep(delay).await;
+                    S::sleep(delay).await;
                     attempts += 1;
                     delay *= 2;
                 }
@@ -446,4 +450,21 @@ impl AsyncClient {
 
 fn is_status_retryable(status: reqwest::StatusCode) -> bool {
     RETRYABLE_ERROR_CODES.contains(&status.as_u16())
+}
+
+pub trait Sleeper: 'static {
+    type Sleep: std::future::Future<Output = ()>;
+    fn sleep(dur: std::time::Duration) -> Self::Sleep;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DefaultSleeper;
+
+#[cfg(any(test, feature = "tokio"))]
+impl Sleeper for DefaultSleeper {
+    type Sleep = tokio::time::Sleep;
+
+    fn sleep(dur: std::time::Duration) -> Self::Sleep {
+        tokio::time::sleep(dur)
+    }
 }
