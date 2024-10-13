@@ -63,6 +63,7 @@ jobs:
           cargo update -p home --precise 0.5.5
           cargo update -p url --precise "2.5.0"
           cargo update -p tokio --precise "1.38.1"
+          cargo update -p hyper-rustls --precise "0.24.2"
 
       - name: Build
         run: cargo build --features ${{ matrix.features }},${{ matrix.runtime != 'blocking' && matrix.runtime || '' }} --no-default-features
