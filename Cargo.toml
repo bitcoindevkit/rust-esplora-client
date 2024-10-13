@@ -36,7 +36,7 @@ electrsd = { version = "0.28.0", features = ["legacy", "esplora_a33e97e1", "bitc
 lazy_static = "1.4.0"
 
 [features]
-default = ["blocking", "async", "async-https"]
+default = ["blocking", "async", "async-https", "tokio"]
 blocking = ["minreq", "minreq/proxy"]
 blocking-https = ["blocking", "minreq/https"]
 blocking-https-rustls = ["blocking", "minreq/https-rustls"]
