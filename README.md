@@ -2,6 +2,8 @@
 
 Bitcoin Esplora API client library. Supports plaintext, TLS and Onion servers. Blocking or async.
 
+If using the async client, you can choose between `tokio` or `async-std` as the runtime. One of these features must be enabled.
+
 <p>
     <a href="https://crates.io/crates/esplora-client"><img alt="Crate Info" src="https://img.shields.io/crates/v/esplora-client.svg"/></a>
     <a href="https://github.com/bitcoindevkit/rust-esplora-client/blob/master/LICENSE"><img alt="MIT Licensed" src="https://img.shields.io/badge/license-MIT-blue.svg"/></a>

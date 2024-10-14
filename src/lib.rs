@@ -77,6 +77,8 @@ pub mod api;
 pub mod r#async;
 #[cfg(feature = "blocking")]
 pub mod blocking;
+#[cfg(feature = "async")]
+pub mod runtime;
 
 pub use api::*;
 #[cfg(feature = "blocking")]

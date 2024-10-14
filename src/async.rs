@@ -11,7 +11,6 @@
 
 //! Esplora by way of `reqwest` HTTP client.
 
-use async_std::task;
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -434,7 +433,7 @@ impl AsyncClient {
         loop {
             match self.client.get(url).send().await? {
                 resp if attempts < self.max_retries && is_status_retryable(resp.status()) => {
-                    task::sleep(delay).await;
+                    crate::runtime::sleep(delay).await;
                     attempts += 1;
                     delay *= 2;
                 }
