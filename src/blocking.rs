@@ -16,6 +16,7 @@ use std::convert::TryFrom;
 use std::str::FromStr;
 use std::thread;
 
+use bitcoin::Address;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
@@ -28,6 +29,7 @@ use bitcoin::{
     block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
 };
 
+use crate::api::AddressStats;
 use crate::{
     BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus,
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
@@ -315,6 +317,20 @@ impl BlockingClient {
     /// blocks) and the value is the estimated feerate (in sat/vB).
     pub fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
         self.get_response_json("/fee-estimates")
+    }
+
+    /// Get information about a specific address, includes confirmed balance and transactions in
+    /// the mempool.
+    pub fn get_address_stats(&self, address: &Address) -> Result<AddressStats, Error> {
+        let path = format!("/address/{address}");
+        self.get_response_json(&path)
+    }
+
+    /// Get transaction history for the specified address/scripthash, sorted with newest first.
+    /// Returns up to 50 mempool transactions plus the first 25 confirmed transactions.
+    pub fn get_address_txns(&self, address: &Address) -> Result<Vec<Tx>, Error> {
+        let path = format!("/address/{address}/txs");
+        self.get_response_json(&path)
     }
 
     /// Get confirmed transaction history for the specified address/scripthash,

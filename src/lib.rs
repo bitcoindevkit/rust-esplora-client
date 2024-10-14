@@ -994,4 +994,79 @@ mod test {
         let tx_async = async_client.get_tx(&txid).await.unwrap();
         assert_eq!(tx, tx_async);
     }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_get_address_stats() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .get_new_address(Some("test"), Some(AddressType::Legacy))
+            .unwrap()
+            .assume_checked();
+
+        let _txid = BITCOIND
+            .client
+            .send_to_address(
+                &address,
+                Amount::from_sat(1000),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+
+        let address_blocking = blocking_client.get_address_stats(&address).unwrap();
+        let address_async = async_client.get_address_stats(&address).await.unwrap();
+        assert_eq!(address_blocking, address_async);
+        assert_eq!(address_async.chain_stats.funded_txo_count, 0);
+
+        let _miner = MINER.lock().await;
+        generate_blocks_and_wait(1);
+
+        let address_blocking = blocking_client.get_address_stats(&address).unwrap();
+        let address_async = async_client.get_address_stats(&address).await.unwrap();
+        assert_eq!(address_blocking, address_async);
+        assert_eq!(address_async.chain_stats.funded_txo_count, 1);
+        assert_eq!(address_async.chain_stats.funded_txo_sum, 1000);
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_get_address_txns() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .get_new_address(Some("test"), Some(AddressType::Legacy))
+            .unwrap()
+            .assume_checked();
+
+        let txid = BITCOIND
+            .client
+            .send_to_address(
+                &address,
+                Amount::from_sat(1000),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+
+        let _miner = MINER.lock().await;
+        generate_blocks_and_wait(1);
+
+        let address_txns_blocking = blocking_client.get_address_txns(&address).unwrap();
+        let address_txns_async = async_client.get_address_txns(&address).await.unwrap();
+
+        assert_eq!(address_txns_blocking, address_txns_async);
+        assert_eq!(address_txns_async[0].txid, txid);
+    }
 }

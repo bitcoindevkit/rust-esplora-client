@@ -26,6 +26,7 @@ use log::{debug, error, info, trace};
 
 use reqwest::{header, Client, Response};
 
+use crate::api::AddressStats;
 use crate::{
     BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus,
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
@@ -375,6 +376,20 @@ impl AsyncClient {
         self.get_response_text(&format!("/block-height/{block_height}"))
             .await
             .map(|block_hash| BlockHash::from_str(&block_hash).map_err(Error::HexToArray))?
+    }
+
+    /// Get information about a specific address, includes confirmed balance and transactions in
+    /// the mempool.
+    pub async fn get_address_stats(&self, address: &Address) -> Result<AddressStats, Error> {
+        let path = format!("/address/{address}");
+        self.get_response_json(&path).await
+    }
+
+    /// Get transaction history for the specified address/scripthash, sorted with newest first.
+    /// Returns up to 50 mempool transactions plus the first 25 confirmed transactions.
+    pub async fn get_address_txns(&self, address: &Address) -> Result<Vec<Tx>, Error> {
+        let path = format!("/address/{address}/txs");
+        self.get_response_json(&path).await
     }
 
     /// Get confirmed transaction history for the specified address/scripthash,
