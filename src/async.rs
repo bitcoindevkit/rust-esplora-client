@@ -18,6 +18,7 @@ use std::str::FromStr;
 use bitcoin::consensus::{deserialize, serialize, Decodable, Encodable};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
+use bitcoin::Address;
 use bitcoin::{
     block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
 };
@@ -27,6 +28,7 @@ use log::{debug, error, info, trace};
 
 use reqwest::{header, Client, Response};
 
+use crate::api::AddressStats;
 use crate::{
     BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus,
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
@@ -376,6 +378,30 @@ impl AsyncClient {
         self.get_response_text(&format!("/block-height/{block_height}"))
             .await
             .map(|block_hash| BlockHash::from_str(&block_hash).map_err(Error::HexToArray))?
+    }
+
+    /// Get information about a specific address, includes confirmed balance and transactions in
+    /// the mempool.
+    pub async fn get_address_stats(&self, address: &Address) -> Result<AddressStats, Error> {
+        let path = format!("/address/{address}");
+        self.get_response_json(&path).await
+    }
+
+    /// Get transaction history for the specified address/scripthash, sorted with newest first.
+    ///
+    /// Returns up to 50 mempool transactions plus the first 25 confirmed transactions.
+    /// More can be requested by specifying the last txid seen by the previous query.
+    pub async fn get_address_txs(
+        &self,
+        address: &Address,
+        last_seen: Option<Txid>,
+    ) -> Result<Vec<Tx>, Error> {
+        let path = match last_seen {
+            Some(last_seen) => format!("/address/{address}/txs/chain/{last_seen}"),
+            None => format!("/address/{address}/txs"),
+        };
+
+        self.get_response_json(&path).await
     }
 
     /// Get confirmed transaction history for the specified address/scripthash,
