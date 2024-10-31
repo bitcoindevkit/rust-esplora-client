@@ -26,7 +26,7 @@
 //! Here is an example of how to create an asynchronous client.
 //!
 //! ```no_run
-//! # #[cfg(feature = "async")]
+//! # #[cfg(all(feature = "async", feature = "tokio"))]
 //! # {
 //! use esplora_client::Builder;
 //! let builder = Builder::new("https://blockstream.info/testnet/api");
@@ -178,9 +178,15 @@ impl Builder {
         BlockingClient::from_builder(self)
     }
 
-    // Build an asynchronous client from builder
-    #[cfg(feature = "async")]
+    /// Build an asynchronous client from builder
+    #[cfg(all(feature = "async", feature = "tokio"))]
     pub fn build_async(self) -> Result<AsyncClient, Error> {
+        AsyncClient::from_builder(self)
+    }
+
+    /// Build an asynchronous client from builder
+    #[cfg(feature = "async")]
+    pub fn build_async_with_sleeper<S: r#async::Sleeper>(self) -> Result<AsyncClient<S>, Error> {
         AsyncClient::from_builder(self)
     }
 }
@@ -253,6 +259,8 @@ mod test {
     use electrsd::{bitcoind, bitcoind::BitcoinD, ElectrsD};
     use lazy_static::lazy_static;
     use std::env;
+    #[cfg(all(feature = "async", not(feature = "tokio")))]
+    use std::{future::Future, pin::Pin};
     use tokio::sync::Mutex;
     #[cfg(all(feature = "blocking", feature = "async"))]
     use {
@@ -320,7 +328,14 @@ mod test {
         let blocking_client = builder.build_blocking();
 
         let builder_async = Builder::new(&format!("http://{}", esplora_url));
+
+        #[cfg(feature = "tokio")]
         let async_client = builder_async.build_async().unwrap();
+
+        #[cfg(not(feature = "tokio"))]
+        let async_client = builder_async
+            .build_async_with_sleeper::<r#async::DefaultSleeper>()
+            .unwrap();
 
         (blocking_client, async_client)
     }
@@ -991,5 +1006,32 @@ mod test {
         let tx = blocking_client.get_tx(&txid).unwrap();
         let tx_async = async_client.get_tx(&txid).await.unwrap();
         assert_eq!(tx, tx_async);
+    }
+
+    #[cfg(all(feature = "async", feature = "tokio"))]
+    #[test]
+    fn test_default_tokio_sleeper() {
+        let builder = Builder::new("https://blockstream.info/testnet/api");
+        let client = builder.build_async();
+        assert!(client.is_ok());
+    }
+    #[cfg(all(feature = "async", not(feature = "tokio")))]
+    struct CustomRuntime;
+
+    #[cfg(all(feature = "async", not(feature = "tokio")))]
+    impl r#async::Sleeper for CustomRuntime {
+        type Sleep = Pin<Box<dyn Future<Output = ()>>>;
+
+        fn sleep(dur: std::time::Duration) -> Self::Sleep {
+            Box::pin(async_std::task::sleep(dur))
+        }
+    }
+
+    #[cfg(all(feature = "async", not(feature = "tokio")))]
+    #[test]
+    fn test_custom_runtime() {
+        let builder = Builder::new("https://blockstream.info/testnet/api");
+        let client = builder.build_async_with_sleeper::<CustomRuntime>();
+        assert!(client.is_ok());
     }
 }
