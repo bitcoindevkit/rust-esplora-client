@@ -97,6 +97,32 @@ pub struct BlockSummary {
     pub merkle_root: bitcoin::hash_types::TxMerkleNode,
 }
 
+/// Address statistics, includes the address, and the utxo information for the address.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct AddressStats {
+    /// The address.
+    pub address: String,
+    /// The summary of transactions for this address, already on chain.
+    pub chain_stats: AddressTxsSummary,
+    /// The summary of transactions for this address, currently in the mempool.
+    pub mempool_stats: AddressTxsSummary,
+}
+
+/// Contains a summary of the transactions for an address.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserialize)]
+pub struct AddressTxsSummary {
+    /// The number of funded transaction outputs.
+    pub funded_txo_count: u32,
+    /// The sum of the funded transaction outputs, in satoshis.
+    pub funded_txo_sum: u64,
+    /// The number of spent transaction outputs.
+    pub spent_txo_count: u32,
+    /// The sum of the spent transaction outputs, in satoshis.
+    pub spent_txo_sum: u64,
+    /// The total number of transactions.
+    pub tx_count: u32,
+}
+
 impl Tx {
     pub fn to_tx(&self) -> Transaction {
         Transaction {
