@@ -26,4 +26,5 @@ cargo update -p url --precise "2.5.0"
 cargo update -p tokio --precise "1.38.1"
 cargo update -p tokio-util --precise "0.7.11"
 cargo update -p indexmap --precise "2.5.0"
+cargo update -p security-framework-sys --precise "2.11.1"
 ```
