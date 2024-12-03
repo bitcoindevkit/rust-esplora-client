@@ -370,7 +370,11 @@ impl BlockingClient {
             Some(height) => format!("/blocks/{}", height),
             None => "/blocks".to_string(),
         };
-        self.get_response_json(&path)
+        let blocks: Vec<BlockSummary> = self.get_response_json(&path)?;
+        if blocks.is_empty() {
+            return Err(Error::InvalidResponse);
+        }
+        Ok(blocks)
     }
 
     /// Sends a GET request to the given `url`, retrying failed attempts
