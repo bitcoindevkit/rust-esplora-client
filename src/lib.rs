@@ -225,6 +225,8 @@ pub enum Error {
     InvalidHttpHeaderName(String),
     /// Invalid HTTP Header value specified
     InvalidHttpHeaderValue(String),
+    /// The server sent an invalid response
+    InvalidResponse,
 }
 
 impl fmt::Display for Error {

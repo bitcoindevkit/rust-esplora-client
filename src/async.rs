@@ -442,7 +442,11 @@ impl<S: Sleeper> AsyncClient<S> {
             Some(height) => format!("/blocks/{height}"),
             None => "/blocks".to_string(),
         };
-        self.get_response_json(&path).await
+        let blocks: Vec<BlockSummary> = self.get_response_json(&path).await?;
+        if blocks.is_empty() {
+            return Err(Error::InvalidResponse);
+        }
+        Ok(blocks)
     }
 
     /// Get the underlying base URL.
