@@ -11,11 +11,12 @@
 
 //! Esplora by way of `reqwest` HTTP client.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use std::str::FromStr;
 
-use bitcoin::consensus::{deserialize, serialize, Decodable, Encodable};
+use bitcoin::consensus::encode::serialize_hex;
+use bitcoin::consensus::{deserialize, serialize, Decodable};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::Address;
@@ -26,12 +27,12 @@ use bitcoin::{
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
-use reqwest::{header, Client, Response};
+use reqwest::{header, Body, Client, Response};
 
 use crate::api::AddressStats;
 use crate::{
-    BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus, Utxo,
-    BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
+    BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, SubmitPackageResult, Tx,
+    TxStatus, Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
 #[derive(Debug, Clone)]
@@ -249,21 +250,27 @@ impl<S: Sleeper> AsyncClient<S> {
         }
     }
 
-    /// Make an HTTP POST request to given URL, serializing from any `T` that
-    /// implement [`bitcoin::consensus::Encodable`].
-    ///
-    /// It should be used when requesting Esplora endpoints that expected a
-    /// native bitcoin type serialized with [`bitcoin::consensus::Encodable`].
+    /// Make an HTTP POST request to given URL, converting any `T` that
+    /// implement [`Into<Body>`] and setting query parameters, if any.
     ///
     /// # Errors
     ///
     /// This function will return an error either from the HTTP client, or the
-    /// [`bitcoin::consensus::Encodable`] serialization.
-    async fn post_request_hex<T: Encodable>(&self, path: &str, body: T) -> Result<(), Error> {
-        let url = format!("{}{}", self.url, path);
-        let body = serialize::<T>(&body).to_lower_hex_string();
+    /// response's [`serde_json`] deserialization.
+    async fn post_request_bytes<T: Into<Body>>(
+        &self,
+        path: &str,
+        body: T,
+        query_params: Option<HashSet<(&str, String)>>,
+    ) -> Result<Response, Error> {
+        let url: String = format!("{}{}", self.url, path);
+        let mut request = self.client.post(url).body(body);
 
-        let response = self.client.post(url).body(body).send().await?;
+        for param in query_params.unwrap_or_default() {
+            request = request.query(&param);
+        }
+
+        let response = request.send().await?;
 
         if !response.status().is_success() {
             return Err(Error::HttpResponse {
@@ -272,7 +279,7 @@ impl<S: Sleeper> AsyncClient<S> {
             });
         }
 
-        Ok(())
+        Ok(response)
     }
 
     /// Get a [`Transaction`] option given its [`Txid`]
@@ -359,8 +366,49 @@ impl<S: Sleeper> AsyncClient<S> {
     }
 
     /// Broadcast a [`Transaction`] to Esplora
-    pub async fn broadcast(&self, transaction: &Transaction) -> Result<(), Error> {
-        self.post_request_hex("/tx", transaction).await
+    pub async fn broadcast(&self, transaction: &Transaction) -> Result<Txid, Error> {
+        let body = serialize::<Transaction>(transaction).to_lower_hex_string();
+        let response = self.post_request_bytes("/tx", body, None).await?;
+        let txid = Txid::from_str(&response.text().await?).map_err(|_| Error::InvalidResponse)?;
+        Ok(txid)
+    }
+
+    /// Broadcast a package of [`Transaction`] to Esplora
+    ///
+    /// if `maxfeerate` is provided, any transaction whose
+    /// fee is higher will be rejected
+    ///
+    /// if  `maxburnamount` is provided, any transaction
+    /// with higher provably unspendable outputs amount
+    /// will be rejected
+    pub async fn submit_package(
+        &self,
+        transactions: &[Transaction],
+        maxfeerate: Option<f64>,
+        maxburnamount: Option<f64>,
+    ) -> Result<SubmitPackageResult, Error> {
+        let mut queryparams = HashSet::<(&str, String)>::new();
+        if let Some(maxfeerate) = maxfeerate {
+            queryparams.insert(("maxfeerate", maxfeerate.to_string()));
+        }
+        if let Some(maxburnamount) = maxburnamount {
+            queryparams.insert(("maxburnamount", maxburnamount.to_string()));
+        }
+
+        let serialized_txs = transactions
+            .iter()
+            .map(|tx| serialize_hex(&tx))
+            .collect::<Vec<_>>();
+
+        let response = self
+            .post_request_bytes(
+                "/txs/package",
+                serde_json::to_string(&serialized_txs).unwrap(),
+                Some(queryparams),
+            )
+            .await?;
+
+        Ok(response.json::<SubmitPackageResult>().await?)
     }
 
     /// Get the current height of the blockchain tip

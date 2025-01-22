@@ -16,6 +16,7 @@ use std::convert::TryFrom;
 use std::str::FromStr;
 use std::thread;
 
+use bitcoin::consensus::encode::serialize_hex;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
@@ -31,8 +32,8 @@ use bitcoin::{
 
 use crate::api::AddressStats;
 use crate::{
-    BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus, Utxo,
-    BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
+    BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, SubmitPackageResult, Tx,
+    TxStatus, Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
 #[derive(Debug, Clone)]
@@ -83,6 +84,24 @@ impl BlockingClient {
             for (key, value) in &self.headers {
                 request = request.with_header(key, value);
             }
+        }
+
+        Ok(request)
+    }
+
+    fn post_request<T>(&self, path: &str, body: T) -> Result<Request, Error>
+    where
+        T: Into<Vec<u8>>,
+    {
+        let mut request = minreq::post(format!("{}{}", self.url, path)).with_body(body);
+
+        if let Some(proxy) = &self.proxy {
+            let proxy = Proxy::new(proxy.as_str())?;
+            request = request.with_proxy(proxy);
+        }
+
+        if let Some(timeout) = &self.timeout {
+            request = request.with_timeout(*timeout);
         }
 
         Ok(request)
@@ -267,21 +286,63 @@ impl BlockingClient {
     }
 
     /// Broadcast a [`Transaction`] to Esplora
-    pub fn broadcast(&self, transaction: &Transaction) -> Result<(), Error> {
-        let mut request = minreq::post(format!("{}/tx", self.url)).with_body(
+    pub fn broadcast(&self, transaction: &Transaction) -> Result<Txid, Error> {
+        let request = self.post_request(
+            "tx",
             serialize(transaction)
                 .to_lower_hex_string()
                 .as_bytes()
                 .to_vec(),
-        );
+        )?;
 
-        if let Some(proxy) = &self.proxy {
-            let proxy = Proxy::new(proxy.as_str())?;
-            request = request.with_proxy(proxy);
+        match request.send() {
+            Ok(resp) if !is_status_ok(resp.status_code) => {
+                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
+                let message = resp.as_str().unwrap_or_default().to_string();
+                Err(Error::HttpResponse { status, message })
+            }
+            Ok(resp) => {
+                let txid =
+                    Txid::from_str(resp.as_str().unwrap_or_default()).map_err(Error::HexToArray)?;
+                Ok(txid)
+            }
+            Err(e) => Err(Error::Minreq(e)),
+        }
+    }
+
+    /// Broadcast a package of [`Transaction`] to Esplora
+    ///
+    /// if `maxfeerate` is provided, any transaction whose
+    /// fee is higher will be rejected
+    ///
+    /// if  `maxburnamount` is provided, any transaction
+    /// with higher provably unspendable outputs amount
+    /// will be rejected
+    pub fn submit_package(
+        &self,
+        transactions: &[Transaction],
+        maxfeerate: Option<f64>,
+        maxburnamount: Option<f64>,
+    ) -> Result<SubmitPackageResult, Error> {
+        let serialized_txs = transactions
+            .iter()
+            .map(|tx| serialize_hex(&tx))
+            .collect::<Vec<_>>();
+
+        let mut request = self.post_request(
+            "txs/package",
+            serde_json::to_string(&serialized_txs)
+                .unwrap()
+                .as_bytes()
+                .to_vec(),
+        )?;
+
+        if let Some(maxfeerate) = maxfeerate {
+            request = request.with_param("maxfeerate", maxfeerate.to_string())
         }
 
-        if let Some(timeout) = &self.timeout {
-            request = request.with_timeout(*timeout);
+        if let Some(maxburnamount) = maxburnamount {
+            request = request.with_param("maxburnamount", maxburnamount.to_string())
         }
 
         match request.send() {
@@ -290,7 +351,7 @@ impl BlockingClient {
                 let message = resp.as_str().unwrap_or_default().to_string();
                 Err(Error::HttpResponse { status, message })
             }
-            Ok(_resp) => Ok(()),
+            Ok(resp) => Ok(resp.json::<SubmitPackageResult>().map_err(Error::Minreq)?),
             Err(e) => Err(Error::Minreq(e)),
         }
     }
