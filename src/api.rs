@@ -10,6 +10,7 @@ pub use bitcoin::{
 };
 
 use serde::Deserialize;
+use serde::Deserializer;
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct PrevOut {
@@ -19,6 +20,7 @@ pub struct PrevOut {
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Vin {
+    #[serde(deserialize_with = "deserialize_txid")]
     pub txid: Txid,
     pub vout: u32,
     // None if coinbase
@@ -68,6 +70,7 @@ pub struct BlockStatus {
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Tx {
+    #[serde(deserialize_with = "deserialize_txid")]
     pub txid: Txid,
     pub version: i32,
     pub locktime: u32,
@@ -197,4 +200,18 @@ where
         .map(|hex_str| Vec::<u8>::from_hex(&hex_str))
         .collect::<Result<Vec<Vec<u8>>, _>>()
         .map_err(serde::de::Error::custom)
+}
+
+fn deserialize_txid<'de, D>(deserializer: D) -> Result<Txid, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use bitcoin::hashes::Hash;
+    use std::str::FromStr;
+
+    let s = String::deserialize(deserializer)?;
+    if s.is_empty() {
+        return Ok(Txid::all_zeros());
+    }
+    Txid::from_str(&s).map_err(serde::de::Error::custom)
 }
