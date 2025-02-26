@@ -63,6 +63,7 @@ jobs:
         cargo update -p indexmap --precise "2.5.0"
         cargo update -p security-framework-sys --precise "2.11.1"
         cargo update -p native-tls --precise "0.2.13"
+        cargo update -p flate2 --precise "1.0.35"
     - name: Build
       run: cargo build --features ${{ matrix.features }} --no-default-features
     - name: Test
