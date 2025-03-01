@@ -2,13 +2,14 @@
 //!
 //! See: <https://github.com/Blockstream/esplora/blob/master/API.md>
 
+use std::collections::HashMap;
+
 pub use bitcoin::consensus::{deserialize, serialize};
 pub use bitcoin::hex::FromHex;
-use bitcoin::Weight;
 pub use bitcoin::{
     transaction, Amount, BlockHash, OutPoint, ScriptBuf, Transaction, TxIn, TxOut, Txid, Witness,
 };
-
+use bitcoin::{FeeRate, Weight, Wtxid};
 use serde::Deserialize;
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -121,6 +122,53 @@ pub struct AddressTxsSummary {
     pub spent_txo_sum: u64,
     /// The total number of transactions.
     pub tx_count: u32,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct SubmitPackageResult {
+    /// The transaction package result message. "success" indicates all transactions were accepted
+    /// into or are already in the mempool.
+    pub package_msg: String,
+    /// Transaction results keyed by [`Wtxid`].
+    #[serde(rename = "tx-results")]
+    pub tx_results: HashMap<Wtxid, TxResult>,
+    /// List of txids of replaced transactions.
+    #[serde(rename = "replaced-transactions")]
+    pub replaced_transactions: Option<Vec<Txid>>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct TxResult {
+    /// The transaction id.
+    pub txid: Txid,
+    /// The [`Wtxid`] of a different transaction with the same [`Txid`] but different witness found
+    /// in the mempool.
+    ///
+    /// If set, this means the submitted transaction was ignored.
+    #[serde(rename = "other-wtxid")]
+    pub other_wtxid: Option<Wtxid>,
+    /// Sigops-adjusted virtual transaction size.
+    pub vsize: Option<u32>,
+    /// Transaction fees.
+    pub fees: Option<MempoolFeesSubmitPackage>,
+    /// The transaction error string, if it was rejected by the mempool
+    pub error: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct MempoolFeesSubmitPackage {
+    /// Transaction fee.
+    pub base: Amount,
+    /// The effective feerate.
+    ///
+    /// Will be `None` if the transaction was already in the mempool. For example, the package
+    /// feerate and/or feerate with modified fees from the `prioritisetransaction` JSON-RPC method.
+    #[serde(rename = "effective-feerate")]
+    pub effective_feerate: Option<FeeRate>,
+    /// If [`Self::effective_fee_rate`] is provided, this holds the [`Wtxid`]s of the transactions
+    /// whose fees and vsizes are included in effective-feerate.
+    #[serde(rename = "effective-includes")]
+    pub effective_includes: Option<Vec<Wtxid>>,
 }
 
 impl Tx {
