@@ -81,7 +81,7 @@ impl<S: Sleeper> AsyncClient<S> {
             marker: PhantomData,
         })
     }
-
+    ///A constructor for creating a new instance of `AsyncClient`.
     pub fn from_client(url: String, client: Client) -> Self {
         AsyncClient {
             url,
