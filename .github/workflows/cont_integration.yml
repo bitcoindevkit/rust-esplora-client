@@ -54,8 +54,7 @@ jobs:
     - name: Pin dependencies for MSRV
       if: matrix.rust.version == '1.63.0'
       run: |
-        cargo update -p reqwest --precise "0.12.4"
-        cargo update -p minreq --precise "2.13.2"
+        cargo update -p async-minreq --precise "2.0.0"
         cargo update -p zstd-sys --precise "2.0.8+zstd.1.5.5"
         cargo update -p time --precise "0.3.20"
         cargo update -p home --precise "0.5.5"
