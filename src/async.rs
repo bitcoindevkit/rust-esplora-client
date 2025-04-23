@@ -9,7 +9,7 @@
 // You may not use this file except in accordance with one or both of these
 // licenses.
 
-//! Esplora by way of `reqwest` HTTP client.
+//! Esplora by way of `async-minreq` HTTP client.
 
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -26,7 +26,7 @@ use bitcoin::{
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
-use reqwest::{header, Client, Response};
+use async-minreq::{header, Client, Response};
 
 use crate::api::AddressStats;
 use crate::{
@@ -38,7 +38,7 @@ use crate::{
 pub struct AsyncClient<S = DefaultSleeper> {
     /// The URL of the Esplora Server.
     url: String,
-    /// The inner [`reqwest::Client`] to make HTTP requests.
+    /// The inner [`async-minreq::Client`] to make HTTP requests.
     client: Client,
     /// Number of times to retry a request
     max_retries: usize,
@@ -54,7 +54,7 @@ impl<S: Sleeper> AsyncClient<S> {
 
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(proxy) = &builder.proxy {
-            client_builder = client_builder.proxy(reqwest::Proxy::all(proxy)?);
+            client_builder = client_builder.proxy(async-minreq::Proxy::all(proxy)?);
         }
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -153,7 +153,7 @@ impl<S: Sleeper> AsyncClient<S> {
             });
         }
 
-        response.json::<T>().await.map_err(Error::Reqwest)
+        response.json::<T>().await.map_err(Error::async-minreq)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -478,7 +478,7 @@ impl<S: Sleeper> AsyncClient<S> {
     }
 }
 
-fn is_status_retryable(status: reqwest::StatusCode) -> bool {
+fn is_status_retryable(status: async-minreq::StatusCode) -> bool {
     RETRYABLE_ERROR_CODES.contains(&status.as_u16())
 }
 

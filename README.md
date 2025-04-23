@@ -19,7 +19,7 @@ This library should compile with any combination of features with Rust 1.63.0.
 To build with the MSRV you will need to pin dependencies as follows:
 
 ```shell
-cargo update -p reqwest --precise "0.12.4"
+cargo update -p async-minreq --precise "0.12.4"
 cargo update -p minreq --precise "2.13.2"
 cargo update -p zstd-sys --precise "2.0.8+zstd.1.5.5"
 cargo update -p time --precise "0.3.20"

@@ -4,7 +4,7 @@
 //! async Esplora client to query Esplora's backend.
 //!
 //! The library provides the possibility to build a blocking
-//! client using [`minreq`] and an async client using [`reqwest`].
+//! client using [`minreq`] and an async client using [`async-minreq`].
 //! The library supports communicating to Esplora via a proxy
 //! and also using TLS (SSL) for secure communication.
 //!
@@ -53,14 +53,14 @@
 //!   capabilities using the platform's native TLS backend (likely OpenSSL).
 //! * `blocking-https-bundled` enables [`minreq`], the blocking client with proxy and TLS (SSL)
 //!   capabilities using a bundled OpenSSL library backend.
-//! * `async` enables [`reqwest`], the async client with proxy capabilities.
-//! * `async-https` enables [`reqwest`], the async client with support for proxying and TLS (SSL)
-//!   using the default [`reqwest`] TLS backend.
-//! * `async-https-native` enables [`reqwest`], the async client with support for proxying and TLS
+//! * `async` enables [`async-minreq`], the async client with proxy capabilities.
+//! * `async-https` enables [`async-minreq`], the async client with support for proxying and TLS (SSL)
+//!   using the default [`async-minreq`] TLS backend.
+//! * `async-https-native` enables [`async-minreq`], the async client with support for proxying and TLS
 //!   (SSL) using the platform's native TLS backend (likely OpenSSL).
-//! * `async-https-rustls` enables [`reqwest`], the async client with support for proxying and TLS
+//! * `async-https-rustls` enables [`async-minreq`], the async client with support for proxying and TLS
 //!   (SSL) using the `rustls` TLS backend.
-//! * `async-https-rustls-manual-roots` enables [`reqwest`], the async client with support for
+//! * `async-https-rustls-manual-roots` enables [`async-minreq`], the async client with support for
 //!   proxying and TLS (SSL) using the `rustls` TLS backend without using its the default root
 //!   certificates.
 
@@ -123,7 +123,7 @@ pub struct Builder {
     ///
     /// Note that the format of this value and the supported protocols change
     /// slightly between the blocking version of the client (using `minreq`)
-    /// and the async version (using `reqwest`). For more details check with
+    /// and the async version (using `async-minreq`). For more details check with
     /// the documentation of the two crates. Both of them are compiled with
     /// the `socks` feature enabled.
     ///
@@ -200,9 +200,9 @@ pub enum Error {
     /// Error during `minreq` HTTP request
     #[cfg(feature = "blocking")]
     Minreq(::minreq::Error),
-    /// Error during reqwest HTTP request
+    /// Error during async-minreq HTTP request
     #[cfg(feature = "async")]
-    Reqwest(::reqwest::Error),
+    async-minreq(::async-minreq::Error),
     /// HTTP response error
     HttpResponse { status: u16, message: String },
     /// Invalid number returned
@@ -252,7 +252,7 @@ impl std::error::Error for Error {}
 #[cfg(feature = "blocking")]
 impl_error!(::minreq::Error, Minreq, Error);
 #[cfg(feature = "async")]
-impl_error!(::reqwest::Error, Reqwest, Error);
+impl_error!(::async-minreq::Error, async-minreq, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
 impl_error!(bitcoin::consensus::encode::Error, BitcoinEncoding, Error);
 impl_error!(bitcoin::hex::HexToArrayError, HexToArray, Error);
