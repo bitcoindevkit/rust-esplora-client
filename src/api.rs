@@ -11,12 +11,19 @@ pub use bitcoin::{
 
 use serde::Deserialize;
 
+/// It contains the value and scriptpubkey of a
+/// previous transaction output that a transaction
+/// input can reference.
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct PrevOut {
     pub value: u64,
     pub scriptpubkey: ScriptBuf,
 }
 
+/// Represents the transaction input containing
+/// a Previous output (or none if coinbase) and includes
+/// the unlocking script, witness data, sequence number,
+/// and a flag indicating if it is a coinbase input.
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Vin {
     pub txid: Txid,
@@ -30,12 +37,15 @@ pub struct Vin {
     pub is_coinbase: bool,
 }
 
+/// Represents the transaction output containing a value and
+/// a scriptpubkey.
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Vout {
     pub value: u64,
     pub scriptpubkey: ScriptBuf,
 }
 
+/// Represents Transaction Status.
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct TxStatus {
     pub confirmed: bool,
@@ -44,6 +54,10 @@ pub struct TxStatus {
     pub block_time: Option<u64>,
 }
 
+/// It holds the block height, a Merkle path of
+/// transaction IDs, and the position of the
+/// transaction in the tree to verify its inclusion
+/// in a block.
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct MerkleProof {
     pub block_height: u32,
@@ -51,6 +65,7 @@ pub struct MerkleProof {
     pub pos: usize,
 }
 
+/// Struct that contains the status of an output in a transaction.
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct OutputStatus {
     pub spent: bool,
@@ -59,6 +74,11 @@ pub struct OutputStatus {
     pub status: Option<TxStatus>,
 }
 
+/// This Struct represents the status of a block in the blockchain.
+/// `in_best_chain` - a boolean that shows whether the block is part of the main chain.
+/// `height` - Optional field that shows the height of the block if block is in main chain.
+/// `next_best` - Optional field that contains `BlockHash` of the next block that may represent
+/// the next block in the best chain.
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct BlockStatus {
     pub in_best_chain: bool,
@@ -66,6 +86,7 @@ pub struct BlockStatus {
     pub next_best: Option<BlockHash>,
 }
 
+/// Structure represents a complete transaction
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Tx {
     pub txid: Txid,
@@ -81,12 +102,15 @@ pub struct Tx {
     pub fee: u64,
 }
 
+/// Returns timing information of a Block
+/// containg `timestamp` and `height` of block
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct BlockTime {
     pub timestamp: u64,
     pub height: u32,
 }
-
+/// Provides a Summary of a  Bitcoin block which includes
+/// `BlockHash`, `BlockTime`, `previousblockhash`, `merkle_root`.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct BlockSummary {
     pub id: BlockHash,
@@ -124,6 +148,7 @@ pub struct AddressTxsSummary {
 }
 
 impl Tx {
+    /// Converts a transaction into a standard `Bitcoin transaction`.
     pub fn to_tx(&self) -> Transaction {
         Transaction {
             version: transaction::Version::non_standard(self.version),
@@ -154,6 +179,9 @@ impl Tx {
         }
     }
 
+    /// Checks Transaction status, returns a `BlockTime` struct contaning
+    /// `height` and `timestamp` if transaction has been confirmed or
+    /// `None` otherwise.
     pub fn confirmation_time(&self) -> Option<BlockTime> {
         match self.status {
             TxStatus {
@@ -166,6 +194,10 @@ impl Tx {
         }
     }
 
+    /// Takes Transaction as input
+    /// iterates through all the inputs present in the transaction
+    /// and checks for prevout field and creates a `TxOut` Struct for each input if it exists
+    /// then returns all optional TxOut values  as a vector.
     pub fn previous_outputs(&self) -> Vec<Option<TxOut>> {
         self.vin
             .iter()
@@ -178,11 +210,13 @@ impl Tx {
             })
             .collect()
     }
-
+    /// Takes Transaction as input and returns
+    /// the `Weight instance` of the weight present in Transaction.
     pub fn weight(&self) -> Weight {
         Weight::from_wu(self.weight)
     }
-
+    /// Takes Transaction as input and returns
+    /// the `Amount instance` of the satoshis present in Transaction.
     pub fn fee(&self) -> Amount {
         Amount::from_sat(self.fee)
     }
