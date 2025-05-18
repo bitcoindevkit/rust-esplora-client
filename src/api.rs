@@ -123,6 +123,14 @@ pub struct AddressTxsSummary {
     pub tx_count: u32,
 }
 
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct MempoolInfo {
+    pub count: u32,
+    pub vsize: u64,
+    pub total_fee: u64,
+    pub fee_histogram: Vec<(f32, u64)>,
+}
+
 impl Tx {
     pub fn to_tx(&self) -> Transaction {
         Transaction {
