@@ -108,16 +108,14 @@ impl<S: Sleeper> AsyncClient<S> {
 
     }
 
-        //----------------------------------------not needed since no client struct in async minreq------------------------------------
-    // pub fn from_client(url: String, client: Client) -> Self {
-    //     AsyncClient {
-    //         url,
-    //         client,
-    //         max_retries: crate::DEFAULT_MAX_RETRIES,
-    //         marker: PhantomData,
-    //     }
-    // }
-//-----------------------------------------------------------------------------------------------
+        pub fn from_client(url: String, client: Client) -> Self {
+        AsyncClient {
+            url,
+            headers,
+            max_retries: crate::DEFAULT_MAX_RETRIES,
+            marker: PhantomData,
+        }
+    } 
     /// Make an HTTP GET request to given URL, deserializing to any `T` that
     /// implement [`bitcoin::consensus::Decodable`].
     ///
@@ -507,8 +505,7 @@ impl<S: Sleeper> AsyncClient<S> {
 
                 },
                 Err(e) => {
-                    // Here you might inspect the error (if possible) to decide whether to retry.
-                    // For simplicity, we retry on any error until max_retries is reached.
+                     
                     if attempts < self.max_retries {
                         S::sleep(delay).await;
                         attempts += 1;
