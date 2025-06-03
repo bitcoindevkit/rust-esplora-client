@@ -25,26 +25,12 @@ use bitcoin::{
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
-// use reqwest::{header, Client, Response};
-use async_minreq::{Method, Request}; //-----------------------added-------------------
+use async_minreq::{Method, Request};
 use crate::api::AddressStats;
 use crate::{
     BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus,
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
-
-// #[derive(Debug, Clone)]
-// pub struct AsyncClient<S = DefaultSleeper> {
-//     /// The URL of the Esplora Server.
-//     url: String,
-//     /// The inner [`reqwest::Client`] to make HTTP requests.
-//     client: Client,
-//     /// Number of times to retry a request
-//     max_retries: usize,
-
-//     /// Marker for the type of sleeper used
-//     marker: PhantomData<S>,
-// }
 
 #[derive(Debug, Clone)]
 pub struct AsyncClient<S = DefaultSleeper> {
@@ -438,11 +424,6 @@ impl<S: Sleeper> AsyncClient<S> {
     pub fn url(&self) -> &str {
         &self.url
     }
-
-    /// Get the underlying [`Client`].
-    // pub fn client(&self) -> &Client {
-    //     &self.client
-    // }
 
     /// Sends a GET request to the given `url`, retrying failed attempts
     /// for retryable error codes until max retries hit.

@@ -43,7 +43,7 @@ blocking-https-native = ["blocking", "minreq/https-native"]
 blocking-https-bundled = ["blocking", "minreq/https-bundled"]
 
 tokio = ["dep:tokio"]
-async = [  "tokio?/time"]
+async = ["tokio?/time"]
 async-https = ["async"]
 async-https-native = ["async"]
 async-https-rustls = ["async"]
