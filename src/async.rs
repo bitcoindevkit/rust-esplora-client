@@ -14,9 +14,6 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use std::time::Duration;//-----------------------added----------------
-use std::convert::TryInto;//-------------------added-----------------
-
 use bitcoin::consensus::{deserialize, serialize, Decodable, Encodable};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
@@ -64,58 +61,22 @@ pub struct AsyncClient<S = DefaultSleeper> {
 impl<S: Sleeper> AsyncClient<S> {
     /// Build an async client from a builder
     pub fn from_builder(builder: Builder) -> Result<Self, Error> {
-
-        //----------------------------------------not needed since no client struct in async minreq------------------------------------
-    //     let mut client_builder = Client::builder();
-
-    //     #[cfg(not(target_arch = "wasm32"))]
-    //     if let Some(proxy) = &builder.proxy {
-    //         client_builder = client_builder.proxy(reqwest::Proxy::all(proxy)?);
-    //     }
-
-    //     #[cfg(not(target_arch = "wasm32"))]
-    //     if let Some(timeout) = builder.timeout {
-    //         client_builder = client_builder.timeout(core::time::Duration::from_secs(timeout));
-    //     }
-
-    //     if !builder.headers.is_empty() {
-    //         let mut headers = header::HeaderMap::new();
-    //         for (k, v) in builder.headers {
-    //             let header_name = header::HeaderName::from_lowercase(k.to_lowercase().as_bytes())
-    //                 .map_err(|_| Error::InvalidHttpHeaderName(k))?;
-    //             let header_value = header::HeaderValue::from_str(&v)
-    //                 .map_err(|_| Error::InvalidHttpHeaderValue(v))?;
-    //             headers.insert(header_name, header_value);
-    //         }
-    //         client_builder = client_builder.default_headers(headers);
-    //     }
-
-        // Ok(AsyncClient {
-        //     url: builder.base_url,
-        //     client: client_builder.build()?,
-        //     max_retries: builder.max_retries,
-        //     marker: PhantomData,
-        // })
-
-//--------------------------------------------------------------------------------------
          Ok(AsyncClient {
             url: builder.base_url,
             max_retries: builder.max_retries,
             headers: builder.headers,
             marker: PhantomData,
         })
-
-
     }
 
-        pub fn from_client(url: String, client: Client) -> Self {
+    pub fn from_client(url: String, headers: HashMap<String, String>,) -> Self {
         AsyncClient {
             url,
             headers,
             max_retries: crate::DEFAULT_MAX_RETRIES,
             marker: PhantomData,
         }
-    } 
+    }
     /// Make an HTTP GET request to given URL, deserializing to any `T` that
     /// implement [`bitcoin::consensus::Decodable`].
     ///
@@ -131,13 +92,12 @@ impl<S: Sleeper> AsyncClient<S> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
 
-        if !(response.status_code==200) {
+        if response.status_code>299 {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
                 message: response.as_str().unwrap().to_string(),
             });
         }
-
         Ok(deserialize::<T>(&response.as_bytes())?)
     }
 
@@ -171,13 +131,12 @@ impl<S: Sleeper> AsyncClient<S> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
 
-        if !(response.status_code==200) {
+        if response.status_code>299 {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
                 message: response.as_str().unwrap().to_string(),
             });
         }
-
        serde_json::from_str(&response.as_str().unwrap().to_string()).map_err(Error::Json)
     }
 
@@ -213,13 +172,12 @@ impl<S: Sleeper> AsyncClient<S> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
 
-        if !(response.status_code==200) {
+        if response.status_code>299 {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
                 message:response.as_str().unwrap().to_string(),
             });
         }
-
         let hex_str =response.as_str().unwrap().to_string();
         Ok(deserialize(&Vec::from_hex(&hex_str)?)?)
     }
@@ -250,13 +208,12 @@ impl<S: Sleeper> AsyncClient<S> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
 
-        if !(response.status_code==200) {
+        if response.status_code>299 {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
                 message:response.as_str().unwrap().to_string(),
             });
         }
-// let x=response.as_str().unwrap().to_string();
         Ok(response.as_str().unwrap().to_string())
     }
 
@@ -293,7 +250,13 @@ impl<S: Sleeper> AsyncClient<S> {
             request = request.with_header(key, value);
         }
        
-        let _ = request.send().await.map_err(Error::AsyncMinreq)?;
+        let response = request.send().await.map_err(Error::AsyncMinreq)?;
+        if response.status_code>299{
+            return Err(Error::HttpResponse {
+                status: response.status_code as u16,
+                message: response.as_str().unwrap().to_string(),
+            });
+        }
         Ok(())
     }
 
@@ -489,39 +452,26 @@ impl<S: Sleeper> AsyncClient<S> {
 
         loop {
              let mut request = Request::new(Method::Get, url);
-            // Apply headers from the builder.
+            // Applying headers from the builder.
             for (key, value) in &self.headers {
                 request = request.with_header(key, value);
             }
-            // request.
 
-            let res = request.send().await.map_err(Error::AsyncMinreq);
-        
-            match res {
-                Ok(body) => {
-
-              
-                    return Ok(body);
-
-                },
-                Err(e) => {
-                     
-                    if attempts < self.max_retries {
-                        S::sleep(delay).await;
-                        attempts += 1;
-                        delay *= 2;
-                        continue;
-                    }
-                    return Err(e);
+            match request.send().await? {
+                resp if attempts < self.max_retries && is_status_retryable(resp.status_code) => {
+                    S::sleep(delay).await;
+                    attempts += 1;
+                    delay *= 2;
                 }
+                resp => return Ok(resp),
             }
         }
     }
 }
 
-// fn is_status_retryable(status: reqwest::StatusCode) -> bool {
-//     RETRYABLE_ERROR_CODES.contains(&status.as_u16())
-// }
+fn is_status_retryable(status: i32) -> bool {
+    RETRYABLE_ERROR_CODES.contains(&(status as u16))
+}
 
 pub trait Sleeper: 'static {
     type Sleep: std::future::Future<Output = ()>;

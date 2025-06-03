@@ -200,15 +200,11 @@ pub enum Error {
     /// Error during `minreq` HTTP request
     #[cfg(feature = "blocking")]
     Minreq(::minreq::Error),
-    /// Error during reqwest HTTP request
-    //-----------------------------------------------changed------------------------------
-    // #[cfg(feature = "async")]
-    // Reqwest(::reqwest::Error),
+    /// Error during async_minreq HTTP request
      #[cfg(feature = "async")]
     AsyncMinreq(async_minreq::Error),
+    /// JSON Error
     Json(serde_json::Error),
-
-
     /// HTTP response error
     HttpResponse { status: u16, message: String },
     /// Invalid number returned
@@ -253,26 +249,12 @@ macro_rules! impl_error {
         }
     };
 }
-
 impl std::error::Error for Error {}
 #[cfg(feature = "blocking")]
 impl_error!(::minreq::Error, Minreq, Error);
-
-//---------------------------------------------changed------------------------------
 #[cfg(feature = "async")]
-// impl_error!(::reqwest::Error, Reqwest, Error);
-impl std::convert::From<async_minreq::Error> for Error {
-    fn from(err: async_minreq::Error) -> Self {
-        Error::AsyncMinreq(err)
-    }
-}
-
-impl std::convert::From<serde_json::Error> for Error {
-    fn from(err: serde_json::Error) -> Self {
-        Error::Json(err)
-    }
-}
-// impl_error!(::reqwest::Error, Reqwest, Error);
+impl_error!(::async_minreq::Error, AsyncMinreq, Error);
+impl_error!(::serde_json::Error, Json, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
 impl_error!(bitcoin::consensus::encode::Error, BitcoinEncoding, Error);
 impl_error!(bitcoin::hex::HexToArrayError, HexToArray, Error);
