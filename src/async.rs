@@ -77,13 +77,18 @@ impl<S: Sleeper> AsyncClient<S> {
     async fn get_response<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
-
+// let x=response.as_str().map(|s| s.to_owned()).map_err(Error::InvalidResponse).unwrap_or_else(|s| s.to_stirng());
+ 
         if response.status_code>299 {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
-                message: response.as_str().unwrap().to_string(),
+                message:match response.as_str(){
+                            Ok(resp)=> resp.to_string(),
+                            Err(_) => return Err(Error::InvalidResponse),
+                        }
             });
         }
+        // String::try_from(value)
         Ok(deserialize::<T>(&response.as_bytes())?)
     }
 
@@ -120,10 +125,16 @@ impl<S: Sleeper> AsyncClient<S> {
         if response.status_code>299 {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
-                message: response.as_str().unwrap().to_string(),
+                message: match response.as_str(){
+                            Ok(resp)=> resp.to_string(),
+                            Err(_) => return Err(Error::InvalidResponse),
+                        },
             });
         }
-       serde_json::from_str(&response.as_str().unwrap().to_string()).map_err(Error::Json)
+       serde_json::from_str(match response.as_str(){
+                            Ok(resp)=> resp,
+                            Err(_) => return Err(Error::InvalidResponse),
+                        }).map_err(Error::Json)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -161,10 +172,16 @@ impl<S: Sleeper> AsyncClient<S> {
         if response.status_code>299 {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
-                message:response.as_str().unwrap().to_string(),
+                message:match response.as_str(){
+                            Ok(resp)=> resp.to_string(),
+                            Err(_) => return Err(Error::InvalidResponse),
+                        }
             });
         }
-        let hex_str =response.as_str().unwrap().to_string();
+        let hex_str =match response.as_str(){
+                            Ok(resp)=> resp.to_string(),
+                            Err(_) => return Err(Error::InvalidResponse),
+                        };
         Ok(deserialize(&Vec::from_hex(&hex_str)?)?)
     }
 
@@ -197,10 +214,16 @@ impl<S: Sleeper> AsyncClient<S> {
         if response.status_code>299 {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
-                message:response.as_str().unwrap().to_string(),
+                message:match response.as_str(){
+                            Ok(resp)=> resp.to_string(),
+                            Err(_) => return Err(Error::InvalidResponse),
+                        }
             });
         }
-        Ok(response.as_str().unwrap().to_string())
+        Ok(match response.as_str(){
+                            Ok(resp)=> resp.to_string(),
+                            Err(_) => return Err(Error::InvalidResponse),
+                        })
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -240,7 +263,10 @@ impl<S: Sleeper> AsyncClient<S> {
         if response.status_code>299{
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
-                message: response.as_str().unwrap().to_string(),
+                message: match response.as_str(){
+                            Ok(resp)=> resp.to_string(),
+                            Err(_) => return Err(Error::InvalidResponse),
+                        }
             });
         }
         Ok(())
