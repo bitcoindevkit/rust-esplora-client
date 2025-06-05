@@ -204,7 +204,7 @@ pub enum Error {
     #[cfg(feature = "blocking")]
     Minreq(::minreq::Error),
     /// Error during async_minreq HTTP request
-     #[cfg(feature = "async")]
+    #[cfg(feature = "async")]
     AsyncMinreq(async_minreq::Error),
     /// JSON Error
     Json(serde_json::Error),
