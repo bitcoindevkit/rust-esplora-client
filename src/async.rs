@@ -34,7 +34,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct AsyncClient<S = DefaultSleeper> {
-    /// The base URL of the Esplora server.
+    /// The URL of the Esplora Server.
     url: String,
     /// Number of times to retry a request.
     max_retries: usize,
@@ -77,8 +77,7 @@ impl<S: Sleeper> AsyncClient<S> {
     async fn get_response<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
-// let x=response.as_str().map(|s| s.to_owned()).map_err(Error::InvalidResponse).unwrap_or_else(|s| s.to_stirng());
- 
+
         if response.status_code>299 {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
@@ -88,7 +87,7 @@ impl<S: Sleeper> AsyncClient<S> {
                         }
             });
         }
-        // String::try_from(value)
+
         Ok(deserialize::<T>(&response.as_bytes())?)
     }
 
@@ -459,7 +458,6 @@ impl<S: Sleeper> AsyncClient<S> {
 
         loop {
              let mut request = Request::new(Method::Get, url);
-            // Applying headers from the builder.
             for (key, value) in &self.headers {
                 request = request.with_header(key, value);
             }
