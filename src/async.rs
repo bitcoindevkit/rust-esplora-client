@@ -11,9 +11,6 @@
 
 //! Esplora by way of `reqwest` HTTP client.
 
-use std::collections::HashMap;
-use std::marker::PhantomData;
-use std::str::FromStr;
 use bitcoin::consensus::{deserialize, serialize, Decodable, Encodable};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
@@ -21,16 +18,18 @@ use bitcoin::Address;
 use bitcoin::{
     block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
 };
+use std::collections::HashMap;
+use std::marker::PhantomData;
+use std::str::FromStr;
 
-#[allow(unused_imports)]
-use log::{debug, error, info, trace};
-
-use async_minreq::{Method, Request};
 use crate::api::AddressStats;
 use crate::{
     BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus,
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
+use async_minreq::{Method, Request};
+#[allow(unused_imports)]
+use log::{debug, error, info, trace};
 
 #[derive(Debug, Clone)]
 pub struct AsyncClient<S = DefaultSleeper> {
@@ -47,7 +46,7 @@ pub struct AsyncClient<S = DefaultSleeper> {
 impl<S: Sleeper> AsyncClient<S> {
     /// Build an async client from a builder
     pub fn from_builder(builder: Builder) -> Result<Self, Error> {
-         Ok(AsyncClient {
+        Ok(AsyncClient {
             url: builder.base_url,
             max_retries: builder.max_retries,
             headers: builder.headers,
@@ -55,7 +54,7 @@ impl<S: Sleeper> AsyncClient<S> {
         })
     }
 
-    pub fn from_client(url: String, headers: HashMap<String, String>,) -> Self {
+    pub fn from_client(url: String, headers: HashMap<String, String>) -> Self {
         AsyncClient {
             url,
             headers,
@@ -78,17 +77,17 @@ impl<S: Sleeper> AsyncClient<S> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
 
-        if response.status_code>299 {
+        if response.status_code > 299 {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
-                message:match response.as_str(){
-                            Ok(resp)=> resp.to_string(),
-                            Err(_) => return Err(Error::InvalidResponse),
-                        }
+                message: match response.as_str() {
+                    Ok(resp) => resp.to_string(),
+                    Err(_) => return Err(Error::InvalidResponse),
+                },
             });
         }
 
-        Ok(deserialize::<T>(&response.as_bytes())?)
+        Ok(deserialize::<T>(response.as_bytes())?)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -121,19 +120,20 @@ impl<S: Sleeper> AsyncClient<S> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
 
-        if response.status_code>299 {
+        if response.status_code > 299 {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
-                message: match response.as_str(){
-                            Ok(resp)=> resp.to_string(),
-                            Err(_) => return Err(Error::InvalidResponse),
-                        },
+                message: match response.as_str() {
+                    Ok(resp) => resp.to_string(),
+                    Err(_) => return Err(Error::InvalidResponse),
+                },
             });
         }
-       serde_json::from_str(match response.as_str(){
-                            Ok(resp)=> resp,
-                            Err(_) => return Err(Error::InvalidResponse),
-                        }).map_err(Error::Json)
+        serde_json::from_str(match response.as_str() {
+            Ok(resp) => resp,
+            Err(_) => return Err(Error::InvalidResponse),
+        })
+        .map_err(Error::Json)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -168,19 +168,19 @@ impl<S: Sleeper> AsyncClient<S> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
 
-        if response.status_code>299 {
+        if response.status_code > 299 {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
-                message:match response.as_str(){
-                            Ok(resp)=> resp.to_string(),
-                            Err(_) => return Err(Error::InvalidResponse),
-                        }
+                message: match response.as_str() {
+                    Ok(resp) => resp.to_string(),
+                    Err(_) => return Err(Error::InvalidResponse),
+                },
             });
         }
-        let hex_str =match response.as_str(){
-                            Ok(resp)=> resp.to_string(),
-                            Err(_) => return Err(Error::InvalidResponse),
-                        };
+        let hex_str = match response.as_str() {
+            Ok(resp) => resp.to_string(),
+            Err(_) => return Err(Error::InvalidResponse),
+        };
         Ok(deserialize(&Vec::from_hex(&hex_str)?)?)
     }
 
@@ -210,19 +210,19 @@ impl<S: Sleeper> AsyncClient<S> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
 
-        if response.status_code>299 {
+        if response.status_code > 299 {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
-                message:match response.as_str(){
-                            Ok(resp)=> resp.to_string(),
-                            Err(_) => return Err(Error::InvalidResponse),
-                        }
+                message: match response.as_str() {
+                    Ok(resp) => resp.to_string(),
+                    Err(_) => return Err(Error::InvalidResponse),
+                },
             });
         }
-        Ok(match response.as_str(){
-                            Ok(resp)=> resp.to_string(),
-                            Err(_) => return Err(Error::InvalidResponse),
-                        })
+        Ok(match response.as_str() {
+            Ok(resp) => resp.to_string(),
+            Err(_) => return Err(Error::InvalidResponse),
+        })
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -257,15 +257,15 @@ impl<S: Sleeper> AsyncClient<S> {
         for (key, value) in &self.headers {
             request = request.with_header(key, value);
         }
-       
+
         let response = request.send().await.map_err(Error::AsyncMinreq)?;
-        if response.status_code>299{
+        if response.status_code > 299 {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
-                message: match response.as_str(){
-                            Ok(resp)=> resp.to_string(),
-                            Err(_) => return Err(Error::InvalidResponse),
-                        }
+                message: match response.as_str() {
+                    Ok(resp) => resp.to_string(),
+                    Err(_) => return Err(Error::InvalidResponse),
+                },
             });
         }
         Ok(())
@@ -457,7 +457,7 @@ impl<S: Sleeper> AsyncClient<S> {
         let mut attempts = 0;
 
         loop {
-             let mut request = Request::new(Method::Get, url);
+            let mut request = Request::new(Method::Get, url);
             for (key, value) in &self.headers {
                 request = request.with_header(key, value);
             }
