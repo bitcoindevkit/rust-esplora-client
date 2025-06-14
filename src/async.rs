@@ -25,9 +25,9 @@ use std::str::FromStr;
 use crate::api::AddressStats;
 use crate::{
     BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus,
-    BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
+    BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES, VALID_HTTP_CODE
 };
-use async_minreq::{Method, Request};
+use async_minreq::{Method, Request, Response};
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
@@ -77,7 +77,7 @@ impl<S: Sleeper> AsyncClient<S> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
 
-        if response.status_code > 299 {
+        if response.status_code > VALID_HTTP_CODE {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
                 message: match response.as_str() {
@@ -120,7 +120,7 @@ impl<S: Sleeper> AsyncClient<S> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
 
-        if response.status_code > 299 {
+        if response.status_code > VALID_HTTP_CODE {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
                 message: match response.as_str() {
@@ -129,11 +129,7 @@ impl<S: Sleeper> AsyncClient<S> {
                 },
             });
         }
-        serde_json::from_str(match response.as_str() {
-            Ok(resp) => resp,
-            Err(_) => return Err(Error::InvalidResponse),
-        })
-        .map_err(Error::Json)
+        response.json().map_err(Error::AsyncMinreq)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -168,7 +164,7 @@ impl<S: Sleeper> AsyncClient<S> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
 
-        if response.status_code > 299 {
+        if response.status_code > VALID_HTTP_CODE {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
                 message: match response.as_str() {
@@ -210,7 +206,7 @@ impl<S: Sleeper> AsyncClient<S> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
 
-        if response.status_code > 299 {
+        if response.status_code > VALID_HTTP_CODE {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
                 message: match response.as_str() {
@@ -259,7 +255,7 @@ impl<S: Sleeper> AsyncClient<S> {
         }
 
         let response = request.send().await.map_err(Error::AsyncMinreq)?;
-        if response.status_code > 299 {
+        if response.status_code > VALID_HTTP_CODE {
             return Err(Error::HttpResponse {
                 status: response.status_code as u16,
                 message: match response.as_str() {
@@ -280,7 +276,7 @@ impl<S: Sleeper> AsyncClient<S> {
     pub async fn get_tx_no_opt(&self, txid: &Txid) -> Result<Transaction, Error> {
         match self.get_tx(txid).await {
             Ok(Some(tx)) => Ok(tx),
-            Ok(None) => Err(Error::TransactionNotFound(*txid)), //look into
+            Ok(None) => Err(Error::TransactionNotFound(*txid)),
             Err(e) => Err(e),
         }
     }
@@ -452,7 +448,7 @@ impl<S: Sleeper> AsyncClient<S> {
 
     /// Sends a GET request to the given `url`, retrying failed attempts
     /// for retryable error codes until max retries hit.
-    async fn get_with_retry(&self, url: &str) -> Result<async_minreq::Response, Error> {
+    async fn get_with_retry(&self, url: &str) -> Result<Response, Error> {
         let mut delay = BASE_BACKOFF_MILLIS;
         let mut attempts = 0;
 
