@@ -231,7 +231,7 @@ pub enum Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -323,14 +323,14 @@ mod test {
 
         let esplora_url = ELECTRSD.esplora_url.as_ref().unwrap();
 
-        let mut builder = Builder::new(&format!("http://{}", esplora_url));
+        let mut builder = Builder::new(&format!("http://{esplora_url}"));
         if !headers.is_empty() {
             builder.headers = headers;
         }
 
         let blocking_client = builder.build_blocking();
 
-        let builder_async = Builder::new(&format!("http://{}", esplora_url));
+        let builder_async = Builder::new(&format!("http://{esplora_url}"));
 
         #[cfg(feature = "tokio")]
         let async_client = builder_async.build_async().unwrap();

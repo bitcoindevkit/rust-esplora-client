@@ -419,8 +419,8 @@ impl<S: Sleeper> AsyncClient<S> {
     ) -> Result<Vec<Tx>, Error> {
         let script_hash = sha256::Hash::hash(script.as_bytes());
         let path = match last_seen {
-            Some(last_seen) => format!("/scripthash/{:x}/txs/chain/{}", script_hash, last_seen),
-            None => format!("/scripthash/{:x}/txs", script_hash),
+            Some(last_seen) => format!("/scripthash/{script_hash:x}/txs/chain/{last_seen}"),
+            None => format!("/scripthash/{script_hash:x}/txs"),
         };
 
         self.get_response_json(&path).await

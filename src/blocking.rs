@@ -197,7 +197,7 @@ impl BlockingClient {
 
     /// Get a [`Transaction`] option given its [`Txid`]
     pub fn get_tx(&self, txid: &Txid) -> Result<Option<Transaction>, Error> {
-        self.get_opt_response(&format!("/tx/{}/raw", txid))
+        self.get_opt_response(&format!("/tx/{txid}/raw"))
     }
 
     /// Get a [`Transaction`] given its [`Txid`].
@@ -216,44 +216,44 @@ impl BlockingClient {
         block_hash: &BlockHash,
         index: usize,
     ) -> Result<Option<Txid>, Error> {
-        self.get_opt_response_txid(&format!("/block/{}/txid/{}", block_hash, index))
+        self.get_opt_response_txid(&format!("/block/{block_hash}/txid/{index}"))
     }
 
     /// Get the status of a [`Transaction`] given its [`Txid`].
     pub fn get_tx_status(&self, txid: &Txid) -> Result<TxStatus, Error> {
-        self.get_response_json(&format!("/tx/{}/status", txid))
+        self.get_response_json(&format!("/tx/{txid}/status"))
     }
 
     /// Get transaction info given it's [`Txid`].
     pub fn get_tx_info(&self, txid: &Txid) -> Result<Option<Tx>, Error> {
-        self.get_opt_response_json(&format!("/tx/{}", txid))
+        self.get_opt_response_json(&format!("/tx/{txid}"))
     }
 
     /// Get a [`BlockHeader`] given a particular block hash.
     pub fn get_header_by_hash(&self, block_hash: &BlockHash) -> Result<BlockHeader, Error> {
-        self.get_response_hex(&format!("/block/{}/header", block_hash))
+        self.get_response_hex(&format!("/block/{block_hash}/header"))
     }
 
     /// Get the [`BlockStatus`] given a particular [`BlockHash`].
     pub fn get_block_status(&self, block_hash: &BlockHash) -> Result<BlockStatus, Error> {
-        self.get_response_json(&format!("/block/{}/status", block_hash))
+        self.get_response_json(&format!("/block/{block_hash}/status"))
     }
 
     /// Get a [`Block`] given a particular [`BlockHash`].
     pub fn get_block_by_hash(&self, block_hash: &BlockHash) -> Result<Option<Block>, Error> {
-        self.get_opt_response(&format!("/block/{}/raw", block_hash))
+        self.get_opt_response(&format!("/block/{block_hash}/raw"))
     }
 
     /// Get a merkle inclusion proof for a [`Transaction`] with the given
     /// [`Txid`].
     pub fn get_merkle_proof(&self, txid: &Txid) -> Result<Option<MerkleProof>, Error> {
-        self.get_opt_response_json(&format!("/tx/{}/merkle-proof", txid))
+        self.get_opt_response_json(&format!("/tx/{txid}/merkle-proof"))
     }
 
     /// Get a [`MerkleBlock`] inclusion proof for a [`Transaction`] with the
     /// given [`Txid`].
     pub fn get_merkle_block(&self, txid: &Txid) -> Result<Option<MerkleBlock>, Error> {
-        self.get_opt_response_hex(&format!("/tx/{}/merkleblock-proof", txid))
+        self.get_opt_response_hex(&format!("/tx/{txid}/merkleblock-proof"))
     }
 
     /// Get the spending status of an output given a [`Txid`] and the output
@@ -263,7 +263,7 @@ impl BlockingClient {
         txid: &Txid,
         index: u64,
     ) -> Result<Option<OutputStatus>, Error> {
-        self.get_opt_response_json(&format!("/tx/{}/outspend/{}", txid, index))
+        self.get_opt_response_json(&format!("/tx/{txid}/outspend/{index}"))
     }
 
     /// Broadcast a [`Transaction`] to Esplora
@@ -309,7 +309,7 @@ impl BlockingClient {
 
     /// Get the [`BlockHash`] of a specific block height
     pub fn get_block_hash(&self, block_height: u32) -> Result<BlockHash, Error> {
-        self.get_response_str(&format!("/block-height/{}", block_height))
+        self.get_response_str(&format!("/block-height/{block_height}"))
             .map(|s| BlockHash::from_str(s.as_str()).map_err(Error::HexToArray))?
     }
 
@@ -354,8 +354,8 @@ impl BlockingClient {
     ) -> Result<Vec<Tx>, Error> {
         let script_hash = sha256::Hash::hash(script.as_bytes());
         let path = match last_seen {
-            Some(last_seen) => format!("/scripthash/{:x}/txs/chain/{}", script_hash, last_seen),
-            None => format!("/scripthash/{:x}/txs", script_hash),
+            Some(last_seen) => format!("/scripthash/{script_hash:x}/txs/chain/{last_seen}"),
+            None => format!("/scripthash/{script_hash:x}/txs"),
         };
         self.get_response_json(&path)
     }
@@ -367,7 +367,7 @@ impl BlockingClient {
     /// esplora returns `10` while [mempool.space](https://mempool.space/docs/api) returns `15`.
     pub fn get_blocks(&self, height: Option<u32>) -> Result<Vec<BlockSummary>, Error> {
         let path = match height {
-            Some(height) => format!("/blocks/{}", height),
+            Some(height) => format!("/blocks/{height}"),
             None => "/blocks".to_string(),
         };
         let blocks: Vec<BlockSummary> = self.get_response_json(&path)?;
