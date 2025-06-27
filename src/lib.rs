@@ -63,7 +63,10 @@
 //! * `async-https-rustls-manual-roots` enables [`reqwest`], the async client with support for
 //!   proxying and TLS (SSL) using the `rustls` TLS backend without using its the default root
 //!   certificates.
-
+//!
+//! [`dont remove this line or cargo doc will break`]: https://example.com
+#![cfg_attr(not(feature = "minreq"), doc = "[`minreq`]: https://docs.rs/minreq")]
+#![cfg_attr(not(feature = "reqwest"), doc = "[`reqwest`]: https://docs.rs/reqwest")]
 #![allow(clippy::result_large_err)]
 
 use std::collections::HashMap;
@@ -87,7 +90,7 @@ pub use blocking::BlockingClient;
 pub use r#async::AsyncClient;
 
 /// Response status codes for which the request may be retried.
-const RETRYABLE_ERROR_CODES: [u16; 3] = [
+pub const RETRYABLE_ERROR_CODES: [u16; 3] = [
     429, // TOO_MANY_REQUESTS
     500, // INTERNAL_SERVER_ERROR
     503, // SERVICE_UNAVAILABLE
