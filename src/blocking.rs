@@ -29,7 +29,7 @@ use bitcoin::{
     block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
 };
 
-use crate::api::AddressStats;
+use crate::api::{AddressStats, MempoolInfo};
 use crate::{
     BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus,
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
@@ -317,6 +317,10 @@ impl BlockingClient {
     /// blocks) and the value is the estimated feerate (in sat/vB).
     pub fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
         self.get_response_json("/fee-estimates")
+    }
+
+    pub fn get_mempool_info(&self) -> Result<MempoolInfo, Error> {
+        self.get_response_json("/mempool")
     }
 
     /// Get information about a specific address, includes confirmed balance and transactions in

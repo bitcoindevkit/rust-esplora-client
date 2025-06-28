@@ -28,7 +28,7 @@ use log::{debug, error, info, trace};
 
 use reqwest::{header, Client, Response};
 
-use crate::api::AddressStats;
+use crate::api::{AddressStats, MempoolInfo};
 use crate::{
     BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus,
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
@@ -430,6 +430,10 @@ impl<S: Sleeper> AsyncClient<S> {
     /// blocks) and the value is the estimated feerate (in sat/vB).
     pub async fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
         self.get_response_json("/fee-estimates").await
+    }
+
+    pub async fn get_mempool_info(&self) -> Result<MempoolInfo, Error> {
+        self.get_response_json("/mempool").await
     }
 
     /// Gets some recent block summaries starting at the tip or at `height` if
