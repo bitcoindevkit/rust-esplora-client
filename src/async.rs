@@ -9,7 +9,7 @@
 // You may not use this file except in accordance with one or both of these
 // licenses.
 
-//! Esplora by way of `reqwest` HTTP client.
+//! Esplora by way of `asyn_minreq` HTTP client.
 
 use bitcoin::consensus::{deserialize, serialize, Decodable, Encodable};
 use bitcoin::hashes::{sha256, Hash};
@@ -25,7 +25,7 @@ use std::str::FromStr;
 use crate::api::AddressStats;
 use crate::{
     BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus,
-    BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES, VALID_HTTP_CODE
+    BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES, VALID_HTTP_CODE,
 };
 use async_minreq::{Method, Request, Response};
 #[allow(unused_imports)]
