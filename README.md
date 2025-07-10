@@ -31,4 +31,8 @@ cargo update -p native-tls --precise "0.2.13"
 cargo update -p ring --precise "0.17.12"
 cargo update -p flate2 --precise "1.0.35"
 cargo update -p once_cell --precise "1.20.3"
+cargo update -p tracing-core --precise "0.1.33"
+cargo update -p parking_lot --precise "0.12.3"
+cargo update -p parking_lot_core --precise "0.9.10"
+cargo update -p lock_api --precise "0.4.12"
 ```
