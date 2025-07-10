@@ -54,12 +54,12 @@
 //! * `blocking-https-bundled` enables [`minreq`], the blocking client with proxy and TLS (SSL)
 //!   capabilities using a bundled OpenSSL library backend.
 //! * `async` enables [`async_minreq`], the async client with proxy capabilities.
-//! * `async-https` enables [`async_minreq`], the async client with support for proxying and TLS (SSL)
-//!   using the default [`async_minreq`] TLS backend.
-//! * `async-https-native` enables [`async_minreq`], the async client with support for proxying and TLS
-//!   (SSL) using the platform's native TLS backend (likely OpenSSL).
-//! * `async-https-rustls` enables [`async_minreq`], the async client with support for proxying and TLS
-//!   (SSL) using the `rustls` TLS backend.
+//! * `async-https` enables [`async_minreq`], the async client with support for proxying and TLS
+//!   (SSL) using the default [`async_minreq`] TLS backend.
+//! * `async-https-native` enables [`async_minreq`], the async client with support for proxying and
+//!   TLS (SSL) using the platform's native TLS backend (likely OpenSSL).
+//! * `async-https-rustls` enables [`async_minreq`], the async client with support for proxying and
+//!   TLS (SSL) using the `rustls` TLS backend.
 //! * `async-https-rustls-manual-roots` enables [`async_minreq`], the async client with support for
 //!   proxying and TLS (SSL) using the `rustls` TLS backend without using its the default root
 //!   certificates.
