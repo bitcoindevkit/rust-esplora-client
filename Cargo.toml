@@ -10,7 +10,7 @@ documentation = "https://docs.rs/esplora-client/"
 description = "Bitcoin Esplora API client library. Supports plaintext, TLS and Onion servers. Blocking or async"
 keywords = ["bitcoin", "esplora"]
 readme = "README.md"
-rust-version = "1.63.0"
+rust-version = "1.71.0"
 
 [lib]
 name = "esplora_client"
@@ -22,7 +22,7 @@ bitcoin = { version = "0.32", features = ["serde", "std"], default-features = fa
 hex = { version = "0.2", package = "hex-conservative" }
 log = "^0.4"
 minreq = { version = "2.11.0", features = ["json-using-serde"], optional = true }
-reqwest = { version = "0.12",  features = ["json"], default-features = false, optional = true }
+async_minreq = { git = "https://github.com/BEULAHEVANJALIN/async-minreq", default-features = false, features = ["json-using-serde"], optional = true }
 
 # default async runtime
 tokio = { version = "1", features = ["time"], optional = true }
@@ -42,8 +42,8 @@ blocking-https-native = ["blocking", "minreq/https-native"]
 blocking-https-bundled = ["blocking", "minreq/https-bundled"]
 
 tokio = ["dep:tokio"]
-async = ["reqwest", "reqwest/socks", "tokio?/time"]
-async-https = ["async", "reqwest/default-tls"]
-async-https-native = ["async", "reqwest/native-tls"]
-async-https-rustls = ["async", "reqwest/rustls-tls"]
-async-https-rustls-manual-roots = ["async", "reqwest/rustls-tls-manual-roots"]
+async = ["async_minreq", "async_minreq/proxy", "tokio?/time"]
+async-https = ["async", "async_minreq/https"]
+async-https-native = ["async", "async_minreq/https-native"]
+async-https-rustls = ["async", "async_minreq/https-rustls"]
+async-https-rustls-manual-roots = ["async"]
