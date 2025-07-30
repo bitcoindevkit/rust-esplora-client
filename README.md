@@ -34,4 +34,5 @@ cargo update -p parking_lot --precise "0.12.3"
 cargo update -p parking_lot_core --precise "0.9.10"
 cargo update -p lock_api --precise "0.4.12"
 cargo update -p socket2@0.6.0 --precise "0.5.10"
+cargo update -p webpki-roots@1.0.2 --precise "1.0.1"
 ```
