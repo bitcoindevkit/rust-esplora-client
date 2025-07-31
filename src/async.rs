@@ -34,6 +34,9 @@ use crate::{
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
+/// Struct that an HTTP client configured with an
+/// Esplora server URL, max retries, and a type
+/// marker for asynchronous sleep behavior.
 #[derive(Debug, Clone)]
 pub struct AsyncClient<S = DefaultSleeper> {
     /// The URL of the Esplora Server.
@@ -81,7 +84,7 @@ impl<S: Sleeper> AsyncClient<S> {
             marker: PhantomData,
         })
     }
-
+    /// A constructor for creating a new instance of `AsyncClient`.
     pub fn from_client(url: String, client: Client) -> Self {
         AsyncClient {
             url,
@@ -482,6 +485,9 @@ fn is_status_retryable(status: reqwest::StatusCode) -> bool {
     RETRYABLE_ERROR_CODES.contains(&status.as_u16())
 }
 
+/// The Sleeper trait defines an asynchronous
+/// sleep mechanism with an associated future
+/// type that completes after a given duration.
 pub trait Sleeper: 'static {
     type Sleep: std::future::Future<Output = ()>;
     fn sleep(dur: std::time::Duration) -> Self::Sleep;
