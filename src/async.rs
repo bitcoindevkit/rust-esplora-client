@@ -27,7 +27,10 @@ use crate::{
     BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus,
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES, VALID_HTTP_CODE,
 };
+#[cfg(feature = "async-minreq")]
 use async_minreq::{Method, Request, Response};
+use reqwest::{header, Client, Response};
+
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
@@ -37,6 +40,9 @@ pub struct AsyncClient<S = DefaultSleeper> {
     url: String,
     /// Number of times to retry a request.
     max_retries: usize,
+    #[cfg(feature = "async")]
+    client: Client,
+    #[cfg(feature = "async-minreq")]
     /// Default headers (applied to every request).
     headers: HashMap<String, String>,
     /// Marker for the sleeper.
@@ -44,6 +50,7 @@ pub struct AsyncClient<S = DefaultSleeper> {
 }
 
 impl<S: Sleeper> AsyncClient<S> {
+    #[cfg(feature = "async-minreq")]
     /// Build an async client from a builder
     pub fn from_builder(builder: Builder) -> Result<Self, Error> {
         Ok(AsyncClient {
@@ -54,10 +61,56 @@ impl<S: Sleeper> AsyncClient<S> {
         })
     }
 
+    #[cfg(feature = "async")]
+    /// Build an async client from a builder
+    pub fn from_builder(builder: Builder) -> Result<Self, Error> {
+        let mut client_builder = Client::builder();
+
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(proxy) = &builder.proxy {
+            client_builder = client_builder.proxy(reqwest::Proxy::all(proxy)?);
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(timeout) = builder.timeout {
+            client_builder = client_builder.timeout(core::time::Duration::from_secs(timeout));
+        }
+
+        if !builder.headers.is_empty() {
+            let mut headers = header::HeaderMap::new();
+            for (k, v) in builder.headers {
+                let header_name = header::HeaderName::from_lowercase(k.to_lowercase().as_bytes())
+                    .map_err(|_| Error::InvalidHttpHeaderName(k))?;
+                let header_value = header::HeaderValue::from_str(&v)
+                    .map_err(|_| Error::InvalidHttpHeaderValue(v))?;
+                headers.insert(header_name, header_value);
+            }
+            client_builder = client_builder.default_headers(headers);
+        }
+
+        Ok(AsyncClient {
+            url: builder.base_url,
+            client: client_builder.build()?,
+            max_retries: builder.max_retries,
+            marker: PhantomData,
+        })
+    }
+
+    #[cfg(feature = "async-minreq")]
     pub fn from_client(url: String, headers: HashMap<String, String>) -> Self {
         AsyncClient {
             url,
             headers,
+            max_retries: crate::DEFAULT_MAX_RETRIES,
+            marker: PhantomData,
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub fn from_client(url: String, client: Client) -> Self {
+        AsyncClient {
+            url,
+            client,
             max_retries: crate::DEFAULT_MAX_RETRIES,
             marker: PhantomData,
         }
@@ -77,17 +130,29 @@ impl<S: Sleeper> AsyncClient<S> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
 
-        if response.status_code > VALID_HTTP_CODE {
+        #[cfg(feature = "async-minreq")]
+        {
+            if response.status_code > VALID_HTTP_CODE {
+                return Err(Error::HttpResponse {
+                    status: response.status_code as u16,
+                    message: match response.as_str() {
+                        Ok(resp) => resp.to_string(),
+                        Err(_) => return Err(Error::InvalidResponse),
+                    },
+                });
+            }
+
+            return Ok(deserialize::<T>(response.as_bytes())?);
+        }
+        #[cfg(feature = "async")]
+        if !response.status().is_success() {
             return Err(Error::HttpResponse {
-                status: response.status_code as u16,
-                message: match response.as_str() {
-                    Ok(resp) => resp.to_string(),
-                    Err(_) => return Err(Error::InvalidResponse),
-                },
+                status: response.status().as_u16(),
+                message: response.text().await?,
             });
         }
 
-        Ok(deserialize::<T>(response.as_bytes())?)
+        Ok(deserialize::<T>(&response.bytes().await?)?)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -120,16 +185,30 @@ impl<S: Sleeper> AsyncClient<S> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
 
-        if response.status_code > VALID_HTTP_CODE {
+        #[cfg(feature = "async-minreq")]
+        {
+            if response.status_code > VALID_HTTP_CODE {
+                return Err(Error::HttpResponse {
+                    status: response.status_code as u16,
+                    message: match response.as_str() {
+                        Ok(resp) => resp.to_string(),
+                        Err(_) => return Err(Error::InvalidResponse),
+                    },
+                });
+            }
+
+            return response.json().map_err(Error::AsyncMinreq);
+        }
+
+        #[cfg(feature = "async")]
+        if !response.status().is_success() {
             return Err(Error::HttpResponse {
-                status: response.status_code as u16,
-                message: match response.as_str() {
-                    Ok(resp) => resp.to_string(),
-                    Err(_) => return Err(Error::InvalidResponse),
-                },
+                status: response.status().as_u16(),
+                message: response.text().await?,
             });
         }
-        response.json().map_err(Error::AsyncMinreq)
+
+        response.json::<T>().await.map_err(Error::Reqwest)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -164,19 +243,34 @@ impl<S: Sleeper> AsyncClient<S> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
 
-        if response.status_code > VALID_HTTP_CODE {
+        #[cfg(feature = "async-minreq")]
+        {
+            if response.status_code > VALID_HTTP_CODE {
+                return Err(Error::HttpResponse {
+                    status: response.status_code as u16,
+                    message: match response.as_str() {
+                        Ok(resp) => resp.to_string(),
+                        Err(_) => return Err(Error::InvalidResponse),
+                    },
+                });
+            }
+
+            let hex_str = match response.as_str() {
+                Ok(resp) => resp.to_string(),
+                Err(_) => return Err(Error::InvalidResponse),
+            };
+
+            return Ok(deserialize(&Vec::from_hex(&hex_str)?)?);
+        }
+        #[cfg(feature = "async")]
+        if !response.status().is_success() {
             return Err(Error::HttpResponse {
-                status: response.status_code as u16,
-                message: match response.as_str() {
-                    Ok(resp) => resp.to_string(),
-                    Err(_) => return Err(Error::InvalidResponse),
-                },
+                status: response.status().as_u16(),
+                message: response.text().await?,
             });
         }
-        let hex_str = match response.as_str() {
-            Ok(resp) => resp.to_string(),
-            Err(_) => return Err(Error::InvalidResponse),
-        };
+
+        let hex_str = response.text().await?;
         Ok(deserialize(&Vec::from_hex(&hex_str)?)?)
     }
 
@@ -206,19 +300,32 @@ impl<S: Sleeper> AsyncClient<S> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
 
-        if response.status_code > VALID_HTTP_CODE {
-            return Err(Error::HttpResponse {
-                status: response.status_code as u16,
-                message: match response.as_str() {
-                    Ok(resp) => resp.to_string(),
-                    Err(_) => return Err(Error::InvalidResponse),
-                },
+        #[cfg(feature = "async-minreq")]
+        {
+            if response.status_code > VALID_HTTP_CODE {
+                return Err(Error::HttpResponse {
+                    status: response.status_code as u16,
+                    message: match response.as_str() {
+                        Ok(resp) => resp.to_string(),
+                        Err(_) => return Err(Error::InvalidResponse),
+                    },
+                });
+            }
+
+            return Ok(match response.as_str() {
+                Ok(resp) => resp.to_string(),
+                Err(_) => return Err(Error::InvalidResponse),
             });
         }
-        Ok(match response.as_str() {
-            Ok(resp) => resp.to_string(),
-            Err(_) => return Err(Error::InvalidResponse),
-        })
+        #[cfg(feature = "async")]
+        if !response.status().is_success() {
+            return Err(Error::HttpResponse {
+                status: response.status().as_u16(),
+                message: response.text().await?,
+            });
+        }
+
+        Ok(response.text().await?)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -249,21 +356,34 @@ impl<S: Sleeper> AsyncClient<S> {
         let url = format!("{}{}", self.url, path);
         let body = serialize::<T>(&body).to_lower_hex_string();
 
-        let mut request = Request::new(Method::Post, &url).with_body(body);
-        for (key, value) in &self.headers {
-            request = request.with_header(key, value);
-        }
+        #[cfg(feature = "async-minreq")]
+        {
+            let mut request = Request::new(Method::Post, &url).with_body(body);
+            for (key, value) in &self.headers {
+                request = request.with_header(key, value);
+            }
 
-        let response = request.send().await.map_err(Error::AsyncMinreq)?;
-        if response.status_code > VALID_HTTP_CODE {
+            let response = request.send().await.map_err(Error::AsyncMinreq)?;
+            if response.status_code > VALID_HTTP_CODE {
+                return Err(Error::HttpResponse {
+                    status: response.status_code as u16,
+                    message: match response.as_str() {
+                        Ok(resp) => resp.to_string(),
+                        Err(_) => return Err(Error::InvalidResponse),
+                    },
+                });
+            }
+        }
+        #[cfg(feature = "async")]
+        let response = self.client.post(url).body(body).send().await?;
+
+        if !response.status().is_success() {
             return Err(Error::HttpResponse {
-                status: response.status_code as u16,
-                message: match response.as_str() {
-                    Ok(resp) => resp.to_string(),
-                    Err(_) => return Err(Error::InvalidResponse),
-                },
+                status: response.status().as_u16(),
+                message: response.text().await?,
             });
         }
+
         Ok(())
     }
 
@@ -445,21 +565,41 @@ impl<S: Sleeper> AsyncClient<S> {
     pub fn url(&self) -> &str {
         &self.url
     }
+    #[cfg(feature = "async")]
+    /// Get the underlying [`Client`].
+    pub fn client(&self) -> &Client {
+        &self.client
+    }
 
     /// Sends a GET request to the given `url`, retrying failed attempts
     /// for retryable error codes until max retries hit.
     async fn get_with_retry(&self, url: &str) -> Result<Response, Error> {
         let mut delay = BASE_BACKOFF_MILLIS;
         let mut attempts = 0;
+        #[cfg(feature = "async-minreq")]
+        {
+            loop {
+                let mut request = Request::new(Method::Get, url);
+                for (key, value) in &self.headers {
+                    request = request.with_header(key, value);
+                }
 
-        loop {
-            let mut request = Request::new(Method::Get, url);
-            for (key, value) in &self.headers {
-                request = request.with_header(key, value);
+                match request.send().await? {
+                    resp if attempts < self.max_retries
+                        && is_status_retryable(resp.status_code) =>
+                    {
+                        S::sleep(delay).await;
+                        attempts += 1;
+                        delay *= 2;
+                    }
+                    resp => return Ok(resp),
+                }
             }
-
-            match request.send().await? {
-                resp if attempts < self.max_retries && is_status_retryable(resp.status_code) => {
+        }
+        #[cfg(feature = "async")]
+        loop {
+            match self.client.get(url).send().await? {
+                resp if attempts < self.max_retries && is_status_retryable(resp.status()) => {
                     S::sleep(delay).await;
                     attempts += 1;
                     delay *= 2;
@@ -470,8 +610,13 @@ impl<S: Sleeper> AsyncClient<S> {
     }
 }
 
+#[cfg(feature = "async-minreq")]
 fn is_status_retryable(status: i32) -> bool {
     RETRYABLE_ERROR_CODES.contains(&(status as u16))
+}
+#[cfg(feature = "async")]
+fn is_status_retryable(status: reqwest::StatusCode) -> bool {
+    RETRYABLE_ERROR_CODES.contains(&status.as_u16())
 }
 
 pub trait Sleeper: 'static {
