@@ -14,7 +14,7 @@ Bitcoin Esplora API client library. Supports plaintext, TLS and Onion servers. B
 
 ## Minimum Supported Rust Version (MSRV)
 
-This library should compile with any combination of features with Rust 1.63.0.
+This library should compile with any combination of features with Rust 1.71.0.
 
 To build with the MSRV you will need to pin dependencies as follows:
 
@@ -35,4 +35,17 @@ cargo update -p parking_lot_core --precise "0.9.10"
 cargo update -p lock_api --precise "0.4.12"
 cargo update -p socket2@0.6.0 --precise "0.5.10"
 cargo update -p webpki-roots@1.0.2 --precise "1.0.1"
+```
+
+## Experimental Features using [async-minreq](https://crates.io/crates/async_minreq)
+
+async-minreq features are currently experimental but may become the only async client In the future once it's more mature.
+
+Currently Supported features
+
+```shell
+async-minreq
+async-minreq-https
+async-minreq-https-native
+async-minreq-https-rustls
 ```

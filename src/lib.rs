@@ -4,7 +4,7 @@
 //! async Esplora client to query Esplora's backend.
 //!
 //! The library provides the possibility to build a blocking
-//! client using [`minreq`] and an async client using [`reqwest`].
+//! client using [`minreq`] and an async client using [`async_minreq`].
 //! The library supports communicating to Esplora via a proxy
 //! and also using TLS (SSL) for secure communication.
 //!
@@ -53,19 +53,23 @@
 //!   capabilities using the platform's native TLS backend (likely OpenSSL).
 //! * `blocking-https-bundled` enables [`minreq`], the blocking client with proxy and TLS (SSL)
 //!   capabilities using a bundled OpenSSL library backend.
-//! * `async` enables [`reqwest`], the async client with proxy capabilities.
-//! * `async-https` enables [`reqwest`], the async client with support for proxying and TLS (SSL)
-//!   using the default [`reqwest`] TLS backend.
-//! * `async-https-native` enables [`reqwest`], the async client with support for proxying and TLS
-//!   (SSL) using the platform's native TLS backend (likely OpenSSL).
-//! * `async-https-rustls` enables [`reqwest`], the async client with support for proxying and TLS
-//!   (SSL) using the `rustls` TLS backend.
-//! * `async-https-rustls-manual-roots` enables [`reqwest`], the async client with support for
+//! * `async` enables [`async_minreq`], the async client with proxy capabilities.
+//! * `async-https` enables [`async_minreq`], the async client with support for proxying and TLS
+//!   (SSL) using the default [`async_minreq`] TLS backend.
+//! * `async-https-native` enables [`async_minreq`], the async client with support for proxying and
+//!   TLS (SSL) using the platform's native TLS backend (likely OpenSSL).
+//! * `async-https-rustls` enables [`async_minreq`], the async client with support for proxying and
+//!   TLS (SSL) using the `rustls` TLS backend.
+//! * `async-https-rustls-manual-roots` enables [`async_minreq`], the async client with support for
 //!   proxying and TLS (SSL) using the `rustls` TLS backend without using its the default root
 //!   certificates.
 //!
 //! [`dont remove this line or cargo doc will break`]: https://example.com
 #![cfg_attr(not(feature = "minreq"), doc = "[`minreq`]: https://docs.rs/minreq")]
+#![cfg_attr(
+    not(feature = "async_minreq"),
+    doc = "[`async_minreq`]: https://docs.rs/async-minreq"
+)]
 #![cfg_attr(not(feature = "reqwest"), doc = "[`reqwest`]: https://docs.rs/reqwest")]
 #![allow(clippy::result_large_err)]
 
@@ -102,6 +106,9 @@ const BASE_BACKOFF_MILLIS: Duration = Duration::from_millis(256);
 /// Default max retries.
 const DEFAULT_MAX_RETRIES: usize = 6;
 
+/// Valid HTTP code
+const VALID_HTTP_CODE: i32 = 299;
+
 /// Get a fee value in sats/vbytes from the estimates
 /// that matches the confirmation target set as parameter.
 ///
@@ -126,7 +133,7 @@ pub struct Builder {
     ///
     /// Note that the format of this value and the supported protocols change
     /// slightly between the blocking version of the client (using `minreq`)
-    /// and the async version (using `reqwest`). For more details check with
+    /// and the async version (using `async-minreq`). For more details check with
     /// the documentation of the two crates. Both of them are compiled with
     /// the `socks` feature enabled.
     ///
@@ -203,7 +210,9 @@ pub enum Error {
     /// Error during `minreq` HTTP request
     #[cfg(feature = "blocking")]
     Minreq(::minreq::Error),
-    /// Error during reqwest HTTP request
+    /// Error during async_minreq HTTP request
+    #[cfg(feature = "async-minreq")]
+    AsyncMinreq(async_minreq::Error),
     #[cfg(feature = "async")]
     Reqwest(::reqwest::Error),
     /// HTTP response error
@@ -250,10 +259,11 @@ macro_rules! impl_error {
         }
     };
 }
-
 impl std::error::Error for Error {}
 #[cfg(feature = "blocking")]
 impl_error!(::minreq::Error, Minreq, Error);
+#[cfg(feature = "async-minreq")]
+impl_error!(::async_minreq::Error, AsyncMinreq, Error);
 #[cfg(feature = "async")]
 impl_error!(::reqwest::Error, Reqwest, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
@@ -268,7 +278,7 @@ mod test {
     use lazy_static::lazy_static;
     use std::env;
     use tokio::sync::Mutex;
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     use {
         bitcoin::{hashes::Hash, Amount},
         corepc_node::AddressType,
@@ -302,15 +312,15 @@ mod test {
         static ref MINER: Mutex<()> = Mutex::new(());
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     static PREMINE: OnceCell<()> = OnceCell::const_new();
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     async fn setup_clients() -> (BlockingClient, AsyncClient) {
         setup_clients_with_headers(HashMap::new()).await
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     async fn setup_clients_with_headers(
         headers: HashMap<String, String>,
     ) -> (BlockingClient, AsyncClient) {
@@ -343,14 +353,14 @@ mod test {
         (blocking_client, async_client)
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     fn generate_blocks_and_wait(num: usize) {
         let cur_height = BITCOIND.client.get_block_count().unwrap().0;
         generate_blocks(num);
         wait_for_block(cur_height as usize + num);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     fn generate_blocks(num: usize) {
         let address = BITCOIND
             .client
@@ -359,7 +369,7 @@ mod test {
         let _block_hashes = BITCOIND.client.generate_to_address(num, &address).unwrap();
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     fn wait_for_block(min_height: usize) {
         let mut header = ELECTRSD.client.block_headers_subscribe().unwrap();
         loop {
@@ -374,7 +384,7 @@ mod test {
         }
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     fn exponential_backoff_poll<T, F>(mut poll: F) -> T
     where
         F: FnMut() -> Option<T>,
@@ -440,7 +450,7 @@ mod test {
         );
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_tx() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -463,7 +473,7 @@ mod test {
         assert_eq!(tx, tx_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_tx_no_opt() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -486,7 +496,7 @@ mod test {
         assert_eq!(tx_no_opt, tx_no_opt_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_tx_status() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -520,7 +530,7 @@ mod test {
         assert!(tx_status.block_time.is_none());
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_tx_info() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -581,7 +591,7 @@ mod test {
         assert_eq!(async_client.get_tx_info(&txid).await.unwrap(), None);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_header_by_hash() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -598,7 +608,7 @@ mod test {
         assert_eq!(block_header, block_header_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_block_status() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -628,7 +638,7 @@ mod test {
         assert_eq!(expected, block_status_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_non_existing_block_status() {
         // Esplora returns the same status for orphaned blocks as for non-existing
@@ -653,7 +663,7 @@ mod test {
         assert_eq!(expected, block_status_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_block_by_hash() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -673,7 +683,7 @@ mod test {
         assert_eq!(expected, block_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_that_errors_are_propagated() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -706,7 +716,7 @@ mod test {
         ));
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_block_by_hash_not_existing() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -722,7 +732,7 @@ mod test {
         assert!(block_async.is_none());
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_merkle_proof() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -746,7 +756,7 @@ mod test {
         assert!(merkle_proof.pos > 0);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_merkle_block() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -779,7 +789,7 @@ mod test {
         assert!(indexes[0] > 0);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_output_status() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -810,7 +820,7 @@ mod test {
         assert_eq!(output_status, output_status_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_height() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -820,7 +830,7 @@ mod test {
         assert_eq!(block_height, block_height_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_tip_hash() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -829,7 +839,7 @@ mod test {
         assert_eq!(tip_hash, tip_hash_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_block_hash() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -847,7 +857,7 @@ mod test {
         assert_eq!(block_hash, block_hash_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_txid_at_block_index() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -871,7 +881,7 @@ mod test {
         assert_eq!(txid_at_block_index, txid_at_block_index_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_fee_estimates() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -880,7 +890,7 @@ mod test {
         assert_eq!(fee_estimates.len(), fee_estimates_async.len());
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_scripthash_txs() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -922,7 +932,7 @@ mod test {
         assert_eq!(scripthash_txs_txids, scripthash_txs_txids_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_blocks() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -951,7 +961,7 @@ mod test {
         assert_eq!(blocks_genesis, blocks_genesis_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_tx_with_http_header() {
         let headers = [(
@@ -979,7 +989,7 @@ mod test {
         assert_eq!(tx, tx_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_address_stats() {
         let (blocking_client, async_client) = setup_clients().await;
@@ -1011,7 +1021,7 @@ mod test {
         assert_eq!(address_stats_async.chain_stats.funded_txo_sum, 1000);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", any(feature = "async", feature = "async-minreq")))]
     #[tokio::test]
     async fn test_get_address_txs() {
         let (blocking_client, async_client) = setup_clients().await;
