@@ -10,7 +10,7 @@ documentation = "https://docs.rs/esplora-client/"
 description = "Bitcoin Esplora API client library. Supports plaintext, TLS and Onion servers. Blocking or async"
 keywords = ["bitcoin", "esplora"]
 readme = "README.md"
-rust-version = "1.63.0"
+rust-version = "1.71.0"
 
 [lib]
 name = "esplora_client"
@@ -22,6 +22,7 @@ bitcoin = { version = "0.32", features = ["serde", "std"], default-features = fa
 hex = { version = "0.2", package = "hex-conservative" }
 log = "^0.4"
 minreq = { version = "2.11.0", features = ["json-using-serde"], optional = true }
+async_minreq = { version = "0.1.0", default-features = false, features = ["json-using-serde"], optional = true }
 reqwest = { version = "0.12",  features = ["json"], default-features = false, optional = true }
 
 # default async runtime
@@ -47,3 +48,9 @@ async-https = ["async", "reqwest/default-tls"]
 async-https-native = ["async", "reqwest/native-tls"]
 async-https-rustls = ["async", "reqwest/rustls-tls"]
 async-https-rustls-manual-roots = ["async", "reqwest/rustls-tls-manual-roots"]
+async-minreq = ["async_minreq", "async_minreq/proxy", "tokio?/time"]
+async-minreq-https = ["async-minreq", "async_minreq/https"]
+async-minreq-https-native = ["async-minreq", "async_minreq/https-native"]
+async-minreq-https-rustls = ["async-minreq", "async_minreq/https-rustls"]
+# TODO async-mineq does not support it for now
+# async-minreq-https-rustls-manual-roots = ["async-minreq"]
