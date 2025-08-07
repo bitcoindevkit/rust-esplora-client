@@ -123,6 +123,33 @@ pub struct AddressTxsSummary {
     pub tx_count: u32,
 }
 
+/// Information about an UTXO's status: confirmation status,
+/// confirmation height, confirmation block hash and confirmation block time.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserialize)]
+pub struct UtxoStatus {
+    /// Whether or not the UTXO is confirmed.
+    pub confirmed: bool,
+    /// The block height in which the UTXO was confirmed.
+    pub block_height: Option<u32>,
+    /// The block hash in which the UTXO was confirmed.
+    pub block_hash: Option<BlockHash>,
+    /// The UNIX timestamp in which the UTXO was confirmed.
+    pub block_time: Option<u64>,
+}
+
+/// Information about an UTXO's outpoint, confirmation status and value.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserialize)]
+pub struct Utxo {
+    /// The [`Txid`] of the transaction that created the UTXO.
+    pub txid: Txid,
+    /// The output index of the UTXO on the transaction that created the it.
+    pub vout: u32,
+    /// The confirmation status of the UTXO.
+    pub status: UtxoStatus,
+    /// The value of the UTXO as an [`Amount`].
+    pub value: Amount,
+}
+
 impl Tx {
     pub fn to_tx(&self) -> Transaction {
         Transaction {

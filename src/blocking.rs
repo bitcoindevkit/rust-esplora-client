@@ -31,7 +31,7 @@ use bitcoin::{
 
 use crate::api::AddressStats;
 use crate::{
-    BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus,
+    BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus, Utxo,
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
@@ -375,6 +375,11 @@ impl BlockingClient {
             return Err(Error::InvalidResponse);
         }
         Ok(blocks)
+    }
+
+    /// Get all UTXOs locked to an address.
+    pub fn get_address_utxos(&self, address: &Address) -> Result<Vec<Utxo>, Error> {
+        self.get_response_json(&format!("/address/{address}/utxo"))
     }
 
     /// Sends a GET request to the given `url`, retrying failed attempts
