@@ -1037,4 +1037,32 @@ mod test {
         assert_eq!(address_txs_blocking, address_txs_async);
         assert_eq!(address_txs_async[0].txid, txid);
     }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_get_address_utxos() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+
+        let _txid = BITCOIND
+            .client
+            .send_to_address(&address, Amount::from_sat(21000))
+            .unwrap()
+            .txid()
+            .unwrap();
+
+        let _miner = MINER.lock().await;
+        generate_blocks_and_wait(1);
+
+        let address_utxos_blocking = blocking_client.get_address_utxos(&address).unwrap();
+        let address_utxos_async = async_client.get_address_utxos(&address).await.unwrap();
+
+        assert_ne!(address_utxos_blocking.len(), 0);
+        assert_ne!(address_utxos_async.len(), 0);
+        assert_eq!(address_utxos_blocking, address_utxos_async);
+    }
 }
