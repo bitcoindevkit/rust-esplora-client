@@ -288,7 +288,7 @@ impl BlockingClient {
     /// Broadcast a [`Transaction`] to Esplora
     pub fn broadcast(&self, transaction: &Transaction) -> Result<Txid, Error> {
         let request = self.post_request(
-            "tx",
+            "/tx",
             serialize(transaction)
                 .to_lower_hex_string()
                 .as_bytes()
@@ -330,7 +330,7 @@ impl BlockingClient {
             .collect::<Vec<_>>();
 
         let mut request = self.post_request(
-            "txs/package",
+            "/txs/package",
             serde_json::to_string(&serialized_txs)
                 .unwrap()
                 .as_bytes()
