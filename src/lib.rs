@@ -83,6 +83,9 @@ pub mod r#async;
 #[cfg(feature = "blocking")]
 pub mod blocking;
 
+#[cfg(feature = "async-ohttp")]
+pub(crate) mod ohttp;
+
 pub use api::*;
 #[cfg(feature = "blocking")]
 pub use blocking::BlockingClient;
@@ -195,6 +198,20 @@ impl Builder {
     pub fn build_async_with_sleeper<S: Sleeper>(self) -> Result<AsyncClient<S>, Error> {
         AsyncClient::from_builder(self)
     }
+
+    #[cfg(feature = "async-ohttp")]
+    pub async fn build_async_with_ohttp(
+        self,
+        ohttp_relay_url: &str,
+        ohttp_gateway_url: &str,
+    ) -> Result<AsyncClient, Error> {
+        use crate::ohttp::OhttpClient;
+
+        let ohttp_client = OhttpClient::new(ohttp_relay_url, ohttp_gateway_url).await?;
+        Ok(self
+            .build_async_with_sleeper()?
+            .set_ohttp_client(ohttp_client))
+    }
 }
 
 /// Errors that can happen during a request to `Esplora` servers.
@@ -230,6 +247,18 @@ pub enum Error {
     InvalidHttpHeaderValue(String),
     /// The server sent an invalid response
     InvalidResponse,
+    /// Error from Ohttp library
+    #[cfg(feature = "async-ohttp")]
+    Ohttp(bitcoin_ohttp::Error),
+    /// Error when reading and writing to bhttp payloads
+    #[cfg(feature = "async-ohttp")]
+    Bhttp(bhttp::Error),
+    /// Error when converting the http response to and from bhttp response
+    #[cfg(feature = "async-ohttp")]
+    Http(http::Error),
+    /// Error when parsing the URL
+    #[cfg(feature = "async-ohttp")]
+    UrlParsing(url::ParseError),
 }
 
 impl fmt::Display for Error {
