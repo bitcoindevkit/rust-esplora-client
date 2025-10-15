@@ -104,6 +104,9 @@ pub mod r#async;
 #[cfg(feature = "blocking")]
 pub mod blocking;
 
+#[cfg(feature = "async-ohttp")]
+pub(crate) mod ohttp;
+
 pub use api::*;
 #[cfg(any(feature = "blocking", feature = "async"))]
 use bitreq::Response;
@@ -165,7 +168,7 @@ fn is_server_error(response: &Response) -> bool {
 }
 
 /// Check if the [`Response`] status code is retryable (429, 500, 503).
-#[cfg(any(feature = "blocking", feature = "async"))]
+#[cfg(feature = "blocking")]
 fn is_retryable(response: &Response) -> bool {
     RETRYABLE_ERROR_CODES.contains(&(response.status_code as u16))
 }
@@ -333,6 +336,30 @@ impl Builder {
     pub fn build_async_with_sleeper<S: Sleeper>(self) -> Result<AsyncClient<S>, Error> {
         AsyncClient::from_builder(self)
     }
+
+    /// Build an [`AsyncClient`] that tunnels requests through an OHTTP relay
+    /// and gateway.
+    ///
+    /// The key config is fetched from `ohttp_gateway_url` before the client
+    /// is returned, revealing the caller's network metadata to the gateway.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the key config cannot be fetched or decoded,
+    /// or if the async HTTP client cannot be constructed.
+    #[cfg(feature = "async-ohttp")]
+    pub async fn build_async_with_ohttp(
+        self,
+        ohttp_relay_url: &str,
+        ohttp_gateway_url: &str,
+    ) -> Result<AsyncClient, Error> {
+        use crate::ohttp::OhttpClient;
+
+        let ohttp_client = OhttpClient::new(ohttp_relay_url, ohttp_gateway_url).await?;
+        Ok(self
+            .build_async_with_sleeper()?
+            .set_ohttp_client(ohttp_client))
+    }
 }
 
 /// Errors that can occur while building clients, sending requests, or decoding responses.
@@ -372,6 +399,15 @@ pub enum Error {
     InvalidHttpHeaderValue(String),
     /// The server sent an invalid response.
     InvalidResponse,
+    /// Error from Ohttp library
+    #[cfg(feature = "async-ohttp")]
+    Ohttp(bitcoin_ohttp::Error),
+    /// Error when reading and writing to bhttp payloads
+    #[cfg(feature = "async-ohttp")]
+    Bhttp(bhttp::Error),
+    /// Error when parsing the URL
+    #[cfg(feature = "async-ohttp")]
+    UrlParsing(url::ParseError),
 }
 
 impl fmt::Display for Error {
@@ -404,6 +440,12 @@ impl fmt::Display for Error {
                 write!(f, "Invalid HTTP header value: {value}")
             }
             Error::InvalidResponse => write!(f, "The server sent an invalid response"),
+            #[cfg(feature = "async-ohttp")]
+            Error::Ohttp(e) => write!(f, "OHTTP error: {e}"),
+            #[cfg(feature = "async-ohttp")]
+            Error::Bhttp(e) => write!(f, "BHTTP error: {e}"),
+            #[cfg(feature = "async-ohttp")]
+            Error::UrlParsing(e) => write!(f, "Failed to parse URL: {e}"),
         }
     }
 }

@@ -45,11 +45,50 @@ use bitcoin::{Address, Amount, Block, BlockHash, FeeRate, MerkleBlock, Script, T
 
 use bitreq::{Client, Method, Proxy, Request, RequestExt, Response};
 
+#[cfg(feature = "async-ohttp")]
+use crate::ohttp::OhttpClient;
 use crate::{
-    duration_to_timeout_secs, is_retryable, is_success, sat_per_vbyte_to_feerate, AddressStats,
-    BlockInfo, BlockStatus, Builder, Error, EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof,
+    duration_to_timeout_secs, is_success, sat_per_vbyte_to_feerate, AddressStats, BlockInfo,
+    BlockStatus, Builder, Error, EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof,
     OutputStatus, ScriptHashStats, SubmitPackageResult, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
 };
+
+/// A GET response body paired with its status code.
+///
+/// Regular requests produce this from a [`bitreq::Response`]. OHTTP-tunneled
+/// requests produce it directly from the decapsulated response, since
+/// [`bitreq::Response`] cannot be constructed outside the `bitreq` crate.
+pub(crate) struct RawResponse {
+    pub(crate) status_code: u16,
+    pub(crate) body: Vec<u8>,
+}
+
+impl RawResponse {
+    fn is_success(&self) -> bool {
+        (200..300).contains(&self.status_code)
+    }
+
+    fn is_retryable(&self) -> bool {
+        crate::RETRYABLE_ERROR_CODES.contains(&self.status_code)
+    }
+
+    fn as_str(&self) -> Result<&str, Error> {
+        std::str::from_utf8(&self.body).map_err(|_| Error::InvalidResponse)
+    }
+
+    fn json<T: serde::de::DeserializeOwned>(&self) -> Result<T, Error> {
+        serde_json::from_slice(&self.body).map_err(Error::SerdeJson)
+    }
+}
+
+impl From<Response> for RawResponse {
+    fn from(response: Response) -> Self {
+        RawResponse {
+            status_code: response.status_code as u16,
+            body: response.into_bytes(),
+        }
+    }
+}
 
 // FIXME: (@oleonardolima) there's no `Debug` implementation for `bitreq::Client`.
 /// An async client for interacting with an Esplora API server.
@@ -86,6 +125,9 @@ pub struct AsyncClient<S = DefaultSleeper> {
     client: Client,
     /// Marker for the sleeper implementation.
     marker: PhantomData<S>,
+    /// Ohttp config
+    #[cfg(feature = "async-ohttp")]
+    ohttp_client: Option<OhttpClient>,
 }
 
 impl<S: Sleeper> AsyncClient<S> {
@@ -108,6 +150,8 @@ impl<S: Sleeper> AsyncClient<S> {
             max_retries: builder.max_retries,
             client: Client::new(builder.max_connections),
             marker: PhantomData,
+            #[cfg(feature = "async-ohttp")]
+            ohttp_client: None,
         })
     }
 
@@ -150,17 +194,19 @@ impl<S: Sleeper> AsyncClient<S> {
         Ok(request)
     }
 
-    /// Sends a GET request to `url`, retrying on retryable status codes
+    /// Sends a GET request to `path`, retrying on retryable status codes
     /// with exponential backoff until [`AsyncClient::max_retries`] is reached.
-    async fn get_with_retry(&self, path: &str) -> Result<Response, Error> {
+    ///
+    /// When an [`Ohttp`](crate::ohttp::OhttpClient) client is configured, the
+    /// request is encapsulated and tunneled through the OHTTP relay instead
+    /// of being sent directly.
+    async fn get_with_retry(&self, path: &str) -> Result<RawResponse, Error> {
         let mut delay = BASE_BACKOFF_MILLIS;
         let mut attempts = 0;
 
-        let request = self.build_request(Method::Get, path)?;
-
         loop {
-            match request.clone().send_async_with_client(&self.client).await? {
-                response if attempts < self.max_retries && is_retryable(&response) => {
+            match self.send_get(path).await? {
+                response if attempts < self.max_retries && response.is_retryable() => {
                     S::sleep(delay).await;
                     attempts += 1;
                     delay *= 2;
@@ -168,6 +214,29 @@ impl<S: Sleeper> AsyncClient<S> {
                 response => return Ok(response),
             }
         }
+    }
+
+    /// Sends a single (non-retried) GET request to `path`.
+    async fn send_get(&self, path: &str) -> Result<RawResponse, Error> {
+        #[cfg(feature = "async-ohttp")]
+        if let Some(ohttp_client) = &self.ohttp_client {
+            let target = format!("{}{}", self.url, path);
+            let (body, ctx) = ohttp_client.encapsulate("GET", &target, None)?;
+            let relay_request = Request::new(Method::Post, ohttp_client.relay_url().to_string())
+                .with_header("Content-Type", "message/ohttp-req")
+                .with_body(body);
+            let relay_response = relay_request.send_async_with_client(&self.client).await?;
+            return ohttp_client.decapsulate(ctx, relay_response.into_bytes());
+        }
+
+        let request = self.build_request(Method::Get, path)?;
+        Ok(request.send_async_with_client(&self.client).await?.into())
+    }
+
+    #[cfg(feature = "async-ohttp")]
+    pub(crate) fn set_ohttp_client(mut self, ohttp_client: OhttpClient) -> Self {
+        self.ohttp_client = Some(ohttp_client);
+        self
     }
 
     /// Makes a GET request to `path`, deserializing the response body as raw
@@ -181,13 +250,15 @@ impl<S: Sleeper> AsyncClient<S> {
     async fn get_response<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         let response = self.get_with_retry(path).await?;
 
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+        if !response.is_success() {
             let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
+            return Err(Error::HttpResponse {
+                status: response.status_code,
+                message,
+            });
         }
 
-        Ok(deserialize::<T>(response.as_bytes())?)
+        Ok(deserialize::<T>(&response.body)?)
     }
 
     /// Makes a GET request to `path`, returning `None` on a 404 response.
@@ -216,13 +287,15 @@ impl<S: Sleeper> AsyncClient<S> {
     ) -> Result<T, Error> {
         let response = self.get_with_retry(path).await?;
 
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+        if !response.is_success() {
             let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
+            return Err(Error::HttpResponse {
+                status: response.status_code,
+                message,
+            });
         }
 
-        response.json::<T>().map_err(Error::BitReq)
+        response.json::<T>()
     }
 
     /// Makes a GET request to `path`, returning `None` on a 404 response.
@@ -251,10 +324,12 @@ impl<S: Sleeper> AsyncClient<S> {
     async fn get_response_hex<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         let response = self.get_with_retry(path).await?;
 
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+        if !response.is_success() {
             let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
+            return Err(Error::HttpResponse {
+                status: response.status_code,
+                message,
+            });
         }
 
         let hex_str = response.as_str()?;
@@ -283,10 +358,12 @@ impl<S: Sleeper> AsyncClient<S> {
     async fn get_response_text(&self, path: &str) -> Result<String, Error> {
         let response = self.get_with_retry(path).await?;
 
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+        if !response.is_success() {
             let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
+            return Err(Error::HttpResponse {
+                status: response.status_code,
+                message,
+            });
         }
 
         Ok(response.as_str()?.to_string())

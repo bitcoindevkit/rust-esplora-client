@@ -26,10 +26,17 @@ bitcoin = { version = "0.32", features = ["serde", "std"], default-features = fa
 hex = { version = "0.2.2", package = "hex-conservative" }
 bitreq = { version = "0.3.7", optional = true }
 # Default runtime when running async tests
-tokio = { version = "1", features = ["time"], optional = true }
+tokio = { version = "1.47.1", features = ["time"], optional = true } # blame: ohttp-relay -> tokio ^1.47.1
+bitcoin-ohttp = { version = "0.6.0", features = ["client", "rust-hpke"], default-features = false, optional = true}
+url = {version = "2.5.7", optional = true}
+bhttp = { version = "0.5.1", optional = true} # blame: bhttp >=0.6.0 requires rustc 1.81+, above our MSRV
+# Pins needed for `Cargo-minimal.lock`:
+thiserror = { version = "1.0.23", optional = true } # blame: bhttp -> thiserror <1.0.10's `#[from]` derive doesn't generate `From` impls; ohttp-relay -> tungstenite -> thiserror ^1.0.23
+hkdf = { version = "0.12.2", optional = true } # blame: bitcoin-hpke v0.13.0 -> hkdf <0.12.2 lacks the 2-generic-param `Hkdf`/`HkdfExtract` API
+
 
 [dev-dependencies]
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.47.1", features = ["full"] } # blame: ohttp-relay -> tokio ^1.47.1
 electrsd = { version = "0.40.0", default-features = false, features = ["legacy", "esplora_a33e97e1", "bitcoind_download", "bitcoind_29_0"] }
 # These pins are needed for `Cargo-minimal.lock`:
 tar = { version = "0.4.45" } # blame: electrsd v0.38.0 -> bitcoind -> tar
@@ -42,6 +49,7 @@ security-framework = { version = "=2.11.1" } # blame: rustls-native-certs 0.8.3 
 
 [features]
 default = ["blocking", "blocking-https", "async", "async-https", "tokio"]
+async-ohttp = ["async", "bitcoin-ohttp", "bhttp", "tokio", "url", "dep:thiserror", "dep:hkdf"]
 
 tokio = ["dep:tokio"]
 async = ["bitreq/async", "bitreq/proxy", "bitreq/json-using-serde", "tokio?/time"]
@@ -66,9 +74,26 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.rbmt.lint]
 allowed_duplicates = [
-    "getrandom",
     "windows-sys",
-    "wit-bindgen",
+    # blame: bitcoin-ohttp's `rust-hpke` feature bundles its (dead-code) legacy
+    # aead/hkdf backend alongside the `bitcoin-hpke`-based backend that's
+    # actually used, pulling in two versions of the same crypto crates.
+    "aead",
+    "block-buffer",
+    "chacha20",
+    "chacha20poly1305",
+    "cipher",
+    "cpufeatures",
+    "digest",
+    "hkdf",
+    "hmac",
+    "poly1305",
+    "sha2",
+    "universal-hash",
+    # blame: bitcoin-ohttp's build-dependencies pull in their own serde/serde_core
+    # instance, separate from the one resolved for our normal dependency graph.
+    "serde",
+    "serde_core",
 ]
 
 [package.metadata.rbmt.test]
