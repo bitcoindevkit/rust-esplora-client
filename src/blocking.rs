@@ -9,7 +9,7 @@
 // You may not use this file except in accordance with one or both of these
 // licenses.
 
-//! Esplora by way of `minreq` HTTP client.
+//! Esplora by way of `bitreq` HTTP client.
 
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -19,7 +19,7 @@ use std::thread;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
-use minreq::{Proxy, Request, Response};
+use bitreq::{Proxy, Request, Response};
 
 use bitcoin::consensus::{deserialize, serialize, Decodable};
 use bitcoin::hashes::{sha256, Hash};
@@ -68,7 +68,7 @@ impl BlockingClient {
 
     /// Perform a raw HTTP GET request with the given URI `path`.
     pub fn get_request(&self, path: &str) -> Result<Request, Error> {
-        let mut request = minreq::get(format!("{}{}", self.url, path));
+        let mut request = bitreq::get(format!("{}{}", self.url, path));
 
         if let Some(proxy) = &self.proxy {
             let proxy = Proxy::new(proxy.as_str())?;
@@ -110,7 +110,7 @@ impl BlockingClient {
                 Err(Error::HttpResponse { status, message })
             }
             Ok(resp) => Ok(Some(
-                Txid::from_str(resp.as_str().map_err(Error::Minreq)?).map_err(Error::HexToArray)?,
+                Txid::from_str(resp.as_str().map_err(Error::BitReq)?).map_err(Error::HexToArray)?,
             )),
             Err(e) => Err(e),
         }
@@ -125,7 +125,7 @@ impl BlockingClient {
                 Err(Error::HttpResponse { status, message })
             }
             Ok(resp) => {
-                let hex_str = resp.as_str().map_err(Error::Minreq)?;
+                let hex_str = resp.as_str().map_err(Error::BitReq)?;
                 let hex_vec = Vec::from_hex(hex_str).unwrap();
                 deserialize::<T>(&hex_vec)
                     .map_err(Error::BitcoinEncoding)
@@ -143,7 +143,7 @@ impl BlockingClient {
                 Err(Error::HttpResponse { status, message })
             }
             Ok(resp) => {
-                let hex_str = resp.as_str().map_err(Error::Minreq)?;
+                let hex_str = resp.as_str().map_err(Error::BitReq)?;
                 let hex_vec = Vec::from_hex(hex_str).unwrap();
                 deserialize::<T>(&hex_vec).map_err(Error::BitcoinEncoding)
             }
@@ -162,7 +162,7 @@ impl BlockingClient {
                 let message = resp.as_str().unwrap_or_default().to_string();
                 Err(Error::HttpResponse { status, message })
             }
-            Ok(resp) => Ok(resp.json::<T>().map_err(Error::Minreq)?),
+            Ok(resp) => Ok(resp.json()?),
             Err(e) => Err(e),
         }
     }
@@ -178,7 +178,7 @@ impl BlockingClient {
                 let message = resp.as_str().unwrap_or_default().to_string();
                 Err(Error::HttpResponse { status, message })
             }
-            Ok(resp) => Ok(Some(resp.json::<T>()?)),
+            Ok(resp) => Ok(Some(resp.json()?)),
             Err(e) => Err(e),
         }
     }
@@ -268,7 +268,7 @@ impl BlockingClient {
 
     /// Broadcast a [`Transaction`] to Esplora
     pub fn broadcast(&self, transaction: &Transaction) -> Result<(), Error> {
-        let mut request = minreq::post(format!("{}/tx", self.url)).with_body(
+        let mut request = bitreq::post(format!("{}/tx", self.url)).with_body(
             serialize(transaction)
                 .to_lower_hex_string()
                 .as_bytes()
@@ -291,7 +291,7 @@ impl BlockingClient {
                 Err(Error::HttpResponse { status, message })
             }
             Ok(_resp) => Ok(()),
-            Err(e) => Err(Error::Minreq(e)),
+            Err(e) => Err(Error::BitReq(e)),
         }
     }
 
