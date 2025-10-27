@@ -68,8 +68,11 @@ jobs:
         cargo update -p parking_lot --precise "0.12.3"
         cargo update -p parking_lot_core --precise "0.9.10"
         cargo update -p lock_api --precise "0.4.12"
-        cargo update -p socket2@0.6.0 --precise "0.5.10"
-        cargo update -p webpki-roots@1.0.2 --precise "1.0.1"
+        cargo update -p socket2@0.6.1 --precise "0.5.10"
+        cargo update -p webpki-roots@1.0.3 --precise "1.0.1"
+        cargo update -p openssl --precise "0.10.73"
+        cargo update -p openssl-sys --precise "0.9.109"
+        cargo update -p syn --precise "2.0.106"
 
         cargo update -p bzip2-sys --precise "0.1.12+1.0.8" # dev-dependency
     - name: Build
