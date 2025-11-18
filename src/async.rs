@@ -30,8 +30,8 @@ use reqwest::{header, Client, Response};
 
 use crate::api::AddressStats;
 use crate::{
-    BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus, Utxo,
-    BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
+    BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputSpendStatus, OutputStatus, Tx,
+    TxStatus, Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
 #[derive(Debug, Clone)]
@@ -313,6 +313,12 @@ impl<S: Sleeper> AsyncClient<S> {
     /// Get transaction info given it's [`Txid`].
     pub async fn get_tx_info(&self, txid: &Txid) -> Result<Option<Tx>, Error> {
         self.get_opt_response_json(&format!("/tx/{txid}")).await
+    }
+
+    /// Get the spend status of a [`Transaction`]'s outputs, given it's [`Txid`].
+    pub async fn get_tx_outspends(&self, txid: &Txid) -> Result<Vec<OutputSpendStatus>, Error> {
+        self.get_response_json(&format!("/tx/{txid}/outspends"))
+            .await
     }
 
     /// Get a [`BlockHeader`] given a particular block hash.
