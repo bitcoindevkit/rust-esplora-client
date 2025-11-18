@@ -38,4 +38,5 @@ cargo update -p webpki-roots@1.0.4 --precise "1.0.1"
 cargo update -p openssl --precise "0.10.73"
 cargo update -p openssl-sys --precise "0.9.109"
 cargo update -p syn --precise "2.0.106"
+cargo update -p quote --precise "1.0.41"
 ```
