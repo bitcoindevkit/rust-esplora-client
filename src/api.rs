@@ -150,6 +150,19 @@ pub struct Utxo {
     pub value: Amount,
 }
 
+/// Information about a single [`TxOut`]'s spend status.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct OutputSpendStatus {
+    /// Wheter this output is spent or not.
+    pub spent: bool,
+    /// The [`Txid`] of the [`Transaction`] that spent this [`TxOut`].
+    pub txid: Option<Txid>,
+    /// The input index of the [`Transaction`] that spent this [`Txout`].
+    pub vin: Option<u32>,
+    /// The status of the [`TxOut`], as a [`UtxoStatus`].
+    pub status: Option<UtxoStatus>,
+}
+
 impl Tx {
     pub fn to_tx(&self) -> Transaction {
         Transaction {
