@@ -229,6 +229,23 @@ pub struct OutputSpendStatus {
     pub status: Option<UtxoStatus>,
 }
 
+/// Statistics about the mempool.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct MempoolStats {
+    /// The number of transactions in the mempool.
+    pub count: usize,
+    /// The total size of mempool transactions in virtual bytes.
+    pub vsize: usize,
+    /// The total fee paid by mempool transactions, in sats.
+    pub total_fee: u64,
+    /// The mempool's fee rate distribution histogram.
+    ///
+    /// An array of `(feerate, vsize)` tuples, where each entry's `vsize` is the total vsize
+    /// of transactions paying more than `feerate` but less than the previous entry's `feerate`
+    /// (except for the first entry, which has no upper bound).
+    pub fee_histogram: Vec<(f64, usize)>,
+}
+
 impl Tx {
     pub fn to_tx(&self) -> Transaction {
         Transaction {
