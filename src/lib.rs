@@ -990,6 +990,48 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
+    async fn test_get_block_txids() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+
+        // Create 5 transactions and mine a block.
+        let txids: Vec<_> = (0..5)
+            .map(|_| {
+                BITCOIND
+                    .client
+                    .send_to_address(&address, Amount::from_sat(1000))
+                    .unwrap()
+                    .txid()
+                    .unwrap()
+            })
+            .collect();
+
+        let _miner = MINER.lock().await;
+        generate_blocks_and_wait(1);
+
+        // Get the block hash at height 1.
+        let blockhash = blocking_client.get_block_hash(1).unwrap();
+
+        let txids_async = async_client.get_block_txids(&blockhash).await.unwrap();
+        let txids_blocking = blocking_client.get_block_txids(&blockhash).unwrap();
+
+        assert_eq!(txids_async, txids_blocking);
+
+        // Compare expected and received (skipping the coinbase TXID).
+        txids
+            .iter()
+            .zip(txids_async.iter().skip(1))
+            .for_each(|(expected_txid, received_txid)| {
+                assert_eq!(expected_txid, received_txid);
+            });
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
     async fn test_get_blocks() {
         let (blocking_client, async_client) = setup_clients().await;
         let start_height = BITCOIND.client.get_block_count().unwrap().0;
