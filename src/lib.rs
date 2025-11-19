@@ -877,6 +877,39 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
+    async fn test_get_mempool_stats() {
+        let (blocking_client, async_client) = setup_clients().await;
+        let address = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+
+        for _ in 0..5 {
+            BITCOIND
+                .client
+                .send_to_address(&address, Amount::from_sat(1000))
+                .unwrap();
+        }
+
+        // Sleep for 5 seconds so the transaction has time to propagate to electrs' mempool.
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+        let stats_blocking = blocking_client.get_mempool_stats().unwrap();
+        let stats_async = async_client.get_mempool_stats().await.unwrap();
+
+        assert_eq!(stats_blocking, stats_async);
+
+        assert!(stats_blocking.count >= 5);
+        assert!(stats_blocking.vsize > 0);
+        assert!(stats_blocking.total_fee > 0);
+
+        if stats_blocking.count > 0 {
+            assert!(!stats_blocking.fee_histogram.is_empty());
+        }
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
     async fn test_get_fee_estimates() {
         let (blocking_client, async_client) = setup_clients().await;
         let fee_estimates = blocking_client.get_fee_estimates().unwrap();

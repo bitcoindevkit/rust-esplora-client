@@ -27,9 +27,9 @@ use log::{debug, error, info, trace};
 use reqwest::{header, Client, Response};
 
 use crate::{
-    AddressStats, BlockInformation, BlockStatus, BlockSummary, Builder, Error, MerkleProof,
-    OutputSpendStatus, OutputStatus, ScriptHashStats, Tx, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
-    RETRYABLE_ERROR_CODES,
+    AddressStats, BlockInformation, BlockStatus, BlockSummary, Builder, Error, MempoolStats,
+    MerkleProof, OutputSpendStatus, OutputStatus, ScriptHashStats, Tx, TxStatus, Utxo,
+    BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
 #[derive(Debug, Clone)]
@@ -451,6 +451,11 @@ impl<S: Sleeper> AsyncClient<S> {
         let path = format!("/scripthash/{script_hash:x}/txs/mempool");
 
         self.get_response_json(&path).await
+    }
+
+    /// Get statistics about the mempool.
+    pub async fn get_mempool_stats(&self) -> Result<MempoolStats, Error> {
+        self.get_response_json("/mempool").await
     }
 
     /// Get an map where the key is the confirmation target (in number of
