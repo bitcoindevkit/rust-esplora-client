@@ -6,7 +6,8 @@ pub use bitcoin::consensus::{deserialize, serialize};
 pub use bitcoin::hex::FromHex;
 use bitcoin::Weight;
 pub use bitcoin::{
-    transaction, Amount, BlockHash, OutPoint, ScriptBuf, Transaction, TxIn, TxOut, Txid, Witness,
+    transaction, Amount, BlockHash, OutPoint, ScriptBuf, ScriptHash, Transaction, TxIn, TxOut,
+    Txid, Witness,
 };
 
 use serde::Deserialize;
@@ -122,6 +123,18 @@ pub struct AddressTxsSummary {
     /// The total number of transactions.
     pub tx_count: u32,
 }
+
+/// Statistics about a particular [`Script`] hash's confirmed and mempool transactions.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserialize)]
+pub struct ScriptHashStats {
+    /// The summary of confirmed transactions for this [`Script`] hash.
+    pub chain_stats: ScriptHashTxsSummary,
+    /// The summary of mempool transactions for this [`Script`] hash.
+    pub mempool_stats: ScriptHashTxsSummary,
+}
+
+/// Contains a summary of the transactions for a particular [`Script`] hash.
+pub type ScriptHashTxsSummary = AddressTxsSummary;
 
 /// Information about an UTXO's status: confirmation status,
 /// confirmation height, confirmation block hash and confirmation block time.
