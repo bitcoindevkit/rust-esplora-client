@@ -926,6 +926,50 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
+    async fn test_get_mempool_scripthash_txs() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+
+        let txid = BITCOIND
+            .client
+            .send_to_address(&address, Amount::from_sat(1000))
+            .unwrap()
+            .txid()
+            .unwrap();
+
+        // Sleep for 5 seconds so the transaction has time to propagate to electrs' mempool.
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+        let expected_tx = BITCOIND
+            .client
+            .get_transaction(txid)
+            .unwrap()
+            .into_model()
+            .unwrap()
+            .tx;
+        let script = &expected_tx.output[0].script_pubkey;
+        let scripthash_txs_txids: Vec<Txid> = blocking_client
+            .get_mempool_scripthash_txs(script)
+            .unwrap()
+            .iter()
+            .map(|tx| tx.txid)
+            .collect();
+        let scripthash_txs_txids_async: Vec<Txid> = async_client
+            .get_mempool_scripthash_txs(script)
+            .await
+            .unwrap()
+            .iter()
+            .map(|tx| tx.txid)
+            .collect();
+        assert_eq!(scripthash_txs_txids, scripthash_txs_txids_async);
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
     async fn test_get_blocks() {
         let (blocking_client, async_client) = setup_clients().await;
         let start_height = BITCOIND.client.get_block_count().unwrap().0;
@@ -1174,6 +1218,37 @@ mod test {
 
         assert_eq!(address_txs_blocking, address_txs_async);
         assert_eq!(address_txs_async[0].txid, txid);
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_get_mempool_address_txs() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+
+        let txid = BITCOIND
+            .client
+            .send_to_address(&address, Amount::from_sat(1000))
+            .unwrap()
+            .txid()
+            .unwrap();
+
+        // Sleep for 5 seconds so the transaction has time to propagate to electrs' mempool.
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+        let mempool_address_txs_blocking =
+            blocking_client.get_mempool_address_txs(&address).unwrap();
+        let mempool_address_txs_async = async_client
+            .get_mempool_address_txs(&address)
+            .await
+            .unwrap();
+
+        assert_eq!(mempool_address_txs_blocking, mempool_address_txs_async);
+        assert_eq!(mempool_address_txs_async[0].txid, txid);
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]

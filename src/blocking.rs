@@ -335,7 +335,8 @@ impl BlockingClient {
         self.get_response_json(&path)
     }
 
-    /// Get transaction history for the specified address/scripthash, sorted with newest first.
+    /// Get transaction history for the specified address, sorted with newest
+    /// first.
     ///
     /// Returns up to 50 mempool transactions plus the first 25 confirmed transactions.
     /// More can be requested by specifying the last txid seen by the previous query.
@@ -352,7 +353,14 @@ impl BlockingClient {
         self.get_response_json(&path)
     }
 
-    /// Get confirmed transaction history for the specified address/scripthash,
+    /// Get mempool [`Transaction`]s for the specified [`Address`], sorted with newest first.
+    pub fn get_mempool_address_txs(&self, address: &Address) -> Result<Vec<Tx>, Error> {
+        let path = format!("/address/{address}/txs/mempool");
+
+        self.get_response_json(&path)
+    }
+
+    /// Get transaction history for the specified scripthash,
     /// sorted with newest first. Returns 25 transactions per page.
     /// More can be requested by specifying the last txid seen by the previous
     /// query.
@@ -366,6 +374,15 @@ impl BlockingClient {
             Some(last_seen) => format!("/scripthash/{script_hash:x}/txs/chain/{last_seen}"),
             None => format!("/scripthash/{script_hash:x}/txs"),
         };
+        self.get_response_json(&path)
+    }
+
+    /// Get mempool [`Transaction`] history for the
+    /// specified [`Script`] hash, sorted with newest first.
+    pub fn get_mempool_scripthash_txs(&self, script: &Script) -> Result<Vec<Tx>, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        let path = format!("/scripthash/{script_hash:x}/txs/mempool");
+
         self.get_response_json(&path)
     }
 
