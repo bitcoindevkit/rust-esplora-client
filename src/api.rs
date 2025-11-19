@@ -2,15 +2,15 @@
 //!
 //! See: <https://github.com/Blockstream/esplora/blob/master/API.md>
 
+use bitcoin::hash_types;
+use serde::Deserialize;
+
 pub use bitcoin::consensus::{deserialize, serialize};
 pub use bitcoin::hex::FromHex;
-use bitcoin::Weight;
 pub use bitcoin::{
-    transaction, Amount, BlockHash, OutPoint, ScriptBuf, ScriptHash, Transaction, TxIn, TxOut,
-    Txid, Witness,
+    absolute, block, transaction, Amount, BlockHash, OutPoint, ScriptBuf, ScriptHash, Transaction,
+    TxIn, TxOut, Txid, Weight, Witness,
 };
-
-use serde::Deserialize;
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct PrevOut {
@@ -87,6 +87,59 @@ pub struct BlockTime {
     pub timestamp: u64,
     pub height: u32,
 }
+
+/// Information about a [`Block`].
+#[derive(Debug, Clone, Deserialize)]
+pub struct BlockInformation {
+    /// The block's [`BlockHash`].
+    pub id: BlockHash,
+    /// The block's height.
+    pub height: u32,
+    /// The block's version.
+    pub version: block::Version,
+    /// The block's timestamp.
+    pub timestamp: u64,
+    /// The block's transaction count.
+    pub tx_count: u64,
+    /// The block's size, in bytes.
+    pub size: u64,
+    /// The block's weight, in virtual bytes.
+    pub weight: u64,
+    /// The merkle root of the transactions in the block.
+    pub merkle_root: hash_types::TxMerkleNode,
+    /// The [`BlockHash`] of the previous block (`None` for the genesis block).
+    pub previousblockhash: Option<BlockHash>,
+    /// The block's MTP (Median Time Past).
+    pub mediantime: u64,
+    /// The block's nonce value.
+    pub nonce: u32,
+    /// The block's `bits` value (`bits` is a compact representation of the target).
+    pub bits: u32,
+    /// The block's difficulty target value.
+    pub difficulty: f64,
+}
+
+impl PartialEq for BlockInformation {
+    fn eq(&self, other: &Self) -> bool {
+        let Self { difficulty: d1, .. } = self;
+        let Self { difficulty: d2, .. } = other;
+
+        self.id == other.id
+            && self.height == other.height
+            && self.version == other.version
+            && self.timestamp == other.timestamp
+            && self.tx_count == other.tx_count
+            && self.size == other.size
+            && self.weight == other.weight
+            && self.merkle_root == other.merkle_root
+            && self.previousblockhash == other.previousblockhash
+            && self.mediantime == other.mediantime
+            && self.nonce == other.nonce
+            && self.bits == other.bits
+            && ((d1.is_nan() && d2.is_nan()) || (d1 == d2))
+    }
+}
+impl Eq for BlockInformation {}
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct BlockSummary {
