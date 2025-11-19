@@ -65,14 +65,14 @@
 //!   certificates.
 //!
 //! [`dont remove this line or cargo doc will break`]: https://example.com
-#![cfg_attr(not(feature = "minreq"), doc = "[`minreq`]: https://docs.rs/minreq")]
+#![cfg_attr(not(feature = "bitreq"), doc = "[`bitreq`]: https://docs.rs/bitreq")]
 #![cfg_attr(not(feature = "reqwest"), doc = "[`reqwest`]: https://docs.rs/reqwest")]
 #![allow(clippy::result_large_err)]
 
 use std::collections::HashMap;
-use std::fmt;
 use std::num::TryFromIntError;
 use std::time::Duration;
+use std::{fmt, str};
 
 #[cfg(feature = "async")]
 pub use r#async::Sleeper;
@@ -88,6 +88,9 @@ pub use api::*;
 pub use blocking::BlockingClient;
 #[cfg(feature = "async")]
 pub use r#async::AsyncClient;
+
+// #[cfg(feature = "bitreq")]
+// use crate::bitreq::;
 
 /// Response status codes for which the request may be retried.
 pub const RETRYABLE_ERROR_CODES: [u16; 3] = [
@@ -200,9 +203,9 @@ impl Builder {
 /// Errors that can happen during a request to `Esplora` servers.
 #[derive(Debug)]
 pub enum Error {
-    /// Error during `minreq` HTTP request
+    /// Error during `bitreq` HTTP request
     #[cfg(feature = "blocking")]
-    Minreq(::minreq::Error),
+    BitReq(::bitreq::Error),
     /// Error during reqwest HTTP request
     #[cfg(feature = "async")]
     Reqwest(::reqwest::Error),
@@ -253,7 +256,7 @@ macro_rules! impl_error {
 
 impl std::error::Error for Error {}
 #[cfg(feature = "blocking")]
-impl_error!(::minreq::Error, Minreq, Error);
+impl_error!(::bitreq::Error, BitReq, Error);
 #[cfg(feature = "async")]
 impl_error!(::reqwest::Error, Reqwest, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
@@ -325,7 +328,7 @@ mod test {
 
         let mut builder = Builder::new(&format!("http://{esplora_url}"));
         if !headers.is_empty() {
-            builder.headers = headers;
+            builder.headers = headers.clone();
         }
 
         let blocking_client = builder.build_blocking();
@@ -951,7 +954,7 @@ mod test {
         assert_eq!(blocks_genesis, blocks_genesis_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[cfg(all(feature = "blocking", feature = "async", feature = "bitreq"))]
     #[tokio::test]
     async fn test_get_tx_with_http_header() {
         let headers = [(
