@@ -268,6 +268,7 @@ mod test {
     use super::*;
     use electrsd::{corepc_node, ElectrsD};
     use lazy_static::lazy_static;
+    use std::collections::HashSet;
     use std::env;
     use std::str::FromStr;
     use tokio::sync::Mutex;
@@ -1028,6 +1029,64 @@ mod test {
             .for_each(|(expected_txid, received_txid)| {
                 assert_eq!(expected_txid, received_txid);
             });
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_get_block_txs() {
+        let (blocking_client, async_client) = setup_clients().await;
+        let address = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+        // Create 30 transactions and mine a block.
+        let mut mined_txids = Vec::new();
+        for _ in 0..30 {
+            let txid = BITCOIND
+                .client
+                .send_to_address(&address, Amount::from_sat(1000))
+                .unwrap()
+                .txid()
+                .unwrap();
+            mined_txids.push(txid);
+        }
+        let _miner = MINER.lock().await;
+        generate_blocks_and_wait(1);
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        // Get the chain tip's blockhash.
+        let blockhash = blocking_client.get_tip_hash().unwrap();
+        let txs_blocking = blocking_client.get_block_txs(blockhash, None).unwrap();
+        let txs_async = async_client.get_block_txs(blockhash, None).await.unwrap();
+        // Assert that we only get 25 transactions, as per the Esplora specification.
+        assert_eq!(txs_blocking.len(), 25);
+        assert_eq!(txs_blocking, txs_async);
+
+        // Compare the received transactions (skipping the coinbase transaction).
+        // All 24 non-coinbase transactions should be from our expected set.
+        let expected_txids: HashSet<Txid> = mined_txids.iter().copied().collect();
+        let received_txids: HashSet<Txid> = txs_blocking
+            .iter()
+            .skip(1)
+            .map(|tx| tx.compute_txid())
+            .collect();
+        assert_eq!(received_txids.len(), 24);
+        assert!(received_txids.is_subset(&expected_txids));
+
+        let txs_blocking_offset = blocking_client.get_block_txs(blockhash, Some(25)).unwrap();
+        let txs_async_offset = async_client
+            .get_block_txs(blockhash, Some(25))
+            .await
+            .unwrap();
+        // 31 transactions on the block minus `start_index` of 25 yields 6 transactions.
+        assert_eq!(txs_blocking_offset.len(), 6);
+        assert_eq!(txs_blocking_offset, txs_async_offset);
+
+        // Compare the expected and received transactions from index 25 through 30.
+        let received_offset_txids: HashSet<Txid> = txs_blocking_offset
+            .iter()
+            .map(|tx| tx.compute_txid())
+            .collect();
+        assert!(received_offset_txids.is_subset(&expected_txids));
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]

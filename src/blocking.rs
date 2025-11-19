@@ -401,6 +401,39 @@ impl BlockingClient {
         self.get_response_json(&path)
     }
 
+    /// Get up to 25 [`Transaction`]s from a [`Block`], given it's [`BlockHash`],
+    /// beginning at `start_index` (starts from 0 if `start_index` is `None`).
+    ///
+    /// The `start_index` value MUST be a multiple of 25,
+    /// even though this is not documented on the Esplora specification.
+    pub fn get_block_txs(
+        &self,
+        blockhash: BlockHash,
+        start_index: Option<u32>,
+    ) -> Result<Vec<Transaction>, Error> {
+        // Check that `start_index` is a multiple of 25.
+        if let Some(idx) = start_index {
+            if idx % 25 != 0 {
+                return Err(Error::InvalidStartIndexValue);
+            }
+        }
+
+        let path = match start_index {
+            None => format!("/block/{blockhash}/txs"),
+            Some(idx) => format!("/block/{blockhash}/txs/{idx}"),
+        };
+
+        let esplora_txs: Vec<Tx> = self.get_response_json(&path)?;
+
+        // Convert Esplora [`Tx`]s into [`Transaction`]s.
+        let txs: Vec<Transaction> = esplora_txs
+            .into_iter()
+            .map(|esplora_tx| esplora_tx.to_tx())
+            .collect();
+
+        Ok(txs)
+    }
+
     /// Gets some recent block summaries starting at the tip or at `height` if
     /// provided.
     ///
