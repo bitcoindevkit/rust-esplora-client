@@ -27,8 +27,9 @@ use log::{debug, error, info, trace};
 use reqwest::{header, Client, Response};
 
 use crate::{
-    AddressStats, BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputSpendStatus,
-    OutputStatus, ScriptHashStats, Tx, TxStatus, Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
+    AddressStats, BlockInformation, BlockStatus, BlockSummary, Builder, Error, MerkleProof,
+    OutputSpendStatus, OutputStatus, ScriptHashStats, Tx, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
+    RETRYABLE_ERROR_CODES,
 };
 
 #[derive(Debug, Clone)]
@@ -456,6 +457,13 @@ impl<S: Sleeper> AsyncClient<S> {
     /// blocks) and the value is the estimated feerate (in sat/vB).
     pub async fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
         self.get_response_json("/fee-estimates").await
+    }
+
+    /// Get a summary about a [`Block`], given it's [`BlockHash`].
+    pub async fn get_block(&self, blockhash: &BlockHash) -> Result<BlockInformation, Error> {
+        let path = format!("/block/{blockhash}");
+
+        self.get_response_json(&path).await
     }
 
     /// Gets some recent block summaries starting at the tip or at `height` if

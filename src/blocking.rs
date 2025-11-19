@@ -28,8 +28,9 @@ use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::{Address, Block, BlockHash, MerkleBlock, Script, Transaction, Txid};
 
 use crate::{
-    AddressStats, BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputSpendStatus,
-    OutputStatus, ScriptHashStats, Tx, TxStatus, Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
+    AddressStats, BlockInformation, BlockStatus, BlockSummary, Builder, Error, MerkleProof,
+    OutputSpendStatus, OutputStatus, ScriptHashStats, Tx, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
+    RETRYABLE_ERROR_CODES,
 };
 
 #[derive(Debug, Clone)]
@@ -382,6 +383,13 @@ impl BlockingClient {
     pub fn get_mempool_scripthash_txs(&self, script: &Script) -> Result<Vec<Tx>, Error> {
         let script_hash = sha256::Hash::hash(script.as_bytes());
         let path = format!("/scripthash/{script_hash:x}/txs/mempool");
+
+        self.get_response_json(&path)
+    }
+
+    /// Get a summary about a [`Block`], given it's [`BlockHash`].
+    pub fn get_block(&self, blockhash: &BlockHash) -> Result<BlockInformation, Error> {
+        let path = format!("/block/{blockhash}");
 
         self.get_response_json(&path)
     }
