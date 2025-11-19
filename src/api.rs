@@ -246,6 +246,19 @@ pub struct MempoolStats {
     pub fee_histogram: Vec<(f64, usize)>,
 }
 
+/// A [`Transaction`] that recently entered the mempool.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct MempoolRecentTx {
+    /// Transaction ID as a [`Txid`].
+    pub txid: Txid,
+    /// [`Amount`] of fees paid by the transaction, in satoshis.
+    pub fee: u64,
+    /// The transaction size, in virtual bytes.
+    pub vsize: usize,
+    /// Combined [`Amount`] of the transaction, in satoshis.
+    pub value: u64,
+}
+
 impl Tx {
     pub fn to_tx(&self) -> Transaction {
         Transaction {
