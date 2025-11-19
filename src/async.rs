@@ -15,23 +15,20 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
+use bitcoin::block::Header as BlockHeader;
 use bitcoin::consensus::{deserialize, serialize, Decodable, Encodable};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
-use bitcoin::Address;
-use bitcoin::{
-    block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
-};
+use bitcoin::{Address, Block, BlockHash, MerkleBlock, Script, Transaction, Txid};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
 use reqwest::{header, Client, Response};
 
-use crate::api::AddressStats;
 use crate::{
-    BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputSpendStatus, OutputStatus, Tx,
-    TxStatus, Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
+    AddressStats, BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputSpendStatus,
+    OutputStatus, ScriptHashStats, Tx, TxStatus, Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
 #[derive(Debug, Clone)]
@@ -394,6 +391,13 @@ impl<S: Sleeper> AsyncClient<S> {
     /// the mempool.
     pub async fn get_address_stats(&self, address: &Address) -> Result<AddressStats, Error> {
         let path = format!("/address/{address}");
+        self.get_response_json(&path).await
+    }
+
+    /// Get statistics about a particular [`Script`] hash's confirmed and mempool transactions.
+    pub async fn get_scripthash_stats(&self, script: &Script) -> Result<ScriptHashStats, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        let path = format!("/scripthash/{script_hash}");
         self.get_response_json(&path).await
     }
 

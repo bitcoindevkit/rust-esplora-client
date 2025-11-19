@@ -21,18 +21,15 @@ use log::{debug, error, info, trace};
 
 use minreq::{Proxy, Request, Response};
 
+use bitcoin::block::Header as BlockHeader;
 use bitcoin::consensus::{deserialize, serialize, Decodable};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
-use bitcoin::Address;
-use bitcoin::{
-    block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
-};
+use bitcoin::{Address, Block, BlockHash, MerkleBlock, Script, Transaction, Txid};
 
-use crate::api::AddressStats;
 use crate::{
-    BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputSpendStatus, OutputStatus, Tx,
-    TxStatus, Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
+    AddressStats, BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputSpendStatus,
+    OutputStatus, ScriptHashStats, Tx, TxStatus, Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
 #[derive(Debug, Clone)]
@@ -328,6 +325,13 @@ impl BlockingClient {
     /// the mempool.
     pub fn get_address_stats(&self, address: &Address) -> Result<AddressStats, Error> {
         let path = format!("/address/{address}");
+        self.get_response_json(&path)
+    }
+
+    /// Get statistics about a particular [`Script`] hash's confirmed and mempool transactions.
+    pub fn get_scripthash_stats(&self, script: &Script) -> Result<ScriptHashStats, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        let path = format!("/scripthash/{script_hash}");
         self.get_response_json(&path)
     }
 
