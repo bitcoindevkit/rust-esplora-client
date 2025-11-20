@@ -28,9 +28,9 @@ use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::{Address, Block, BlockHash, MerkleBlock, Script, Transaction, Txid};
 
 use crate::{
-    AddressStats, BlockInformation, BlockStatus, BlockSummary, Builder, Error, MempoolStats,
-    MerkleProof, OutputSpendStatus, OutputStatus, ScriptHashStats, Tx, TxStatus, Utxo,
-    BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
+    AddressStats, BlockInformation, BlockStatus, BlockSummary, Builder, Error, MempoolRecentTx,
+    MempoolStats, MerkleProof, OutputSpendStatus, OutputStatus, ScriptHashStats, Tx, TxStatus,
+    Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
 #[derive(Debug, Clone)]
@@ -319,6 +319,11 @@ impl BlockingClient {
     /// Get statistics about the mempool.
     pub fn get_mempool_stats(&self) -> Result<MempoolStats, Error> {
         self.get_response_json("/mempool")
+    }
+
+    // Get a list of the last 10 [`Transaction`]s to enter the mempool.
+    pub fn get_mempool_recent_txs(&self) -> Result<Vec<MempoolRecentTx>, Error> {
+        self.get_response_json("/mempool/recent")
     }
 
     /// Get an map where the key is the confirmation target (in number of

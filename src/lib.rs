@@ -910,6 +910,56 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
+    async fn test_get_mempool_recent_txs() {
+        let (blocking_client, async_client) = setup_clients().await;
+        let address = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+
+        let _miner = MINER.lock().await;
+
+        let mut expected_txids = Vec::new();
+        for _ in 0..5 {
+            let txid = BITCOIND
+                .client
+                .send_to_address(&address, Amount::from_sat(1000))
+                .unwrap()
+                .txid()
+                .unwrap();
+            expected_txids.push(txid);
+        }
+
+        // Sleep for 5 seconds so transactions have time to propagate
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+        let recent_blocking = blocking_client.get_mempool_recent_txs().unwrap();
+        let recent_async = async_client.get_mempool_recent_txs().await.unwrap();
+
+        assert_eq!(recent_blocking, recent_async);
+
+        // Should return up to 10 transactions
+        assert!(recent_blocking.len() <= 10);
+        assert!(!recent_blocking.is_empty());
+
+        // Our most recent transactions should be in there
+        let returned_txids: Vec<Txid> = recent_blocking.iter().map(|tx| tx.txid).collect();
+        for expected_txid in &expected_txids {
+            assert!(
+                returned_txids.contains(expected_txid),
+                "Txid {} not found in recent mempool txs",
+                expected_txid
+            );
+        }
+
+        for tx in &recent_blocking {
+            assert!(tx.vsize > 0);
+            assert!(tx.value > 0);
+        }
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
     async fn test_get_fee_estimates() {
         let (blocking_client, async_client) = setup_clients().await;
         let fee_estimates = blocking_client.get_fee_estimates().unwrap();

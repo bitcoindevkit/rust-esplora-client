@@ -27,9 +27,9 @@ use log::{debug, error, info, trace};
 use reqwest::{header, Client, Response};
 
 use crate::{
-    AddressStats, BlockInformation, BlockStatus, BlockSummary, Builder, Error, MempoolStats,
-    MerkleProof, OutputSpendStatus, OutputStatus, ScriptHashStats, Tx, TxStatus, Utxo,
-    BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
+    AddressStats, BlockInformation, BlockStatus, BlockSummary, Builder, Error, MempoolRecentTx,
+    MempoolStats, MerkleProof, OutputSpendStatus, OutputStatus, ScriptHashStats, Tx, TxStatus,
+    Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
 #[derive(Debug, Clone)]
@@ -456,6 +456,11 @@ impl<S: Sleeper> AsyncClient<S> {
     /// Get statistics about the mempool.
     pub async fn get_mempool_stats(&self) -> Result<MempoolStats, Error> {
         self.get_response_json("/mempool").await
+    }
+
+    // Get a list of the last 10 [`Transaction`]s to enter the mempool.
+    pub async fn get_mempool_recent_txs(&self) -> Result<Vec<MempoolRecentTx>, Error> {
+        self.get_response_json("/mempool/recent").await
     }
 
     /// Get an map where the key is the confirmation target (in number of
