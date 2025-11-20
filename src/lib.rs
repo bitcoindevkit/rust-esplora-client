@@ -960,6 +960,47 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
+    async fn test_get_mempool_txids() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+
+        let _miner = MINER.lock().await;
+
+        let mut expected_txids = Vec::new();
+        for _ in 0..5 {
+            let txid = BITCOIND
+                .client
+                .send_to_address(&address, Amount::from_sat(1000))
+                .unwrap()
+                .txid()
+                .unwrap();
+            expected_txids.push(txid);
+        }
+
+        // Sleep for 5 seconds so the transaction has time to propagate to electrs' mempool.
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+        let txids_blocking = blocking_client.get_mempool_txids().unwrap();
+        let txids_async = async_client.get_mempool_txids().await.unwrap();
+
+        assert_eq!(txids_blocking, txids_async);
+        assert!(txids_blocking.len() >= 5);
+
+        for expected_txid in &expected_txids {
+            assert!(
+                txids_blocking.contains(expected_txid),
+                "Txid {} not found in mempool",
+                expected_txid
+            );
+        }
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
     async fn test_get_fee_estimates() {
         let (blocking_client, async_client) = setup_clients().await;
         let fee_estimates = blocking_client.get_fee_estimates().unwrap();

@@ -463,6 +463,13 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json("/mempool/recent").await
     }
 
+    /// Get the full list of [`Txid`]s in the mempool.
+    ///
+    /// The order of the [`Txid`]s is arbitrary.
+    pub async fn get_mempool_txids(&self) -> Result<Vec<Txid>, Error> {
+        self.get_response_json("/mempool/txids").await
+    }
+
     /// Get an map where the key is the confirmation target (in number of
     /// blocks) and the value is the estimated feerate (in sat/vB).
     pub async fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
