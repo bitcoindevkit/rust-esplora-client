@@ -2,7 +2,10 @@
 name = "esplora-client"
 version = "0.12.1"
 edition = "2021"
-authors = ["Alekos Filini <alekos.filini@gmail.com>"]
+authors = [
+  "Alekos Filini <alekos.filini@gmail.com>",
+  "Bitcoin Dev Kit Developers"
+]
 license = "MIT"
 homepage = "https://github.com/bitcoindevkit/rust-esplora-client"
 repository = "https://github.com/bitcoindevkit/rust-esplora-client"
