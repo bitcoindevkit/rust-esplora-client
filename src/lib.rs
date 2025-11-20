@@ -230,6 +230,8 @@ pub enum Error {
     InvalidHttpHeaderValue(String),
     /// The server sent an invalid response
     InvalidResponse,
+    /// Invalid `start_index` value (not a multiple of 25).
+    InvalidStartIndexValue,
 }
 
 impl fmt::Display for Error {
