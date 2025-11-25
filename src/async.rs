@@ -458,6 +458,11 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json("/mempool").await
     }
 
+    // Get a list of the last 10 [`Transaction`]s to enter the mempool.
+    pub async fn get_mempool_recent_txs(&self) -> Result<Vec<MempoolRecentTx>, Error> {
+        self.get_response_json("/mempool/recent").await
+    }
+
     /// Get an map where the key is the confirmation target (in number of
     /// blocks) and the value is the estimated feerate (in sat/vB).
     pub async fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {

@@ -321,6 +321,11 @@ impl BlockingClient {
         self.get_response_json("/mempool")
     }
 
+    // Get a list of the last 10 [`Transaction`]s to enter the mempool.
+    pub fn get_mempool_recent_txs(&self) -> Result<Vec<MempoolRecentTx>, Error> {
+        self.get_response_json("/mempool/recent")
+    }
+
     /// Get an map where the key is the confirmation target (in number of
     /// blocks) and the value is the estimated feerate (in sat/vB).
     pub fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
