@@ -527,8 +527,17 @@ impl<S: Sleeper> AsyncClient<S> {
 
     /// Get all UTXOs locked to an address.
     pub async fn get_address_utxos(&self, address: &Address) -> Result<Vec<Utxo>, Error> {
-        self.get_response_json(&format!("/address/{address}/utxo"))
-            .await
+        let path = format!("/address/{address}/utxo");
+
+        self.get_response_json(&path).await
+    }
+
+    /// Get all [`TxOut`]s locked to a [`Script`] hash.
+    pub async fn get_scripthash_utxos(&self, script: &Script) -> Result<Vec<Utxo>, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        let path = format!("/scripthash/{script_hash}/utxo");
+
+        self.get_response_json(&path).await
     }
 
     /// Get the underlying base URL.
