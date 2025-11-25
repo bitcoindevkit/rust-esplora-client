@@ -444,6 +444,14 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json(&path).await
     }
 
+    /// Get mempool [`Transaction`] history for the
+    /// specified [`Script`] hash, sorted with newest first.
+    pub async fn get_mempool_scripthash_txs(&self, script: &Script) -> Result<Vec<Tx>, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        let path = format!("/scripthash/{script_hash:x}/txs/mempool");
+
+        self.get_response_json(&path).await
+    }
     /// Get an map where the key is the confirmation target (in number of
     /// blocks) and the value is the estimated feerate (in sat/vB).
     pub async fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {

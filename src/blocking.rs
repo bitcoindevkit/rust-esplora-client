@@ -378,6 +378,14 @@ impl BlockingClient {
         self.get_response_json(&path)
     }
 
+    /// Get mempool [`Transaction`] history for the
+    /// specified [`Script`] hash, sorted with newest first.
+    pub fn get_mempool_scripthash_txs(&self, script: &Script) -> Result<Vec<Tx>, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        let path = format!("/scripthash/{script_hash:x}/txs/mempool");
+
+        self.get_response_json(&path)
+    }
     /// Gets some recent block summaries starting at the tip or at `height` if
     /// provided.
     ///
