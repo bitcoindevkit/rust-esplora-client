@@ -267,6 +267,7 @@ mod test {
     use electrsd::{corepc_node, ElectrsD};
     use lazy_static::lazy_static;
     use std::env;
+    use std::str::FromStr;
     use tokio::sync::Mutex;
     #[cfg(all(feature = "blocking", feature = "async"))]
     use {
@@ -920,6 +921,28 @@ mod test {
             .map(|tx| tx.txid)
             .collect();
         assert_eq!(scripthash_txs_txids, scripthash_txs_txids_async);
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_get_block_info() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        // Genesis block `BlockHash` on regtest.
+        let blockhash_genesis =
+            BlockHash::from_str("0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206")
+                .unwrap();
+
+        let block_info_blocking = blocking_client.get_block_info(&blockhash_genesis).unwrap();
+        let block_info_async = async_client
+            .get_block_info(&blockhash_genesis)
+            .await
+            .unwrap();
+
+        assert_eq!(block_info_async, block_info_blocking);
+        assert_eq!(block_info_async.id, blockhash_genesis);
+        assert_eq!(block_info_async.height, 0);
+        assert_eq!(block_info_async.previousblockhash, None);
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]

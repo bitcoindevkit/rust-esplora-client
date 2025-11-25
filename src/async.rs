@@ -476,6 +476,13 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json("/fee-estimates").await
     }
 
+    /// Get a summary about a [`Block`], given it's [`BlockHash`].
+    pub async fn get_block_info(&self, blockhash: &BlockHash) -> Result<BlockInformation, Error> {
+        let path = format!("/block/{blockhash}");
+
+        self.get_response_json(&path).await
+    }
+
     /// Gets some recent block summaries starting at the tip or at `height` if
     /// provided.
     ///

@@ -403,6 +403,14 @@ impl BlockingClient {
 
         self.get_response_json(&path)
     }
+
+    /// Get a summary about a [`Block`], given it's [`BlockHash`].
+    pub fn get_block_info(&self, blockhash: &BlockHash) -> Result<BlockInformation, Error> {
+        let path = format!("/block/{blockhash}");
+
+        self.get_response_json(&path)
+    }
+
     /// Gets some recent block summaries starting at the tip or at `height` if
     /// provided.
     ///
