@@ -1278,6 +1278,36 @@ mod test {
         assert_ne!(address_utxos_async.len(), 0);
         assert_eq!(address_utxos_blocking, address_utxos_async);
     }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_get_scripthash_utxos() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+        let script = address.script_pubkey();
+
+        let _txid = BITCOIND
+            .client
+            .send_to_address(&address, Amount::from_sat(21000))
+            .unwrap()
+            .txid()
+            .unwrap();
+
+        let _miner = MINER.lock().await;
+        generate_blocks_and_wait(1);
+
+        let scripthash_utxos_blocking = blocking_client.get_scripthash_utxos(&script).unwrap();
+        let scripthash_utxos_async = async_client.get_scripthash_utxos(&script).await.unwrap();
+
+        assert_ne!(scripthash_utxos_blocking.len(), 0);
+        assert_ne!(scripthash_utxos_async.len(), 0);
+        assert_eq!(scripthash_utxos_blocking, scripthash_utxos_async);
+    }
+
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tx_outspends() {
