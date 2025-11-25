@@ -316,6 +316,11 @@ impl BlockingClient {
             .map(|s| BlockHash::from_str(s.as_str()).map_err(Error::HexToArray))?
     }
 
+    /// Get statistics about the mempool.
+    pub fn get_mempool_stats(&self) -> Result<MempoolStats, Error> {
+        self.get_response_json("/mempool")
+    }
+
     /// Get an map where the key is the confirmation target (in number of
     /// blocks) and the value is the estimated feerate (in sat/vB).
     pub fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
