@@ -411,6 +411,13 @@ impl BlockingClient {
         self.get_response_json(&path)
     }
 
+    /// Get all [`Txid`]s that belong to a [`Block`] identified by it's [`BlockHash`].
+    pub fn get_block_txids(&self, blockhash: &BlockHash) -> Result<Vec<Txid>, Error> {
+        let path = format!("/block/{blockhash}/txids");
+
+        self.get_response_json(&path)
+    }
+
     /// Gets some recent block summaries starting at the tip or at `height` if
     /// provided.
     ///
