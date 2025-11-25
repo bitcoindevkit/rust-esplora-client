@@ -326,6 +326,13 @@ impl BlockingClient {
         self.get_response_json("/mempool/recent")
     }
 
+    /// Get the full list of [`Txid`]s in the mempool.
+    ///
+    /// The order of the txids is arbitrary and does not match bitcoind's.
+    pub fn get_mempool_txids(&self) -> Result<Vec<Txid>, Error> {
+        self.get_response_json("/mempool/txids")
+    }
+
     /// Get an map where the key is the confirmation target (in number of
     /// blocks) and the value is the estimated feerate (in sat/vB).
     pub fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
