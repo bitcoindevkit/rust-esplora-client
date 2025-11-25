@@ -1013,6 +1013,142 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
+    async fn test_get_scripthash_stats() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        // Create an address of each type.
+        let address_legacy = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+        let address_p2sh_segwit = BITCOIND
+            .client
+            .new_address_with_type(AddressType::P2shSegwit)
+            .unwrap();
+        let address_bech32 = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Bech32)
+            .unwrap();
+        let address_bech32m = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Bech32m)
+            .unwrap();
+
+        // Send a transaction to each address.
+        let _txid = BITCOIND
+            .client
+            .send_to_address(&address_legacy, Amount::from_sat(1000))
+            .unwrap()
+            .txid()
+            .unwrap();
+        let _txid = BITCOIND
+            .client
+            .send_to_address(&address_p2sh_segwit, Amount::from_sat(1000))
+            .unwrap()
+            .txid()
+            .unwrap();
+        let _txid = BITCOIND
+            .client
+            .send_to_address(&address_bech32, Amount::from_sat(1000))
+            .unwrap()
+            .txid()
+            .unwrap();
+        let _txid = BITCOIND
+            .client
+            .send_to_address(&address_bech32m, Amount::from_sat(1000))
+            .unwrap()
+            .txid()
+            .unwrap();
+
+        let _miner = MINER.lock().await;
+        generate_blocks_and_wait(1);
+
+        // Derive each addresses script.
+        let script_legacy = address_legacy.script_pubkey();
+        let script_p2sh_segwit = address_p2sh_segwit.script_pubkey();
+        let script_bech32 = address_bech32.script_pubkey();
+        let script_bech32m = address_bech32m.script_pubkey();
+
+        // P2PKH
+        let scripthash_stats_blocking_legacy = blocking_client
+            .get_scripthash_stats(&script_legacy)
+            .unwrap();
+        let scripthash_stats_async_legacy = async_client
+            .get_scripthash_stats(&script_legacy)
+            .await
+            .unwrap();
+        assert_eq!(
+            scripthash_stats_blocking_legacy,
+            scripthash_stats_async_legacy
+        );
+        assert_eq!(
+            scripthash_stats_blocking_legacy.chain_stats.funded_txo_sum,
+            1000
+        );
+        assert_eq!(scripthash_stats_blocking_legacy.chain_stats.tx_count, 1);
+
+        // P2SH-P2WSH
+        let scripthash_stats_blocking_p2sh_segwit = blocking_client
+            .get_scripthash_stats(&script_p2sh_segwit)
+            .unwrap();
+        let scripthash_stats_async_p2sh_segwit = async_client
+            .get_scripthash_stats(&script_p2sh_segwit)
+            .await
+            .unwrap();
+        assert_eq!(
+            scripthash_stats_blocking_p2sh_segwit,
+            scripthash_stats_async_p2sh_segwit
+        );
+        assert_eq!(
+            scripthash_stats_blocking_p2sh_segwit
+                .chain_stats
+                .funded_txo_sum,
+            1000
+        );
+        assert_eq!(
+            scripthash_stats_blocking_p2sh_segwit.chain_stats.tx_count,
+            1
+        );
+
+        // P2WPKH / P2WSH
+        let scripthash_stats_blocking_bech32 = blocking_client
+            .get_scripthash_stats(&script_bech32)
+            .unwrap();
+        let scripthash_stats_async_bech32 = async_client
+            .get_scripthash_stats(&script_bech32)
+            .await
+            .unwrap();
+        assert_eq!(
+            scripthash_stats_blocking_bech32,
+            scripthash_stats_async_bech32
+        );
+        assert_eq!(
+            scripthash_stats_blocking_bech32.chain_stats.funded_txo_sum,
+            1000
+        );
+        assert_eq!(scripthash_stats_blocking_bech32.chain_stats.tx_count, 1);
+
+        // P2TR
+        let scripthash_stats_blocking_bech32m = blocking_client
+            .get_scripthash_stats(&script_bech32m)
+            .unwrap();
+        let scripthash_stats_async_bech32m = async_client
+            .get_scripthash_stats(&script_bech32m)
+            .await
+            .unwrap();
+        assert_eq!(
+            scripthash_stats_blocking_bech32m,
+            scripthash_stats_async_bech32m
+        );
+        assert_eq!(
+            scripthash_stats_blocking_bech32m.chain_stats.funded_txo_sum,
+            1000
+        );
+        assert_eq!(scripthash_stats_blocking_bech32m.chain_stats.tx_count, 1);
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
     async fn test_get_address_txs() {
         let (blocking_client, async_client) = setup_clients().await;
 

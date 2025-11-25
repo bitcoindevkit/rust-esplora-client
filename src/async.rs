@@ -395,7 +395,14 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json(&path).await
     }
 
-    /// Get transaction history for the specified address/scripthash, sorted with newest first.
+    /// Get statistics about a particular [`Script`] hash's confirmed and mempool transactions.
+    pub async fn get_scripthash_stats(&self, script: &Script) -> Result<ScriptHashStats, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        let path = format!("/scripthash/{script_hash}");
+        self.get_response_json(&path).await
+    }
+
+    /// Get transaction history for the specified address, sorted with newest first.
     ///
     /// Returns up to 50 mempool transactions plus the first 25 confirmed transactions.
     /// More can be requested by specifying the last txid seen by the previous query.
