@@ -2,14 +2,15 @@
 //!
 //! See: <https://github.com/Blockstream/esplora/blob/master/API.md>
 
+use bitcoin::hash_types;
+use serde::Deserialize;
+
 pub use bitcoin::consensus::{deserialize, serialize};
 pub use bitcoin::hex::FromHex;
-use bitcoin::Weight;
 pub use bitcoin::{
-    transaction, Amount, BlockHash, OutPoint, ScriptBuf, Transaction, TxIn, TxOut, Txid, Witness,
+    absolute, block, transaction, Amount, BlockHash, CompactTarget, OutPoint, ScriptBuf,
+    ScriptHash, Transaction, TxIn, TxOut, Txid, Weight, Witness,
 };
-
-use serde::Deserialize;
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct PrevOut {
@@ -213,6 +214,36 @@ pub struct Utxo {
     pub status: UtxoStatus,
     /// The value of the UTXO as an [`Amount`].
     pub value: Amount,
+}
+
+/// Statistics about the mempool.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct MempoolStats {
+    /// The number of transactions in the mempool.
+    pub count: usize,
+    /// The total size of mempool transactions in virtual bytes.
+    pub vsize: usize,
+    /// The total fee paid by mempool transactions, in sats.
+    pub total_fee: u64,
+    /// The mempool's fee rate distribution histogram.
+    ///
+    /// An array of `(feerate, vsize)` tuples, where each entry's `vsize` is the total vsize
+    /// of transactions paying more than `feerate` but less than the previous entry's `feerate`
+    /// (except for the first entry, which has no upper bound).
+    pub fee_histogram: Vec<(f64, usize)>,
+}
+
+/// A [`Transaction`] that recently entered the mempool.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct MempoolRecentTx {
+    /// Transaction ID as a [`Txid`].
+    pub txid: Txid,
+    /// [`Amount`] of fees paid by the transaction, in satoshis.
+    pub fee: u64,
+    /// The transaction size, in virtual bytes.
+    pub vsize: usize,
+    /// Combined [`Amount`] of the transaction, in satoshis.
+    pub value: u64,
 }
 
 impl Tx {
