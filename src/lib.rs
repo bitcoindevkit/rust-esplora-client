@@ -986,6 +986,21 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
+    async fn test_get_block_txs() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let _miner = MINER.lock().await;
+        let blockhash = blocking_client.get_tip_hash().unwrap();
+
+        let txs_blocking = blocking_client.get_block_txs(&blockhash, None).unwrap();
+        let txs_async = async_client.get_block_txs(&blockhash, None).await.unwrap();
+
+        assert_ne!(txs_blocking.len(), 0);
+        assert_eq!(txs_blocking.len(), txs_async.len());
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
     async fn test_get_blocks() {
         let (blocking_client, async_client) = setup_clients().await;
         let start_height = BITCOIND.client.get_block_count().unwrap().0;

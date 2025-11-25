@@ -490,6 +490,24 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json(&path).await
     }
 
+    /// Get up to 25 [`Transaction`]s from a [`Block`], given it's [`BlockHash`],
+    /// beginning at `start_index` (starts from 0 if `start_index` is `None`).
+    ///
+    /// The `start_index` value MUST be a multiple of 25,
+    /// else an error will be returned by Esplora.
+    pub async fn get_block_txs(
+        &self,
+        blockhash: &BlockHash,
+        start_index: Option<u32>,
+    ) -> Result<Vec<Tx>, Error> {
+        let path = match start_index {
+            None => format!("/block/{blockhash}/txs"),
+            Some(start_index) => format!("/block/{blockhash}/txs/{start_index}"),
+        };
+
+        self.get_response_json(&path).await
+    }
+
     /// Gets some recent block summaries starting at the tip or at `height` if
     /// provided.
     ///
