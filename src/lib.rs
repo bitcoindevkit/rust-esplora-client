@@ -1339,4 +1339,66 @@ mod test {
         // Assert that both outputs are returned as unspent (spent == false).
         assert!(outspends_blocking.iter().all(|output| !output.spent));
     }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_mempool_methods() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+
+        for _ in 0..5 {
+            let _txid = BITCOIND
+                .client
+                .send_to_address(&address, Amount::from_sat(1000))
+                .unwrap()
+                .txid()
+                .unwrap();
+        }
+
+        // Wait for transactions to propagate to electrs' mempool.
+        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+
+        // Test `get_mempool_stats`
+        let stats_blocking = blocking_client.get_mempool_stats().unwrap();
+        let stats_async = async_client.get_mempool_stats().await.unwrap();
+        assert_eq!(stats_blocking, stats_async);
+        assert!(stats_blocking.count >= 5);
+
+        // Test `get_mempool_recent_txs`
+        let recent_blocking = blocking_client.get_mempool_recent_txs().unwrap();
+        let recent_async = async_client.get_mempool_recent_txs().await.unwrap();
+        assert_eq!(recent_blocking, recent_async);
+        assert!(recent_blocking.len() <= 10);
+        assert!(!recent_blocking.is_empty());
+
+        // Test `get_mempool_txids`
+        let txids_blocking = blocking_client.get_mempool_txids().unwrap();
+        let txids_async = async_client.get_mempool_txids().await.unwrap();
+        assert_eq!(txids_blocking, txids_async);
+        assert!(txids_blocking.len() >= 5);
+
+        // Test `get_mempool_scripthash_txs`
+        let script = address.script_pubkey();
+        let scripthash_txs_blocking = blocking_client.get_mempool_scripthash_txs(&script).unwrap();
+        let scripthash_txs_async = async_client
+            .get_mempool_scripthash_txs(&script)
+            .await
+            .unwrap();
+        assert_eq!(scripthash_txs_blocking, scripthash_txs_async);
+        assert_eq!(scripthash_txs_blocking.len(), 5);
+
+        // Test `get_mempool_address_txs`
+        let mempool_address_txs_blocking =
+            blocking_client.get_mempool_address_txs(&address).unwrap();
+        let mempool_address_txs_async = async_client
+            .get_mempool_address_txs(&address)
+            .await
+            .unwrap();
+        assert_eq!(mempool_address_txs_blocking, mempool_address_txs_async);
+        assert_eq!(mempool_address_txs_blocking.len(), 5);
+    }
 }
