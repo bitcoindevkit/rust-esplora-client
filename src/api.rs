@@ -176,6 +176,18 @@ pub struct AddressTxsSummary {
     pub tx_count: u32,
 }
 
+/// Statistics about a particular [`Script`] hash's confirmed and mempool transactions.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserialize)]
+pub struct ScriptHashStats {
+    /// The summary of confirmed transactions for this [`Script`] hash.
+    pub chain_stats: ScriptHashTxsSummary,
+    /// The summary of mempool transactions for this [`Script`] hash.
+    pub mempool_stats: ScriptHashTxsSummary,
+}
+
+/// Contains a summary of the transactions for a particular [`Script`] hash.
+pub type ScriptHashTxsSummary = AddressTxsSummary;
+
 /// Information about an UTXO's status: confirmation status,
 /// confirmation height, confirmation block hash and confirmation block time.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Deserialize)]
