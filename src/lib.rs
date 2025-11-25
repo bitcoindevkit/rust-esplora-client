@@ -1065,4 +1065,35 @@ mod test {
         assert_ne!(address_utxos_async.len(), 0);
         assert_eq!(address_utxos_blocking, address_utxos_async);
     }
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_get_tx_outspends() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+
+        let txid = BITCOIND
+            .client
+            .send_to_address(&address, Amount::from_sat(21000))
+            .unwrap()
+            .txid()
+            .unwrap();
+
+        let _miner = MINER.lock().await;
+        generate_blocks_and_wait(1);
+
+        let outspends_blocking = blocking_client.get_tx_outspends(&txid).unwrap();
+        let outspends_async = async_client.get_tx_outspends(&txid).await.unwrap();
+
+        // Assert that there are 2 outputs: 21K sat and (coinbase - 21K sat).
+        assert_eq!(outspends_blocking.len(), 2);
+        assert_eq!(outspends_async.len(), 2);
+        assert_eq!(outspends_blocking, outspends_async);
+
+        // Assert that both outputs are returned as unspent (spent == false).
+        assert!(outspends_blocking.iter().all(|output| !output.spent));
+    }
 }

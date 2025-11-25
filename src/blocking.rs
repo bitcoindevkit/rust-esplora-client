@@ -21,17 +21,15 @@ use log::{debug, error, info, trace};
 
 use minreq::{Proxy, Request, Response};
 
+use bitcoin::block::Header as BlockHeader;
 use bitcoin::consensus::{deserialize, serialize, Decodable};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
-use bitcoin::Address;
-use bitcoin::{
-    block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
-};
+use bitcoin::{Address, Block, BlockHash, MerkleBlock, Script, Transaction, Txid};
 
-use crate::api::AddressStats;
 use crate::{
-    BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus, Utxo,
+    AddressStats, BlockInformation, BlockStatus, BlockSummary, Builder, Error, MempoolRecentTx,
+    MempoolStats, MerkleProof, OutputStatus, ScriptHashStats, Tx, TxStatus, Utxo,
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
@@ -227,6 +225,11 @@ impl BlockingClient {
     /// Get transaction info given it's [`Txid`].
     pub fn get_tx_info(&self, txid: &Txid) -> Result<Option<Tx>, Error> {
         self.get_opt_response_json(&format!("/tx/{txid}"))
+    }
+
+    /// Get the spend status of a [`Transaction`]'s outputs, given it's [`Txid`].
+    pub fn get_tx_outspends(&self, txid: &Txid) -> Result<Vec<OutputStatus>, Error> {
+        self.get_response_json(&format!("/tx/{txid}/outspends"))
     }
 
     /// Get a [`BlockHeader`] given a particular block hash.

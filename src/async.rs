@@ -15,22 +15,20 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
+use bitcoin::block::Header as BlockHeader;
 use bitcoin::consensus::{deserialize, serialize, Decodable, Encodable};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
-use bitcoin::Address;
-use bitcoin::{
-    block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
-};
+use bitcoin::{Address, Block, BlockHash, MerkleBlock, Script, Transaction, Txid};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
 use reqwest::{header, Client, Response};
 
-use crate::api::AddressStats;
 use crate::{
-    BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus, Utxo,
+    AddressStats, BlockInformation, BlockStatus, BlockSummary, Builder, Error, MempoolRecentTx,
+    MempoolStats, MerkleProof, OutputStatus, ScriptHashStats, Tx, TxStatus, Utxo,
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
@@ -313,6 +311,12 @@ impl<S: Sleeper> AsyncClient<S> {
     /// Get transaction info given it's [`Txid`].
     pub async fn get_tx_info(&self, txid: &Txid) -> Result<Option<Tx>, Error> {
         self.get_opt_response_json(&format!("/tx/{txid}")).await
+    }
+
+    /// Get the spend status of a [`Transaction`]'s outputs, given it's [`Txid`].
+    pub async fn get_tx_outspends(&self, txid: &Txid) -> Result<Vec<OutputStatus>, Error> {
+        self.get_response_json(&format!("/tx/{txid}/outspends"))
+            .await
     }
 
     /// Get a [`BlockHeader`] given a particular block hash.
