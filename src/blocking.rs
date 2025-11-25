@@ -354,7 +354,14 @@ impl BlockingClient {
         self.get_response_json(&path)
     }
 
-    /// Get confirmed transaction history for the specified address/scripthash,
+    /// Get mempool [`Transaction`]s for the specified [`Address`], sorted with newest first.
+    pub fn get_mempool_address_txs(&self, address: &Address) -> Result<Vec<Tx>, Error> {
+        let path = format!("/address/{address}/txs/mempool");
+
+        self.get_response_json(&path)
+    }
+
+    /// Get transaction history for the specified scripthash,
     /// sorted with newest first. Returns 25 transactions per page.
     /// More can be requested by specifying the last txid seen by the previous
     /// query.
