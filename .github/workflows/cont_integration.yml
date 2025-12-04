@@ -64,6 +64,7 @@ jobs:
         cargo update -p ring --precise "0.17.12"
         cargo update -p flate2 --precise "1.0.35"
         cargo update -p once_cell --precise "1.20.3"
+        cargo update -p tracing --precise "0.1.41"
         cargo update -p tracing-core --precise "0.1.33"
         cargo update -p parking_lot --precise "0.12.3"
         cargo update -p parking_lot_core --precise "0.9.10"
@@ -74,6 +75,7 @@ jobs:
         cargo update -p openssl-sys --precise "0.9.109"
         cargo update -p syn --precise "2.0.106"
         cargo update -p quote --precise "1.0.41"
+        cargo update -p log --precise "0.4.28"
 
         cargo update -p bzip2-sys --precise "0.1.12+1.0.8" # dev-dependency
     - name: Build
