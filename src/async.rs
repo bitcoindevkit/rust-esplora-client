@@ -532,7 +532,7 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json(&path).await
     }
 
-    /// Get all [`TxOut`]s locked to a [`Script`] hash.
+    /// Get all [`Utxo`]s locked to a [`Script`].
     pub async fn get_scripthash_utxos(&self, script: &Script) -> Result<Vec<Utxo>, Error> {
         let script_hash = sha256::Hash::hash(script.as_bytes());
         let path = format!("/scripthash/{script_hash}/utxo");

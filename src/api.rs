@@ -8,8 +8,8 @@ use serde::Deserialize;
 pub use bitcoin::consensus::{deserialize, serialize};
 pub use bitcoin::hex::FromHex;
 pub use bitcoin::{
-    absolute, block, transaction, Amount, BlockHash, CompactTarget, OutPoint, ScriptBuf,
-    ScriptHash, Transaction, TxIn, TxOut, Txid, Weight, Witness,
+    absolute, block, transaction, Amount, Block, BlockHash, CompactTarget, OutPoint, Script,
+    ScriptBuf, ScriptHash, Transaction, TxIn, TxOut, Txid, Weight, Witness,
 };
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -88,7 +88,7 @@ pub struct BlockTime {
     pub height: u32,
 }
 
-/// Information about a [`Block`].
+/// Information about a bitcoin [`Block`].
 #[derive(Debug, Clone, Deserialize)]
 pub struct BlockInformation {
     /// The block's [`BlockHash`].
