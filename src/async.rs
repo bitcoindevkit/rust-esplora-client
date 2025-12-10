@@ -15,22 +15,20 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
+use bitcoin::block::Header as BlockHeader;
 use bitcoin::consensus::{deserialize, serialize, Decodable, Encodable};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
-use bitcoin::Address;
-use bitcoin::{
-    block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
-};
+use bitcoin::{Address, Block, BlockHash, MerkleBlock, Script, Transaction, Txid};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
 use reqwest::{header, Client, Response};
 
-use crate::api::AddressStats;
 use crate::{
-    BlockStatus, BlockSummary, Builder, Error, MerkleProof, OutputStatus, Tx, TxStatus, Utxo,
+    AddressStats, BlockInfo, BlockStatus, BlockSummary, Builder, Error, MempoolRecentTx,
+    MempoolStats, MerkleProof, OutputStatus, ScriptHashStats, Tx, TxStatus, Utxo,
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
@@ -315,6 +313,12 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_opt_response_json(&format!("/tx/{txid}")).await
     }
 
+    /// Get the spend status of a [`Transaction`]'s outputs, given it's [`Txid`].
+    pub async fn get_tx_outspends(&self, txid: &Txid) -> Result<Vec<OutputStatus>, Error> {
+        self.get_response_json(&format!("/tx/{txid}/outspends"))
+            .await
+    }
+
     /// Get a [`BlockHeader`] given a particular block hash.
     pub async fn get_header_by_hash(&self, block_hash: &BlockHash) -> Result<BlockHeader, Error> {
         self.get_response_hex(&format!("/block/{block_hash}/header"))
@@ -391,7 +395,14 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json(&path).await
     }
 
-    /// Get transaction history for the specified address/scripthash, sorted with newest first.
+    /// Get statistics about a particular [`Script`] hash's confirmed and mempool transactions.
+    pub async fn get_scripthash_stats(&self, script: &Script) -> Result<ScriptHashStats, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        let path = format!("/scripthash/{script_hash}");
+        self.get_response_json(&path).await
+    }
+
+    /// Get transaction history for the specified address, sorted with newest first.
     ///
     /// Returns up to 50 mempool transactions plus the first 25 confirmed transactions.
     /// More can be requested by specifying the last txid seen by the previous query.
@@ -408,7 +419,14 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json(&path).await
     }
 
-    /// Get confirmed transaction history for the specified address/scripthash,
+    /// Get mempool [`Transaction`]s for the specified [`Address`], sorted with newest first.
+    pub async fn get_mempool_address_txs(&self, address: &Address) -> Result<Vec<Tx>, Error> {
+        let path = format!("/address/{address}/txs/mempool");
+
+        self.get_response_json(&path).await
+    }
+
+    /// Get transaction history for the specified address/scripthash,
     /// sorted with newest first. Returns 25 transactions per page.
     /// More can be requested by specifying the last txid seen by the previous
     /// query.
@@ -426,10 +444,68 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json(&path).await
     }
 
+    /// Get mempool [`Transaction`] history for the
+    /// specified [`Script`] hash, sorted with newest first.
+    pub async fn get_mempool_scripthash_txs(&self, script: &Script) -> Result<Vec<Tx>, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        let path = format!("/scripthash/{script_hash:x}/txs/mempool");
+
+        self.get_response_json(&path).await
+    }
+
+    /// Get statistics about the mempool.
+    pub async fn get_mempool_stats(&self) -> Result<MempoolStats, Error> {
+        self.get_response_json("/mempool").await
+    }
+
+    // Get a list of the last 10 [`Transaction`]s to enter the mempool.
+    pub async fn get_mempool_recent_txs(&self) -> Result<Vec<MempoolRecentTx>, Error> {
+        self.get_response_json("/mempool/recent").await
+    }
+
+    /// Get the full list of [`Txid`]s in the mempool.
+    ///
+    /// The order of the [`Txid`]s is arbitrary.
+    pub async fn get_mempool_txids(&self) -> Result<Vec<Txid>, Error> {
+        self.get_response_json("/mempool/txids").await
+    }
+
     /// Get an map where the key is the confirmation target (in number of
     /// blocks) and the value is the estimated feerate (in sat/vB).
     pub async fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
         self.get_response_json("/fee-estimates").await
+    }
+
+    /// Get a summary about a [`Block`], given it's [`BlockHash`].
+    pub async fn get_block_info(&self, blockhash: &BlockHash) -> Result<BlockInfo, Error> {
+        let path = format!("/block/{blockhash}");
+
+        self.get_response_json(&path).await
+    }
+
+    /// Get all [`Txid`]s that belong to a [`Block`] identified by it's [`BlockHash`].
+    pub async fn get_block_txids(&self, blockhash: &BlockHash) -> Result<Vec<Txid>, Error> {
+        let path = format!("/block/{blockhash}/txids");
+
+        self.get_response_json(&path).await
+    }
+
+    /// Get up to 25 [`Transaction`]s from a [`Block`], given it's [`BlockHash`],
+    /// beginning at `start_index` (starts from 0 if `start_index` is `None`).
+    ///
+    /// The `start_index` value MUST be a multiple of 25,
+    /// else an error will be returned by Esplora.
+    pub async fn get_block_txs(
+        &self,
+        blockhash: &BlockHash,
+        start_index: Option<u32>,
+    ) -> Result<Vec<Tx>, Error> {
+        let path = match start_index {
+            None => format!("/block/{blockhash}/txs"),
+            Some(start_index) => format!("/block/{blockhash}/txs/{start_index}"),
+        };
+
+        self.get_response_json(&path).await
     }
 
     /// Gets some recent block summaries starting at the tip or at `height` if
@@ -451,8 +527,17 @@ impl<S: Sleeper> AsyncClient<S> {
 
     /// Get all UTXOs locked to an address.
     pub async fn get_address_utxos(&self, address: &Address) -> Result<Vec<Utxo>, Error> {
-        self.get_response_json(&format!("/address/{address}/utxo"))
-            .await
+        let path = format!("/address/{address}/utxo");
+
+        self.get_response_json(&path).await
+    }
+
+    /// Get all [`Utxo`]s locked to a [`Script`].
+    pub async fn get_scripthash_utxos(&self, script: &Script) -> Result<Vec<Utxo>, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        let path = format!("/scripthash/{script_hash}/utxo");
+
+        self.get_response_json(&path).await
     }
 
     /// Get the underlying base URL.

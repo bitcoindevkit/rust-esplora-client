@@ -2,14 +2,15 @@
 //!
 //! See: <https://github.com/Blockstream/esplora/blob/master/API.md>
 
+use bitcoin::hash_types;
+use serde::Deserialize;
+
 pub use bitcoin::consensus::{deserialize, serialize};
 pub use bitcoin::hex::FromHex;
-use bitcoin::Weight;
 pub use bitcoin::{
-    transaction, Amount, BlockHash, OutPoint, ScriptBuf, Transaction, TxIn, TxOut, Txid, Witness,
+    absolute, block, transaction, Amount, Block, BlockHash, CompactTarget, OutPoint, Script,
+    ScriptBuf, ScriptHash, Transaction, TxIn, TxOut, Txid, Weight, Witness,
 };
-
-use serde::Deserialize;
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct PrevOut {
@@ -87,6 +88,59 @@ pub struct BlockTime {
     pub height: u32,
 }
 
+/// Information about a bitcoin [`Block`].
+#[derive(Debug, Clone, Deserialize)]
+pub struct BlockInfo {
+    /// The block's [`BlockHash`].
+    pub id: BlockHash,
+    /// The block's height.
+    pub height: u32,
+    /// The block's version.
+    pub version: block::Version,
+    /// The block's timestamp.
+    pub timestamp: u64,
+    /// The block's transaction count.
+    pub tx_count: u64,
+    /// The block's size, in bytes.
+    pub size: usize,
+    /// The block's weight.
+    pub weight: u64,
+    /// The merkle root of the transactions in the block.
+    pub merkle_root: hash_types::TxMerkleNode,
+    /// The [`BlockHash`] of the previous block (`None` for the genesis block).
+    pub previousblockhash: Option<BlockHash>,
+    /// The block's MTP (Median Time Past).
+    pub mediantime: u64,
+    /// The block's nonce value.
+    pub nonce: u32,
+    /// The block's `bits` value as a [`CompactTarget`].
+    pub bits: CompactTarget,
+    /// The block's difficulty target value.
+    pub difficulty: f64,
+}
+
+impl PartialEq for BlockInfo {
+    fn eq(&self, other: &Self) -> bool {
+        let Self { difficulty: d1, .. } = self;
+        let Self { difficulty: d2, .. } = other;
+
+        self.id == other.id
+            && self.height == other.height
+            && self.version == other.version
+            && self.timestamp == other.timestamp
+            && self.tx_count == other.tx_count
+            && self.size == other.size
+            && self.weight == other.weight
+            && self.merkle_root == other.merkle_root
+            && self.previousblockhash == other.previousblockhash
+            && self.mediantime == other.mediantime
+            && self.nonce == other.nonce
+            && self.bits == other.bits
+            && ((d1.is_nan() && d2.is_nan()) || (d1 == d2))
+    }
+}
+impl Eq for BlockInfo {}
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct BlockSummary {
     pub id: BlockHash,
@@ -123,6 +177,18 @@ pub struct AddressTxsSummary {
     pub tx_count: u32,
 }
 
+/// Statistics about a particular [`Script`] hash's confirmed and mempool transactions.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserialize)]
+pub struct ScriptHashStats {
+    /// The summary of confirmed transactions for this [`Script`] hash.
+    pub chain_stats: ScriptHashTxsSummary,
+    /// The summary of mempool transactions for this [`Script`] hash.
+    pub mempool_stats: ScriptHashTxsSummary,
+}
+
+/// Contains a summary of the transactions for a particular [`Script`] hash.
+pub type ScriptHashTxsSummary = AddressTxsSummary;
+
 /// Information about an UTXO's status: confirmation status,
 /// confirmation height, confirmation block hash and confirmation block time.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Deserialize)]
@@ -148,6 +214,36 @@ pub struct Utxo {
     pub status: UtxoStatus,
     /// The value of the UTXO as an [`Amount`].
     pub value: Amount,
+}
+
+/// Statistics about the mempool.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct MempoolStats {
+    /// The number of transactions in the mempool.
+    pub count: usize,
+    /// The total size of mempool transactions in virtual bytes.
+    pub vsize: usize,
+    /// The total fee paid by mempool transactions, in sats.
+    pub total_fee: u64,
+    /// The mempool's fee rate distribution histogram.
+    ///
+    /// An array of `(feerate, vsize)` tuples, where each entry's `vsize` is the total vsize
+    /// of transactions paying more than `feerate` but less than the previous entry's `feerate`
+    /// (except for the first entry, which has no upper bound).
+    pub fee_histogram: Vec<(f64, usize)>,
+}
+
+/// A [`Transaction`] that recently entered the mempool.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct MempoolRecentTx {
+    /// Transaction ID as a [`Txid`].
+    pub txid: Txid,
+    /// [`Amount`] of fees paid by the transaction, in satoshis.
+    pub fee: u64,
+    /// The transaction size, in virtual bytes.
+    pub vsize: usize,
+    /// Combined [`Amount`] of the transaction, in satoshis.
+    pub value: u64,
 }
 
 impl Tx {

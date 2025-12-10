@@ -267,6 +267,7 @@ mod test {
     use electrsd::{corepc_node, ElectrsD};
     use lazy_static::lazy_static;
     use std::env;
+    use std::str::FromStr;
     use tokio::sync::Mutex;
     #[cfg(all(feature = "blocking", feature = "async"))]
     use {
@@ -924,6 +925,82 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
+    async fn test_get_block_info() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        // Genesis block `BlockHash` on regtest.
+        let blockhash_genesis =
+            BlockHash::from_str("0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206")
+                .unwrap();
+
+        let block_info_blocking = blocking_client.get_block_info(&blockhash_genesis).unwrap();
+        let block_info_async = async_client
+            .get_block_info(&blockhash_genesis)
+            .await
+            .unwrap();
+
+        assert_eq!(block_info_async, block_info_blocking);
+        assert_eq!(block_info_async.id, blockhash_genesis);
+        assert_eq!(block_info_async.height, 0);
+        assert_eq!(block_info_async.previousblockhash, None);
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_get_block_txids() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+
+        // Create 5 transactions and mine a block.
+        let txids: Vec<_> = (0..5)
+            .map(|_| {
+                BITCOIND
+                    .client
+                    .send_to_address(&address, Amount::from_sat(1000))
+                    .unwrap()
+                    .txid()
+                    .unwrap()
+            })
+            .collect();
+
+        let _miner = MINER.lock().await;
+        generate_blocks_and_wait(1);
+
+        // Get the block hash at the chain's tip.
+        let blockhash = blocking_client.get_tip_hash().unwrap();
+
+        let txids_async = async_client.get_block_txids(&blockhash).await.unwrap();
+        let txids_blocking = blocking_client.get_block_txids(&blockhash).unwrap();
+
+        assert_eq!(txids_async, txids_blocking);
+
+        // Compare expected and received (skipping the coinbase TXID).
+        for expected_txid in txids.iter() {
+            assert!(txids_async.contains(expected_txid));
+        }
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_get_block_txs() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let _miner = MINER.lock().await;
+        let blockhash = blocking_client.get_tip_hash().unwrap();
+
+        let txs_blocking = blocking_client.get_block_txs(&blockhash, None).unwrap();
+        let txs_async = async_client.get_block_txs(&blockhash, None).await.unwrap();
+
+        assert_ne!(txs_blocking.len(), 0);
+        assert_eq!(txs_blocking.len(), txs_async.len());
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
     async fn test_get_blocks() {
         let (blocking_client, async_client) = setup_clients().await;
         let start_height = BITCOIND.client.get_block_count().unwrap().0;
@@ -1013,6 +1090,142 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
+    async fn test_get_scripthash_stats() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        // Create an address of each type.
+        let address_legacy = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+        let address_p2sh_segwit = BITCOIND
+            .client
+            .new_address_with_type(AddressType::P2shSegwit)
+            .unwrap();
+        let address_bech32 = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Bech32)
+            .unwrap();
+        let address_bech32m = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Bech32m)
+            .unwrap();
+
+        // Send a transaction to each address.
+        let _txid = BITCOIND
+            .client
+            .send_to_address(&address_legacy, Amount::from_sat(1000))
+            .unwrap()
+            .txid()
+            .unwrap();
+        let _txid = BITCOIND
+            .client
+            .send_to_address(&address_p2sh_segwit, Amount::from_sat(1000))
+            .unwrap()
+            .txid()
+            .unwrap();
+        let _txid = BITCOIND
+            .client
+            .send_to_address(&address_bech32, Amount::from_sat(1000))
+            .unwrap()
+            .txid()
+            .unwrap();
+        let _txid = BITCOIND
+            .client
+            .send_to_address(&address_bech32m, Amount::from_sat(1000))
+            .unwrap()
+            .txid()
+            .unwrap();
+
+        let _miner = MINER.lock().await;
+        generate_blocks_and_wait(1);
+
+        // Derive each addresses script.
+        let script_legacy = address_legacy.script_pubkey();
+        let script_p2sh_segwit = address_p2sh_segwit.script_pubkey();
+        let script_bech32 = address_bech32.script_pubkey();
+        let script_bech32m = address_bech32m.script_pubkey();
+
+        // P2PKH
+        let scripthash_stats_blocking_legacy = blocking_client
+            .get_scripthash_stats(&script_legacy)
+            .unwrap();
+        let scripthash_stats_async_legacy = async_client
+            .get_scripthash_stats(&script_legacy)
+            .await
+            .unwrap();
+        assert_eq!(
+            scripthash_stats_blocking_legacy,
+            scripthash_stats_async_legacy
+        );
+        assert_eq!(
+            scripthash_stats_blocking_legacy.chain_stats.funded_txo_sum,
+            1000
+        );
+        assert_eq!(scripthash_stats_blocking_legacy.chain_stats.tx_count, 1);
+
+        // P2SH-P2WSH
+        let scripthash_stats_blocking_p2sh_segwit = blocking_client
+            .get_scripthash_stats(&script_p2sh_segwit)
+            .unwrap();
+        let scripthash_stats_async_p2sh_segwit = async_client
+            .get_scripthash_stats(&script_p2sh_segwit)
+            .await
+            .unwrap();
+        assert_eq!(
+            scripthash_stats_blocking_p2sh_segwit,
+            scripthash_stats_async_p2sh_segwit
+        );
+        assert_eq!(
+            scripthash_stats_blocking_p2sh_segwit
+                .chain_stats
+                .funded_txo_sum,
+            1000
+        );
+        assert_eq!(
+            scripthash_stats_blocking_p2sh_segwit.chain_stats.tx_count,
+            1
+        );
+
+        // P2WPKH / P2WSH
+        let scripthash_stats_blocking_bech32 = blocking_client
+            .get_scripthash_stats(&script_bech32)
+            .unwrap();
+        let scripthash_stats_async_bech32 = async_client
+            .get_scripthash_stats(&script_bech32)
+            .await
+            .unwrap();
+        assert_eq!(
+            scripthash_stats_blocking_bech32,
+            scripthash_stats_async_bech32
+        );
+        assert_eq!(
+            scripthash_stats_blocking_bech32.chain_stats.funded_txo_sum,
+            1000
+        );
+        assert_eq!(scripthash_stats_blocking_bech32.chain_stats.tx_count, 1);
+
+        // P2TR
+        let scripthash_stats_blocking_bech32m = blocking_client
+            .get_scripthash_stats(&script_bech32m)
+            .unwrap();
+        let scripthash_stats_async_bech32m = async_client
+            .get_scripthash_stats(&script_bech32m)
+            .await
+            .unwrap();
+        assert_eq!(
+            scripthash_stats_blocking_bech32m,
+            scripthash_stats_async_bech32m
+        );
+        assert_eq!(
+            scripthash_stats_blocking_bech32m.chain_stats.funded_txo_sum,
+            1000
+        );
+        assert_eq!(scripthash_stats_blocking_bech32m.chain_stats.tx_count, 1);
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
     async fn test_get_address_txs() {
         let (blocking_client, async_client) = setup_clients().await;
 
@@ -1064,5 +1277,128 @@ mod test {
         assert_ne!(address_utxos_blocking.len(), 0);
         assert_ne!(address_utxos_async.len(), 0);
         assert_eq!(address_utxos_blocking, address_utxos_async);
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_get_scripthash_utxos() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+        let script = address.script_pubkey();
+
+        let _txid = BITCOIND
+            .client
+            .send_to_address(&address, Amount::from_sat(21000))
+            .unwrap()
+            .txid()
+            .unwrap();
+
+        let _miner = MINER.lock().await;
+        generate_blocks_and_wait(1);
+
+        let scripthash_utxos_blocking = blocking_client.get_scripthash_utxos(&script).unwrap();
+        let scripthash_utxos_async = async_client.get_scripthash_utxos(&script).await.unwrap();
+
+        assert_ne!(scripthash_utxos_blocking.len(), 0);
+        assert_ne!(scripthash_utxos_async.len(), 0);
+        assert_eq!(scripthash_utxos_blocking, scripthash_utxos_async);
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_get_tx_outspends() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+
+        let txid = BITCOIND
+            .client
+            .send_to_address(&address, Amount::from_sat(21000))
+            .unwrap()
+            .txid()
+            .unwrap();
+
+        let _miner = MINER.lock().await;
+        generate_blocks_and_wait(1);
+
+        let outspends_blocking = blocking_client.get_tx_outspends(&txid).unwrap();
+        let outspends_async = async_client.get_tx_outspends(&txid).await.unwrap();
+
+        // Assert that there are 2 outputs: 21K sat and (coinbase - 21K sat).
+        assert_eq!(outspends_blocking.len(), 2);
+        assert_eq!(outspends_async.len(), 2);
+        assert_eq!(outspends_blocking, outspends_async);
+
+        // Assert that both outputs are returned as unspent (spent == false).
+        assert!(outspends_blocking.iter().all(|output| !output.spent));
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_mempool_methods() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+
+        for _ in 0..5 {
+            let _txid = BITCOIND
+                .client
+                .send_to_address(&address, Amount::from_sat(1000))
+                .unwrap()
+                .txid()
+                .unwrap();
+        }
+
+        // Wait for transactions to propagate to electrs' mempool.
+        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+
+        // Test `get_mempool_stats`
+        let stats_blocking = blocking_client.get_mempool_stats().unwrap();
+        let stats_async = async_client.get_mempool_stats().await.unwrap();
+        assert_eq!(stats_blocking, stats_async);
+        assert!(stats_blocking.count >= 5);
+
+        // Test `get_mempool_recent_txs`
+        let recent_blocking = blocking_client.get_mempool_recent_txs().unwrap();
+        let recent_async = async_client.get_mempool_recent_txs().await.unwrap();
+        assert_eq!(recent_blocking, recent_async);
+        assert!(recent_blocking.len() <= 10);
+        assert!(!recent_blocking.is_empty());
+
+        // Test `get_mempool_txids`
+        let txids_blocking = blocking_client.get_mempool_txids().unwrap();
+        let txids_async = async_client.get_mempool_txids().await.unwrap();
+        assert_eq!(txids_blocking, txids_async);
+        assert!(txids_blocking.len() >= 5);
+
+        // Test `get_mempool_scripthash_txs`
+        let script = address.script_pubkey();
+        let scripthash_txs_blocking = blocking_client.get_mempool_scripthash_txs(&script).unwrap();
+        let scripthash_txs_async = async_client
+            .get_mempool_scripthash_txs(&script)
+            .await
+            .unwrap();
+        assert_eq!(scripthash_txs_blocking, scripthash_txs_async);
+        assert_eq!(scripthash_txs_blocking.len(), 5);
+
+        // Test `get_mempool_address_txs`
+        let mempool_address_txs_blocking =
+            blocking_client.get_mempool_address_txs(&address).unwrap();
+        let mempool_address_txs_async = async_client
+            .get_mempool_address_txs(&address)
+            .await
+            .unwrap();
+        assert_eq!(mempool_address_txs_blocking, mempool_address_txs_async);
+        assert_eq!(mempool_address_txs_blocking.len(), 5);
     }
 }
