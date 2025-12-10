@@ -90,7 +90,7 @@ pub struct BlockTime {
 
 /// Information about a bitcoin [`Block`].
 #[derive(Debug, Clone, Deserialize)]
-pub struct BlockInformation {
+pub struct BlockInfo {
     /// The block's [`BlockHash`].
     pub id: BlockHash,
     /// The block's height.
@@ -119,7 +119,7 @@ pub struct BlockInformation {
     pub difficulty: f64,
 }
 
-impl PartialEq for BlockInformation {
+impl PartialEq for BlockInfo {
     fn eq(&self, other: &Self) -> bool {
         let Self { difficulty: d1, .. } = self;
         let Self { difficulty: d2, .. } = other;
@@ -139,7 +139,7 @@ impl PartialEq for BlockInformation {
             && ((d1.is_nan() && d2.is_nan()) || (d1 == d2))
     }
 }
-impl Eq for BlockInformation {}
+impl Eq for BlockInfo {}
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct BlockSummary {

@@ -27,7 +27,7 @@ use log::{debug, error, info, trace};
 use reqwest::{header, Client, Response};
 
 use crate::{
-    AddressStats, BlockInformation, BlockStatus, BlockSummary, Builder, Error, MempoolRecentTx,
+    AddressStats, BlockInfo, BlockStatus, BlockSummary, Builder, Error, MempoolRecentTx,
     MempoolStats, MerkleProof, OutputStatus, ScriptHashStats, Tx, TxStatus, Utxo,
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
@@ -477,7 +477,7 @@ impl<S: Sleeper> AsyncClient<S> {
     }
 
     /// Get a summary about a [`Block`], given it's [`BlockHash`].
-    pub async fn get_block_info(&self, blockhash: &BlockHash) -> Result<BlockInformation, Error> {
+    pub async fn get_block_info(&self, blockhash: &BlockHash) -> Result<BlockInfo, Error> {
         let path = format!("/block/{blockhash}");
 
         self.get_response_json(&path).await

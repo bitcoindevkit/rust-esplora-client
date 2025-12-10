@@ -28,7 +28,7 @@ use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::{Address, Block, BlockHash, MerkleBlock, Script, Transaction, Txid};
 
 use crate::{
-    AddressStats, BlockInformation, BlockStatus, BlockSummary, Builder, Error, MempoolRecentTx,
+    AddressStats, BlockInfo, BlockStatus, BlockSummary, Builder, Error, MempoolRecentTx,
     MempoolStats, MerkleProof, OutputStatus, ScriptHashStats, Tx, TxStatus, Utxo,
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
@@ -405,7 +405,7 @@ impl BlockingClient {
     }
 
     /// Get a summary about a [`Block`], given it's [`BlockHash`].
-    pub fn get_block_info(&self, blockhash: &BlockHash) -> Result<BlockInformation, Error> {
+    pub fn get_block_info(&self, blockhash: &BlockHash) -> Result<BlockInfo, Error> {
         let path = format!("/block/{blockhash}");
 
         self.get_response_json(&path)
