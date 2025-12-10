@@ -1,7 +1,7 @@
 // Bitcoin Dev Kit
 // Written in 2020 by Alekos Filini <alekos.filini@gmail.com>
 //
-// Copyright (c) 2020-2021 Bitcoin Dev Kit Developers
+// Copyright (c) 2020-2025 Bitcoin Dev Kit Developers
 //
 // This file is licensed under the Apache License, Version 2.0 <LICENSE-APACHE
 // or http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -14,6 +14,7 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::str::FromStr;
+use std::time::Duration;
 
 use bitcoin::block::Header as BlockHeader;
 use bitcoin::consensus::{deserialize, serialize, Decodable, Encodable};
@@ -32,6 +33,7 @@ use crate::{
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
+/// An async client for interacting with an Esplora API server.
 #[derive(Debug, Clone)]
 pub struct AsyncClient<S = DefaultSleeper> {
     /// The URL of the Esplora Server.
@@ -40,13 +42,12 @@ pub struct AsyncClient<S = DefaultSleeper> {
     client: Client,
     /// Number of times to retry a request
     max_retries: usize,
-
     /// Marker for the type of sleeper used
     marker: PhantomData<S>,
 }
 
 impl<S: Sleeper> AsyncClient<S> {
-    /// Build an async client from a builder
+    /// Build an [`AsyncClient`] from a [`Builder`].
     pub fn from_builder(builder: Builder) -> Result<Self, Error> {
         let mut client_builder = Client::builder();
 
@@ -80,6 +81,7 @@ impl<S: Sleeper> AsyncClient<S> {
         })
     }
 
+    /// Build an [`AsyncClient`] from a [`Client`].
     pub fn from_client(url: String, client: Client) -> Self {
         AsyncClient {
             url,
@@ -308,12 +310,12 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json(&format!("/tx/{txid}/status")).await
     }
 
-    /// Get transaction info given it's [`Txid`].
+    /// Get transaction info given its [`Txid`].
     pub async fn get_tx_info(&self, txid: &Txid) -> Result<Option<Tx>, Error> {
         self.get_opt_response_json(&format!("/tx/{txid}")).await
     }
 
-    /// Get the spend status of a [`Transaction`]'s outputs, given it's [`Txid`].
+    /// Get the spend status of a [`Transaction`]'s outputs, given its [`Txid`].
     pub async fn get_tx_outspends(&self, txid: &Txid) -> Result<Vec<OutputStatus>, Error> {
         self.get_response_json(&format!("/tx/{txid}/outspends"))
             .await
@@ -458,7 +460,7 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json("/mempool").await
     }
 
-    // Get a list of the last 10 [`Transaction`]s to enter the mempool.
+    /// Get a list of the last 10 [`Transaction`]s to enter the mempool.
     pub async fn get_mempool_recent_txs(&self) -> Result<Vec<MempoolRecentTx>, Error> {
         self.get_response_json("/mempool/recent").await
     }
@@ -470,13 +472,13 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json("/mempool/txids").await
     }
 
-    /// Get an map where the key is the confirmation target (in number of
+    /// Get a map where the key is the confirmation target (in number of
     /// blocks) and the value is the estimated feerate (in sat/vB).
     pub async fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
         self.get_response_json("/fee-estimates").await
     }
 
-    /// Get a summary about a [`Block`], given it's [`BlockHash`].
+    /// Get a summary about a [`Block`], given its [`BlockHash`].
     pub async fn get_block_info(&self, blockhash: &BlockHash) -> Result<BlockInfo, Error> {
         let path = format!("/block/{blockhash}");
 
@@ -490,7 +492,7 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json(&path).await
     }
 
-    /// Get up to 25 [`Transaction`]s from a [`Block`], given it's [`BlockHash`],
+    /// Get up to 25 [`Transaction`]s from a [`Block`], given its [`BlockHash`],
     /// beginning at `start_index` (starts from 0 if `start_index` is `None`).
     ///
     /// The `start_index` value MUST be a multiple of 25,
@@ -573,11 +575,15 @@ fn is_status_retryable(status: reqwest::StatusCode) -> bool {
     RETRYABLE_ERROR_CODES.contains(&status.as_u16())
 }
 
+/// Sleeper trait that allows any async runtime to be used.
 pub trait Sleeper: 'static {
+    /// The `Future` type returned by the sleep function.
     type Sleep: std::future::Future<Output = ()>;
-    fn sleep(dur: std::time::Duration) -> Self::Sleep;
+    /// Create a `Future` that completes after the specified [`Duration`].
+    fn sleep(dur: Duration) -> Self::Sleep;
 }
 
+/// The default `Sleeper` implementation using the underlying async runtime.
 #[derive(Debug, Clone, Copy)]
 pub struct DefaultSleeper;
 

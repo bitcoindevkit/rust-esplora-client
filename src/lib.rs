@@ -61,13 +61,14 @@
 //! * `async-https-rustls` enables [`reqwest`], the async client with support for proxying and TLS
 //!   (SSL) using the `rustls` TLS backend.
 //! * `async-https-rustls-manual-roots` enables [`reqwest`], the async client with support for
-//!   proxying and TLS (SSL) using the `rustls` TLS backend without using its the default root
+//!   proxying and TLS (SSL) using the `rustls` TLS backend without using the default root
 //!   certificates.
 //!
 //! [`dont remove this line or cargo doc will break`]: https://example.com
 #![cfg_attr(not(feature = "minreq"), doc = "[`minreq`]: https://docs.rs/minreq")]
 #![cfg_attr(not(feature = "reqwest"), doc = "[`reqwest`]: https://docs.rs/reqwest")]
 #![allow(clippy::result_large_err)]
+#![warn(missing_docs)]
 
 use std::collections::HashMap;
 use std::fmt;
@@ -115,6 +116,7 @@ pub fn convert_fee_rate(target: usize, estimates: HashMap<u16, f64>) -> Option<f
         .map(|(_, v)| v as f32)
 }
 
+/// A builder for an [`AsyncClient`] or [`BlockingClient`].
 #[derive(Debug, Clone)]
 pub struct Builder {
     /// The URL of the Esplora server.
@@ -207,7 +209,12 @@ pub enum Error {
     #[cfg(feature = "async")]
     Reqwest(::reqwest::Error),
     /// HTTP response error
-    HttpResponse { status: u16, message: String },
+    HttpResponse {
+        /// The HTTP status code returned by the server.
+        status: u16,
+        /// The error message content.
+        message: String,
+    },
     /// Invalid number returned
     Parsing(std::num::ParseIntError),
     /// Invalid status code, unable to convert to `u16`
