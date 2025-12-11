@@ -26,6 +26,8 @@ use log::{debug, error, info, trace};
 
 use reqwest::{header, Client, Response};
 
+#[cfg(feature = "async-ohttp")]
+use crate::ohttp::OhttpClient;
 use crate::{
     AddressStats, BlockInfo, BlockStatus, BlockSummary, Builder, Error, MempoolRecentTx,
     MempoolStats, MerkleProof, OutputStatus, ScriptHashStats, Tx, TxStatus, Utxo,
@@ -43,6 +45,9 @@ pub struct AsyncClient<S = DefaultSleeper> {
 
     /// Marker for the type of sleeper used
     marker: PhantomData<S>,
+    /// Ohttp config
+    #[cfg(feature = "async-ohttp")]
+    ohttp_client: Option<OhttpClient>,
 }
 
 impl<S: Sleeper> AsyncClient<S> {
@@ -77,6 +82,8 @@ impl<S: Sleeper> AsyncClient<S> {
             client: client_builder.build()?,
             max_retries: builder.max_retries,
             marker: PhantomData,
+            #[cfg(feature = "async-ohttp")]
+            ohttp_client: None,
         })
     }
 
@@ -86,7 +93,15 @@ impl<S: Sleeper> AsyncClient<S> {
             client,
             max_retries: crate::DEFAULT_MAX_RETRIES,
             marker: PhantomData,
+            #[cfg(feature = "async-ohttp")]
+            ohttp_client: None,
         }
+    }
+
+    #[cfg(feature = "async-ohttp")]
+    pub(crate) fn set_ohttp_client(mut self, ohttp_client: OhttpClient) -> Self {
+        self.ohttp_client = Some(ohttp_client);
+        self
     }
 
     /// Make an HTTP GET request to given URL, deserializing to any `T` that
@@ -557,12 +572,32 @@ impl<S: Sleeper> AsyncClient<S> {
         let mut attempts = 0;
 
         loop {
-            match self.client.get(url).send().await? {
+            let res = {
+                #[cfg(feature = "async-ohttp")]
+                if let Some(ohttp_client) = &self.ohttp_client {
+                    let (body, ctx) = ohttp_client.ohttp_encapsulate("get", url, None)?;
+                    let res = self
+                        .client
+                        .post(ohttp_client.relay_url().to_string())
+                        .header("Content-Type", "message/ohttp-req")
+                        .body(body)
+                        .send()
+                        .await?;
+                    let body = res.bytes().await?.to_vec();
+                    ohttp_client.ohttp_decapsulate(ctx, body)?.into()
+                } else {
+                    self.client.get(url).send().await?
+                }
+                #[cfg(not(feature = "async-ohttp"))]
+                self.client.get(url).send().await?
+            };
+            match res {
                 resp if attempts < self.max_retries && is_status_retryable(resp.status()) => {
                     S::sleep(delay).await;
                     attempts += 1;
                     delay *= 2;
                 }
+
                 resp => return Ok(resp),
             }
         }
