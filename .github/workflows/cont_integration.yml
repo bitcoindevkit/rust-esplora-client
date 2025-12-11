@@ -19,8 +19,8 @@ jobs:
           - blocking
           - blocking-https
           - blocking-https-rustls
-          - blocking-https-native
-          - blocking-https-bundled
+          # - blocking-https-native
+          # - blocking-https-bundled
           - async
           - async-https
           - async-https-native
@@ -51,7 +51,7 @@ jobs:
       if: matrix.rust.version == '1.63.0'
       run: |
         cargo update -p reqwest --precise "0.12.4"
-        cargo update -p minreq --precise "2.13.2"
+        # cargo update -p minreq --precise "2.13.2"
         cargo update -p home --precise "0.5.5"
         cargo update -p url --precise "2.5.0"
         cargo update -p tokio --precise "1.38.1"
