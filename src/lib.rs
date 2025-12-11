@@ -373,6 +373,194 @@ mod test {
         (blocking_client, async_client)
     }
 
+    #[cfg(feature = "async-ohttp")]
+    fn find_free_port() -> u16 {
+        let listener = std::net::TcpListener::bind("0.0.0.0:0").unwrap();
+        listener.local_addr().unwrap().port()
+    }
+
+    #[cfg(feature = "async-ohttp")]
+    async fn start_ohttp_relay(
+        gateway_url: ohttp_relay::GatewayUri,
+    ) -> (
+        u16,
+        tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + std::marker::Send + Sync>>>,
+    ) {
+        let port = find_free_port();
+        let relay = ohttp_relay::listen_tcp(port, gateway_url).await.unwrap();
+
+        (port, relay)
+    }
+
+    #[cfg(feature = "async-ohttp")]
+    async fn start_ohttp_gateway() -> (u16, tokio::task::JoinHandle<()>) {
+        use http_body_util::Full;
+        use hyper::body::Incoming;
+        use hyper::service::service_fn;
+        use hyper::Response;
+        use hyper::{Method, Request};
+        use hyper_util::rt::TokioIo;
+        use tokio::net::TcpListener;
+
+        let port = find_free_port();
+        let listener = TcpListener::bind(format!("0.0.0.0:{}", port))
+            .await
+            .unwrap();
+
+        let handle = tokio::spawn(async move {
+            let key_config = bitcoin_ohttp::KeyConfig::new(
+                0,
+                bitcoin_ohttp::hpke::Kem::K256Sha256,
+                vec![bitcoin_ohttp::SymmetricSuite::new(
+                    bitcoin_ohttp::hpke::Kdf::HkdfSha256,
+                    bitcoin_ohttp::hpke::Aead::ChaCha20Poly1305,
+                )],
+            )
+            .expect("valid key config");
+            let server = bitcoin_ohttp::Server::new(key_config).expect("valid server");
+            let server = std::sync::Arc::new(server);
+            loop {
+                match listener.accept().await {
+                    Ok((stream, _)) => {
+                        let io = TokioIo::new(stream);
+                        let server = server.clone();
+                        let service = service_fn(move |req: Request<Incoming>| {
+                            let server = server.clone();
+                            async move {
+                                let path = req.uri().path();
+                                if path == "/.well-known/ohttp-gateway"
+                                    && req.method() == Method::GET
+                                {
+                                    let key_config = server.config().encode().unwrap();
+                                    Ok::<_, hyper::Error>(
+                                        Response::builder()
+                                            .status(200)
+                                            .header("content-type", "application/ohttp-keys")
+                                            .body(Full::new(hyper::body::Bytes::from(key_config)))
+                                            .unwrap(),
+                                    )
+                                } else if path == "/.well-known/ohttp-gateway"
+                                    && req.method() == Method::POST
+                                {
+                                    use http_body_util::BodyExt;
+
+                                    // Assert that the content-type header is set to
+                                    // "message/ohttp-req".
+                                    let content_type_header = req
+                                        .headers()
+                                        .get("content-type")
+                                        .expect("content-type header should be set by the client");
+                                    assert_eq!(content_type_header, "message/ohttp-req");
+
+                                    let bytes = req.collect().await?.to_bytes();
+                                    let (bhttp_body, response_ctx) =
+                                        server.decapsulate(bytes.iter().as_slice()).unwrap();
+                                    // Reconstruct the inner HTTP message from the bhttp message.
+                                    let mut r = std::io::Cursor::new(bhttp_body);
+                                    let m: bhttp::Message = bhttp::Message::read_bhttp(&mut r)
+                                        .expect("Should be valid bhttp message");
+                                    let base_url = format!(
+                                        "http://{}",
+                                        ELECTRSD.esplora_url.as_ref().unwrap()
+                                    );
+                                    let path =
+                                        String::from_utf8(m.control().path().unwrap().to_vec())
+                                            .unwrap();
+                                    let _ =
+                                        Method::from_bytes(m.control().method().unwrap()).unwrap();
+                                    // TODO: Use the actual method from the bhttp message
+                                    // This will be refactored out to use bitreq
+                                    let req = reqwest::Request::new(
+                                        Method::GET,
+                                        url::Url::parse(&(base_url + &path)).unwrap(),
+                                    );
+                                    let mut req_builder = reqwest::RequestBuilder::from_parts(
+                                        reqwest::Client::new(),
+                                        req,
+                                    );
+                                    for field in m.header().iter() {
+                                        req_builder =
+                                            req_builder.header(field.name(), field.value());
+                                    }
+
+                                    let res = req_builder.send().await.unwrap();
+                                    // Convert HTTP response to bhttp response
+                                    let mut m: bhttp::Message = bhttp::Message::response(
+                                        res.status().as_u16().try_into().unwrap(),
+                                    );
+                                    m.write_content(res.bytes().await.unwrap());
+                                    let mut bhttp_res = vec![];
+                                    m.write_bhttp(bhttp::Mode::IndeterminateLength, &mut bhttp_res)
+                                        .unwrap();
+                                    // Now we need to encapsulate the response
+                                    let encapsulated_response =
+                                        response_ctx.encapsulate(&bhttp_res).unwrap();
+
+                                    Ok::<_, hyper::Error>(
+                                        Response::builder()
+                                            .status(200)
+                                            .header("content-type", "message/ohttp-res")
+                                            .body(Full::new(hyper::body::Bytes::copy_from_slice(
+                                                &encapsulated_response,
+                                            )))
+                                            .unwrap(),
+                                    )
+                                } else {
+                                    Ok::<_, hyper::Error>(
+                                        Response::builder()
+                                            .status(404)
+                                            .body(Full::new(hyper::body::Bytes::from("Not Found")))
+                                            .unwrap(),
+                                    )
+                                }
+                            }
+                        });
+
+                        tokio::spawn(async move {
+                            if let Err(err) = hyper::server::conn::http1::Builder::new()
+                                .serve_connection(io, service)
+                                .await
+                            {
+                                eprintln!("Error serving connection: {:?}", err);
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        eprintln!("Error accepting connection: {:?}", e);
+                        break;
+                    }
+                }
+            }
+        });
+        println!("OHTTP gateway started on port {}", port);
+
+        (port, handle)
+    }
+    #[cfg(feature = "async-ohttp")]
+    #[tokio::test]
+    async fn test_ohttp_e2e() {
+        let (_, async_client) = setup_clients().await;
+        let block_hash = async_client.get_block_hash(1).await.unwrap();
+        let esplora_url = ELECTRSD.esplora_url.as_ref().unwrap();
+        let (gateway_port, _) = start_ohttp_gateway().await;
+        let gateway_origin = format!("http://localhost:{gateway_port}");
+        let (relay_port, _) =
+            start_ohttp_relay(gateway_origin.parse::<ohttp_relay::GatewayUri>().unwrap()).await;
+        let gateway_url = format!(
+            "http://localhost:{}/.well-known/ohttp-gateway",
+            gateway_port
+        );
+        let relay_url = format!("http://localhost:{}", relay_port);
+
+        let ohttp_client = Builder::new(&format!("http://{}", esplora_url))
+            .build_async_with_ohttp(&relay_url, &gateway_url)
+            .await
+            .unwrap();
+
+        let res = ohttp_client.get_block_hash(1).await.unwrap();
+        assert_eq!(res, block_hash);
+    }
+
     #[cfg(all(feature = "blocking", feature = "async"))]
     fn generate_blocks_and_wait(num: usize) {
         let cur_height = BITCOIND.client.get_block_count().unwrap().0;

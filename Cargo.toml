@@ -40,6 +40,10 @@ serde_json = "1.0"
 tokio = { version = "1.20.1", features = ["full"] }
 electrsd = { version = "0.33.0", features = ["legacy", "esplora_a33e97e1", "corepc-node_28_0"] }
 lazy_static = "1.4.0"
+ohttp-relay = { git = "https://github.com/payjoin/ohttp-relay.git", branch = "main", features = ["_test-util"]}
+hyper = {version = "1.8.1", features = ["full"]}
+hyper-util = {version = "0.1.19"}
+http-body-util = "0.1.1"
 
 [features]
 default = ["blocking", "async", "async-https", "tokio"]
