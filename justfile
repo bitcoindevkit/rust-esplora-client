@@ -11,11 +11,12 @@ _default:
 build:
    cargo build
 
-# Check code: formatting, compilation, linting, and commit signature
+# Check code: formatting, compilation, linting, doc comments, and commit signature
 check:
    cargo +nightly fmt --all -- --check
    cargo check --all-features --all-targets
    cargo clippy --all-features --all-targets -- -D warnings
+   RUSTDOCFLAGS="-D warnings" cargo doc --all-features --no-deps
    @[ "$(git log --pretty='format:%G?' -1 HEAD)" = "N" ] && \
        echo "\n⚠️  Unsigned commit: BDK requires that commits be signed." || \
        true

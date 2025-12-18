@@ -1,7 +1,7 @@
 // Bitcoin Dev Kit
 // Written in 2020 by Alekos Filini <alekos.filini@gmail.com>
 //
-// Copyright (c) 2020-2021 Bitcoin Dev Kit Developers
+// Copyright (c) 2020-2025 Bitcoin Dev Kit Developers
 //
 // This file is licensed under the Apache License, Version 2.0 <LICENSE-APACHE
 // or http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -33,6 +33,7 @@ use crate::{
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
+/// A blocking client for interacting with an Esplora API server.
 #[derive(Debug, Clone)]
 pub struct BlockingClient {
     /// The URL of the Esplora server.
@@ -222,17 +223,17 @@ impl BlockingClient {
         self.get_response_json(&format!("/tx/{txid}/status"))
     }
 
-    /// Get transaction info given it's [`Txid`].
+    /// Get transaction info given its [`Txid`].
     pub fn get_tx_info(&self, txid: &Txid) -> Result<Option<Tx>, Error> {
         self.get_opt_response_json(&format!("/tx/{txid}"))
     }
 
-    /// Get the spend status of a [`Transaction`]'s outputs, given it's [`Txid`].
+    /// Get the spend status of a [`Transaction`]'s outputs, given its [`Txid`].
     pub fn get_tx_outspends(&self, txid: &Txid) -> Result<Vec<OutputStatus>, Error> {
         self.get_response_json(&format!("/tx/{txid}/outspends"))
     }
 
-    /// Get a [`BlockHeader`] given a particular block hash.
+    /// Get a [`BlockHeader`] given a particular [`BlockHash`].
     pub fn get_header_by_hash(&self, block_hash: &BlockHash) -> Result<BlockHeader, Error> {
         self.get_response_hex(&format!("/block/{block_hash}/header"))
     }
@@ -321,7 +322,7 @@ impl BlockingClient {
         self.get_response_json("/mempool")
     }
 
-    // Get a list of the last 10 [`Transaction`]s to enter the mempool.
+    /// Get a list of the last 10 [`Transaction`]s to enter the mempool.
     pub fn get_mempool_recent_txs(&self) -> Result<Vec<MempoolRecentTx>, Error> {
         self.get_response_json("/mempool/recent")
     }
@@ -333,7 +334,7 @@ impl BlockingClient {
         self.get_response_json("/mempool/txids")
     }
 
-    /// Get an map where the key is the confirmation target (in number of
+    /// Get a map where the key is the confirmation target (in number of
     /// blocks) and the value is the estimated feerate (in sat/vB).
     pub fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
         self.get_response_json("/fee-estimates")
@@ -404,7 +405,7 @@ impl BlockingClient {
         self.get_response_json(&path)
     }
 
-    /// Get a summary about a [`Block`], given it's [`BlockHash`].
+    /// Get a summary about a [`Block`], given its [`BlockHash`].
     pub fn get_block_info(&self, blockhash: &BlockHash) -> Result<BlockInfo, Error> {
         let path = format!("/block/{blockhash}");
 
@@ -418,7 +419,7 @@ impl BlockingClient {
         self.get_response_json(&path)
     }
 
-    /// Get up to 25 [`Transaction`]s from a [`Block`], given it's [`BlockHash`],
+    /// Get up to 25 [`Transaction`]s from a [`Block`], given its [`BlockHash`],
     /// beginning at `start_index` (starts from 0 if `start_index` is `None`).
     ///
     /// The `start_index` value MUST be a multiple of 25,
