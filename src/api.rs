@@ -15,13 +15,15 @@
 
 use bitcoin::hash_types;
 use serde::Deserialize;
+use std::collections::HashMap;
 
 pub use bitcoin::consensus::{deserialize, serialize};
 use bitcoin::hash_types::TxMerkleNode;
 pub use bitcoin::hex::FromHex;
 pub use bitcoin::{
-    absolute, block, transaction, Address, Amount, Block, BlockHash, CompactTarget, OutPoint,
-    Script, ScriptBuf, ScriptHash, Transaction, TxIn, TxOut, Txid, Weight, Witness,
+    absolute, block, transaction, Address, Amount, Block, BlockHash, CompactTarget, FeeRate,
+    OutPoint, Script, ScriptBuf, ScriptHash, Transaction, TxIn, TxOut, Txid, Weight, Witness,
+    Wtxid,
 };
 
 /// Information about a previous output.
@@ -311,6 +313,61 @@ pub struct MempoolRecentTx {
     pub value: u64,
 }
 
+/// The result for a broadcasted package of [`Transaction`]s.
+#[derive(Deserialize, Debug)]
+pub struct SubmitPackageResult {
+    /// The transaction package result message. "success" indicates all transactions were accepted
+    /// into or are already in the mempool.
+    pub package_msg: String,
+    /// Transaction results keyed by [`Wtxid`].
+    #[serde(rename = "tx-results")]
+    pub tx_results: HashMap<Wtxid, TxResult>,
+    /// List of txids of replaced transactions.
+    #[serde(rename = "replaced-transactions")]
+    pub replaced_transactions: Option<Vec<Txid>>,
+}
+
+/// The result [`Transaction`] for a broadcasted package of [`Transaction`]s.
+#[derive(Deserialize, Debug)]
+pub struct TxResult {
+    /// The transaction id.
+    pub txid: Txid,
+    /// The [`Wtxid`] of a different transaction with the same [`Txid`] but different witness found
+    /// in the mempool.
+    ///
+    /// If set, this means the submitted transaction was ignored.
+    #[serde(rename = "other-wtxid")]
+    pub other_wtxid: Option<Wtxid>,
+    /// Sigops-adjusted virtual transaction size.
+    pub vsize: Option<u32>,
+    /// Transaction fees.
+    pub fees: Option<MempoolFeesSubmitPackage>,
+    /// The transaction error string, if it was rejected by the mempool
+    pub error: Option<String>,
+}
+
+/// The mempool fees for a resulting [`Transaction`] broadcasted by a package of [`Transaction`]s.
+#[derive(Deserialize, Debug)]
+pub struct MempoolFeesSubmitPackage {
+    /// Transaction fee.
+    #[serde(with = "bitcoin::amount::serde::as_btc")]
+    pub base: Amount,
+    /// The effective feerate.
+    ///
+    /// Will be `None` if the transaction was already in the mempool. For example, the package
+    /// feerate and/or feerate with modified fees from the `prioritisetransaction` JSON-RPC method.
+    #[serde(
+        rename = "effective-feerate",
+        default,
+        deserialize_with = "deserialize_feerate"
+    )]
+    pub effective_feerate: Option<FeeRate>,
+    /// If [`Self::effective_feerate`] is provided, this holds the [`Wtxid`]s of the transactions
+    /// whose fees and vsizes are included in effective-feerate.
+    #[serde(rename = "effective-includes")]
+    pub effective_includes: Option<Vec<Wtxid>>,
+}
+
 impl Tx {
     /// Convert a transaction from the format returned by Esplora into a `rust-bitcoin`
     /// [`Transaction`].
@@ -391,4 +448,21 @@ where
         .map(|hex_str| Vec::<u8>::from_hex(&hex_str))
         .collect::<Result<Vec<Vec<u8>>, _>>()
         .map_err(serde::de::Error::custom)
+}
+
+fn deserialize_feerate<'de, D>(d: D) -> Result<Option<FeeRate>, D::Error>
+where
+    D: serde::de::Deserializer<'de>,
+{
+    use serde::de::Error;
+
+    let btc_per_kvb = match Option::<f64>::deserialize(d)? {
+        Some(v) => v,
+        None => return Ok(None),
+    };
+    let sat_per_kwu = btc_per_kvb * 25_000_000.0;
+    if sat_per_kwu.is_infinite() {
+        return Err(D::Error::custom("feerate overflow"));
+    }
+    Ok(Some(FeeRate::from_sat_per_kwu(sat_per_kwu as u64)))
 }
