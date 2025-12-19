@@ -290,7 +290,7 @@ impl BlockingClient {
     }
 
     /// Broadcast a [`Transaction`] to Esplora
-    pub fn broadcast(&self, transaction: &Transaction) -> Result<(), Error> {
+    pub fn broadcast(&self, transaction: &Transaction) -> Result<Txid, Error> {
         let request = self.post_request(
             "/tx",
             serialize(transaction)
@@ -305,7 +305,11 @@ impl BlockingClient {
                 let message = resp.as_str().unwrap_or_default().to_string();
                 Err(Error::HttpResponse { status, message })
             }
-            Ok(_resp) => Ok(()),
+            Ok(resp) => {
+                let txid =
+                    Txid::from_str(resp.as_str().unwrap_or_default()).map_err(Error::HexToArray)?;
+                Ok(txid)
+            }
             Err(e) => Err(Error::Minreq(e)),
         }
     }
