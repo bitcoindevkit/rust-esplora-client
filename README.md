@@ -44,4 +44,5 @@ cargo update -p log --precise "0.4.28"
 cargo update -p itoa --precise "1.0.15"
 cargo update -p serde_json --precise "1.0.145"
 cargo update -p ryu --precise "1.0.20"
+cargo update -p proc-macro2 --precise "1.0.103"
 ```
