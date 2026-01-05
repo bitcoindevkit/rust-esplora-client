@@ -74,6 +74,7 @@ jobs:
         cargo update -p log --precise "0.4.28"
         cargo update -p itoa --precise "1.0.15"
         cargo update -p serde_json --precise "1.0.145"
+        cargo update -p ryu --precise "1.0.20"
 
         cargo update -p bzip2-sys --precise "0.1.12+1.0.8" # dev-dependency
     - name: Build
