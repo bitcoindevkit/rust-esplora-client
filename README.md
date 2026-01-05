@@ -42,4 +42,5 @@ cargo update -p syn --precise "2.0.106"
 cargo update -p quote --precise "1.0.41"
 cargo update -p log --precise "0.4.28"
 cargo update -p itoa --precise "1.0.15"
+cargo update -p serde_json --precise "1.0.145"
 ```
