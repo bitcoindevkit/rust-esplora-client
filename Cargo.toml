@@ -21,6 +21,7 @@ path = "src/lib.rs"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", default-features = false }
 bitcoin = { version = "0.32", features = ["serde", "std"], default-features = false }
 hex = { version = "0.2", package = "hex-conservative" }
 log = "^0.4"
@@ -31,7 +32,6 @@ reqwest = { version = "0.12",  features = ["json"], default-features = false, op
 tokio = { version = "1", features = ["time"], optional = true }
 
 [dev-dependencies]
-serde_json = "1.0"
 tokio = { version = "1.20.1", features = ["full"] }
 electrsd = { version = "0.33.0", features = ["legacy", "esplora_a33e97e1", "corepc-node_28_0"] }
 lazy_static = "1.4.0"
