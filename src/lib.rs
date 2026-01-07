@@ -578,7 +578,7 @@ mod test {
         assert_eq!(tx_info.to_tx(), tx_exp);
         assert_eq!(tx_info.size, tx_exp.total_size());
         assert_eq!(tx_info.weight(), tx_exp.weight());
-        assert_eq!(tx_info.fee(), tx_res.fee.unwrap().unsigned_abs());
+        assert_eq!(tx_info.fee, tx_res.fee.unwrap().unsigned_abs());
         assert!(tx_info.status.confirmed);
         assert_eq!(tx_info.status.block_height, Some(tx_block_height));
         assert_eq!(tx_info.status.block_hash, tx_res.block_hash);
@@ -1095,7 +1095,10 @@ mod test {
         let address_stats_async = async_client.get_address_stats(&address).await.unwrap();
         assert_eq!(address_stats_blocking, address_stats_async);
         assert_eq!(address_stats_async.chain_stats.funded_txo_count, 1);
-        assert_eq!(address_stats_async.chain_stats.funded_txo_sum, 1000);
+        assert_eq!(
+            address_stats_async.chain_stats.funded_txo_sum,
+            Amount::from_sat(1000)
+        );
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
@@ -1170,7 +1173,7 @@ mod test {
         );
         assert_eq!(
             scripthash_stats_blocking_legacy.chain_stats.funded_txo_sum,
-            1000
+            Amount::from_sat(1000)
         );
         assert_eq!(scripthash_stats_blocking_legacy.chain_stats.tx_count, 1);
 
@@ -1190,7 +1193,7 @@ mod test {
             scripthash_stats_blocking_p2sh_segwit
                 .chain_stats
                 .funded_txo_sum,
-            1000
+            Amount::from_sat(1000)
         );
         assert_eq!(
             scripthash_stats_blocking_p2sh_segwit.chain_stats.tx_count,
@@ -1211,7 +1214,7 @@ mod test {
         );
         assert_eq!(
             scripthash_stats_blocking_bech32.chain_stats.funded_txo_sum,
-            1000
+            Amount::from_sat(1000)
         );
         assert_eq!(scripthash_stats_blocking_bech32.chain_stats.tx_count, 1);
 
@@ -1229,7 +1232,7 @@ mod test {
         );
         assert_eq!(
             scripthash_stats_blocking_bech32m.chain_stats.funded_txo_sum,
-            1000
+            Amount::from_sat(1000)
         );
         assert_eq!(scripthash_stats_blocking_bech32m.chain_stats.tx_count, 1);
     }
