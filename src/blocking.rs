@@ -332,9 +332,8 @@ impl BlockingClient {
         let mut request = self.post_request(
             "/txs/package",
             serde_json::to_string(&serialized_txs)
-                .unwrap()
-                .as_bytes()
-                .to_vec(),
+                .unwrap_or_default()
+                .into_bytes(),
         )?;
 
         if let Some(maxfeerate) = maxfeerate {
