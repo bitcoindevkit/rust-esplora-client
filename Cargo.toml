@@ -34,7 +34,6 @@ tokio = { version = "1", features = ["time"], optional = true }
 [dev-dependencies]
 tokio = { version = "1.20.1", features = ["full"] }
 electrsd = { version = "0.33.0", features = ["legacy", "esplora_a33e97e1", "corepc-node_28_0"] }
-lazy_static = "1.4.0"
 
 [features]
 default = ["blocking", "async", "async-https", "tokio"]
