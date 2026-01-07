@@ -1016,7 +1016,7 @@ mod test {
         let start_height = BITCOIND.client.get_block_count().unwrap().0;
         let blocks1 = blocking_client.get_blocks(None).unwrap();
         let blocks_async1 = async_client.get_blocks(None).await.unwrap();
-        assert_eq!(blocks1[0].time.height, start_height as u32);
+        assert_eq!(blocks1[0].height, start_height as u32);
         assert_eq!(blocks1, blocks_async1);
         generate_blocks_and_wait(10);
         let blocks2 = blocking_client.get_blocks(None).unwrap();
@@ -1031,7 +1031,7 @@ mod test {
             .await
             .unwrap();
         assert_eq!(blocks3, blocks_async3);
-        assert_eq!(blocks3[0].time.height, start_height as u32);
+        assert_eq!(blocks3[0].height, start_height as u32);
         assert_eq!(blocks3, blocks1);
         let blocks_genesis = blocking_client.get_blocks(Some(0)).unwrap();
         let blocks_genesis_async = async_client.get_blocks(Some(0)).await.unwrap();
