@@ -25,15 +25,6 @@ pub use bitcoin::{
     Wtxid,
 };
 
-/// Information about a previous output.
-#[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct PrevOut {
-    /// The value of the previous output, in satoshis.
-    pub value: u64,
-    /// The ScriptPubKey that the previous output is locked to, as a [`ScriptBuf`].
-    pub scriptpubkey: ScriptBuf,
-}
-
 /// Information about an input from a [`Transaction`].
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Vin {
@@ -43,7 +34,7 @@ pub struct Vin {
     pub vout: u32,
     /// The previous output amount and ScriptPubKey.
     /// `None` if this is a coinbase input.
-    pub prevout: Option<PrevOut>,
+    pub prevout: Option<Vout>,
     /// The ScriptSig authorizes spending this input.
     pub scriptsig: ScriptBuf,
     /// The Witness that authorizes spending this input, if this is a SegWit spend.
