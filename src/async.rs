@@ -476,11 +476,11 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json(&path).await
     }
 
-    /// Get transaction history for the specified address/scripthash,
-    /// sorted with newest first. Returns 25 transactions per page.
-    /// More can be requested by specifying the last txid seen by the previous
-    /// query.
-    pub async fn scripthash_txs(
+    /// Get transaction history for the specified [`Script`] hash,
+    /// sorted by newest first. Returns 25 transactions per page.
+    /// More can be requested by specifying
+    /// the last [`Txid`] seen by the previous query.
+    pub async fn get_scripthash_txs(
         &self,
         script: &Script,
         last_seen: Option<Txid>,
