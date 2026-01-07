@@ -126,7 +126,7 @@ pub struct Tx {
     /// The [`Transaction`] size in raw bytes (NOT virtual bytes).
     pub size: usize,
     /// The [`Transaction`]'s weight units.
-    pub weight: u64,
+    pub weight: Weight,
     /// The confirmation status of the [`Transaction`].
     pub status: TxStatus,
     /// The fee amount paid by the [`Transaction`], in satoshis.
@@ -410,11 +410,6 @@ impl Tx {
                 })
             })
             .collect()
-    }
-
-    /// Get the weight of a [`Tx`].
-    pub fn weight(&self) -> Weight {
-        Weight::from_wu(self.weight)
     }
 }
 
