@@ -410,7 +410,7 @@ impl<S: Sleeper> AsyncClient<S> {
         let response = self
             .post_request_bytes(
                 "/txs/package",
-                serde_json::to_string(&serialized_txs).unwrap(),
+                serde_json::to_string(&serialized_txs).unwrap_or_default(),
                 Some(queryparams),
             )
             .await?;

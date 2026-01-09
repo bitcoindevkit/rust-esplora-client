@@ -144,7 +144,7 @@ impl BlockingClient {
             }
             Ok(resp) => {
                 let hex_str = resp.as_str().map_err(Error::Minreq)?;
-                let hex_vec = Vec::from_hex(hex_str).unwrap();
+                let hex_vec = Vec::from_hex(hex_str)?;
                 deserialize::<T>(&hex_vec)
                     .map_err(Error::BitcoinEncoding)
                     .map(|r| Some(r))
@@ -162,7 +162,7 @@ impl BlockingClient {
             }
             Ok(resp) => {
                 let hex_str = resp.as_str().map_err(Error::Minreq)?;
-                let hex_vec = Vec::from_hex(hex_str).unwrap();
+                let hex_vec = Vec::from_hex(hex_str)?;
                 deserialize::<T>(&hex_vec).map_err(Error::BitcoinEncoding)
             }
             Err(e) => Err(e),
@@ -332,9 +332,8 @@ impl BlockingClient {
         let mut request = self.post_request(
             "/txs/package",
             serde_json::to_string(&serialized_txs)
-                .unwrap()
-                .as_bytes()
-                .to_vec(),
+                .unwrap_or_default()
+                .into_bytes(),
         )?;
 
         if let Some(maxfeerate) = maxfeerate {
