@@ -5,44 +5,24 @@ Bitcoin Esplora API client library. Supports plaintext, TLS and Onion servers. B
 <p>
     <a href="https://crates.io/crates/esplora-client"><img alt="Crate Info" src="https://img.shields.io/crates/v/esplora-client.svg"/></a>
     <a href="https://github.com/bitcoindevkit/rust-esplora-client/blob/master/LICENSE"><img alt="MIT Licensed" src="https://img.shields.io/badge/license-MIT-blue.svg"/></a>
-    <a href="https://github.com/bitcoindevkit/rust-esplora-client/actions/workflows/cont_integration.yml"><img alt="CI Status" src="https://github.com/bitcoindevkit/rust-esplora-client/workflows/Rust/badge.svg"></a>
+    <a href="https://github.com/bitcoindevkit/rust-esplora-client/actions/workflows/cont_integration.yml"><img alt="CI Status" src="https://github.com/bitcoindevkit/rust-esplora-client/actions/workflows/cont_integration.yml/badge.svg"></a>
     <a href='https://coveralls.io/github/bitcoindevkit/rust-esplora-client?branch=master'><img src='https://coveralls.io/repos/github/bitcoindevkit/rust-esplora-client/badge.svg?branch=master' alt='Coverage Status' /></a>
     <a href="https://docs.rs/esplora-client"><img alt="API Docs" src="https://img.shields.io/badge/docs.rs-esplora--client-green"/></a>
-    <a href="https://blog.rust-lang.org/2022/08/11/Rust-1.63.0.html"><img alt="Rustc Version 1.63.0+" src="https://img.shields.io/badge/rustc-1.63.0%2B-lightgrey.svg"/></a>
+    <a href="https://blog.rust-lang.org/2023/12/28/Rust-1.75.0.html"><img alt="Rustc Version 1.75.0+" src="https://img.shields.io/badge/rustc-1.75.0%2B-lightgrey.svg"/></a>
     <a href="https://discord.gg/d7NkDKm"><img alt="Chat on Discord" src="https://img.shields.io/discord/753336465005608961?logo=discord"></a>
 </p>
 
 ## Minimum Supported Rust Version (MSRV)
 
-This library should compile with any combination of features with Rust 1.63.0.
+This library should compile with any combination of features with Rust 1.75.0.
 
 To build with the MSRV you will need to pin dependencies as follows:
 
 ```shell
-cargo update -p reqwest --precise "0.12.4"
 cargo update -p minreq --precise "2.13.2"
-cargo update -p home --precise "0.5.5"
-cargo update -p url --precise "2.5.0"
-cargo update -p tokio --precise "1.38.1"
-cargo update -p security-framework-sys --precise "2.11.1"
+cargo update -p home --precise "0.5.9"
 cargo update -p native-tls --precise "0.2.13"
-cargo update -p ring --precise "0.17.12"
-cargo update -p flate2 --precise "1.0.35"
-cargo update -p once_cell --precise "1.20.3"
-cargo update -p tracing --precise "0.1.41"
-cargo update -p tracing-core --precise "0.1.33"
-cargo update -p parking_lot --precise "0.12.3"
-cargo update -p parking_lot_core --precise "0.9.10"
-cargo update -p lock_api --precise "0.4.12"
-cargo update -p socket2@0.6.1 --precise "0.5.10"
-cargo update -p webpki-roots@1.0.5 --precise "1.0.1"
-cargo update -p openssl --precise "0.10.73"
-cargo update -p openssl-sys --precise "0.9.109"
-cargo update -p syn --precise "2.0.106"
-cargo update -p quote --precise "1.0.41"
-cargo update -p log --precise "0.4.28"
-cargo update -p itoa --precise "1.0.15"
-cargo update -p serde_json --precise "1.0.145"
-cargo update -p ryu --precise "1.0.20"
-cargo update -p proc-macro2 --precise "1.0.103"
+cargo update -p idna_adapter --precise "1.2.0"
+cargo update -p zerofrom --precise "0.1.5"
+cargo update -p litemap --precise "0.7.4"
 ```
