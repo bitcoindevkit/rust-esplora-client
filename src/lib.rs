@@ -272,10 +272,10 @@ impl_error!(bitcoin::hex::HexToBytesError, HexToBytes, Error);
 mod test {
     use super::*;
     use electrsd::{corepc_node, ElectrsD};
-    use lazy_static::lazy_static;
     use std::env;
     use std::str::FromStr;
-    use tokio::sync::Mutex;
+    use std::sync::Mutex;
+    use std::sync::Once;
     #[cfg(all(feature = "blocking", feature = "async"))]
     use {
         bitcoin::{hashes::Hash, Amount},
@@ -285,29 +285,73 @@ mod test {
         tokio::sync::OnceCell,
     };
 
-    lazy_static! {
-        static ref BITCOIND: corepc_node::Node = {
+    static BITCOIND: Mutex<Option<corepc_node::Node>> = Mutex::new(None);
+    static ELECTRSD: Mutex<Option<ElectrsD>> = Mutex::new(None);
+    static MINER_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    static CLEANUP: Once = Once::new();
+
+    /// Invoking `get_bitcoind()` or `get_electrsd()` will register an
+    /// exit handler with the OS once. When the program teminates, `cleanup()`
+    /// is called in order for `BITCOIND` and `ELECTRSD` to be dropped via
+    /// their `Drop` implementations.
+    fn register_cleanup() {
+        CLEANUP.call_once(|| {
+            extern "C" fn cleanup() {
+                if let Ok(mut guard) = ELECTRSD.lock() {
+                    if let Some(electrsd) = guard.take() {
+                        drop(electrsd);
+                    }
+                }
+                if let Ok(mut guard) = BITCOIND.lock() {
+                    if let Some(bitcoind) = guard.take() {
+                        drop(bitcoind);
+                    }
+                }
+            }
+            unsafe {
+                extern "C" {
+                    fn atexit(cb: extern "C" fn()) -> i32;
+                }
+                atexit(cleanup);
+            }
+        });
+    }
+
+    // Initialize and/or get a static reference to a `corepc::Node`.
+    fn get_bitcoind() -> &'static corepc_node::Node {
+        register_cleanup();
+
+        let mut guard = BITCOIND.lock().unwrap();
+        if guard.is_none() {
             let bitcoind_exe = env::var("BITCOIND_EXE")
                 .ok()
                 .or_else(|| corepc_node::downloaded_exe_path().ok())
-                .expect(
-                    "you need to provide an env var BITCOIND_EXE or specify a bitcoind version feature",
-                );
+                .expect("provide a BITCOIND_EXE environment variable with the path to `bitcoind`, or define a feature with the desired version");
             let conf = corepc_node::Conf::default();
-            corepc_node::Node::with_conf(bitcoind_exe, &conf).unwrap()
-        };
-        static ref ELECTRSD: ElectrsD = {
+            *guard = Some(corepc_node::Node::with_conf(bitcoind_exe, &conf).unwrap());
+        }
+        unsafe { &*(guard.as_ref().unwrap_unchecked() as *const _) }
+    }
+
+    // Initialize and/or get a static reference to a `ElectrsD`.
+    fn get_electrsd() -> &'static ElectrsD {
+        register_cleanup();
+
+        let mut guard = ELECTRSD.lock().unwrap();
+        if guard.is_none() {
             let electrs_exe = env::var("ELECTRS_EXE")
                 .ok()
                 .or_else(electrsd::downloaded_exe_path)
-                .expect(
-                    "you need to provide env var ELECTRS_EXE or specify an electrsd version feature",
-                );
+                .expect("provide a ELECTRS_EXE environment variable with the path to `electrs`, or define a feature with the desired version");
             let mut conf = electrsd::Conf::default();
             conf.http_enabled = true;
-            ElectrsD::with_conf(electrs_exe, &BITCOIND, &conf).unwrap()
-        };
-        static ref MINER: Mutex<()> = Mutex::new(());
+            *guard = Some(ElectrsD::with_conf(electrs_exe, get_bitcoind(), &conf).unwrap());
+        }
+        unsafe { &*(guard.as_ref().unwrap_unchecked() as *const _) }
+    }
+
+    fn get_miner() -> &'static tokio::sync::Mutex<()> {
+        &MINER_LOCK
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
@@ -324,12 +368,12 @@ mod test {
     ) -> (BlockingClient, AsyncClient) {
         PREMINE
             .get_or_init(|| async {
-                let _miner = MINER.lock().await;
+                let _miner = get_miner().lock().await;
                 generate_blocks_and_wait(101);
             })
             .await;
 
-        let esplora_url = ELECTRSD.esplora_url.as_ref().unwrap();
+        let esplora_url = get_electrsd().esplora_url.as_ref().unwrap();
 
         let mut builder = Builder::new(&format!("http://{esplora_url}"));
         if !headers.is_empty() {
@@ -353,31 +397,34 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     fn generate_blocks_and_wait(num: usize) {
-        let cur_height = BITCOIND.client.get_block_count().unwrap().0;
+        let cur_height = get_bitcoind().client.get_block_count().unwrap().0;
         generate_blocks(num);
         wait_for_block(cur_height as usize + num);
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     fn generate_blocks(num: usize) {
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
-        let _block_hashes = BITCOIND.client.generate_to_address(num, &address).unwrap();
+        let _block_hashes = get_bitcoind()
+            .client
+            .generate_to_address(num, &address)
+            .unwrap();
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     fn wait_for_block(min_height: usize) {
-        let mut header = ELECTRSD.client.block_headers_subscribe().unwrap();
+        let mut header = get_electrsd().client.block_headers_subscribe().unwrap();
         loop {
             if header.height >= min_height {
                 break;
             }
             header = exponential_backoff_poll(|| {
-                ELECTRSD.trigger().unwrap();
-                ELECTRSD.client.ping().unwrap();
-                ELECTRSD.client.block_headers_pop().unwrap()
+                get_electrsd().trigger().unwrap();
+                get_electrsd().client.ping().unwrap();
+                get_electrsd().client.block_headers_pop().unwrap()
             });
         }
     }
@@ -453,17 +500,17 @@ mod test {
     async fn test_get_tx() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
-        let txid = BITCOIND
+        let txid = get_bitcoind()
             .client
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         generate_blocks_and_wait(1);
 
         let tx = blocking_client.get_tx(&txid).unwrap();
@@ -476,17 +523,17 @@ mod test {
     async fn test_get_tx_no_opt() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
-        let txid = BITCOIND
+        let txid = get_bitcoind()
             .client
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         generate_blocks_and_wait(1);
 
         let tx_no_opt = blocking_client.get_tx_no_opt(&txid).unwrap();
@@ -499,17 +546,17 @@ mod test {
     async fn test_get_tx_status() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
-        let txid = BITCOIND
+        let txid = get_bitcoind()
             .client
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         generate_blocks_and_wait(1);
 
         let tx_status = blocking_client.get_tx_status(&txid).unwrap();
@@ -533,27 +580,27 @@ mod test {
     async fn test_get_tx_info() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
-        let txid = BITCOIND
+        let txid = get_bitcoind()
             .client
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         generate_blocks_and_wait(1);
 
-        let tx_res = BITCOIND
+        let tx_res = get_bitcoind()
             .client
             .get_transaction(txid)
             .unwrap()
             .into_model()
             .unwrap();
         let tx_exp: Transaction = tx_res.tx;
-        let tx_block_height = BITCOIND
+        let tx_block_height = get_bitcoind()
             .client
             .get_block_header_verbose(&tx_res.block_hash.unwrap())
             .unwrap()
@@ -594,7 +641,7 @@ mod test {
     async fn test_get_header_by_hash() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let block_hash = BITCOIND
+        let block_hash = get_bitcoind()
             .client
             .get_block_hash(23)
             .unwrap()
@@ -611,13 +658,13 @@ mod test {
     async fn test_get_block_status() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let block_hash = BITCOIND
+        let block_hash = get_bitcoind()
             .client
             .get_block_hash(21)
             .unwrap()
             .block_hash()
             .unwrap();
-        let next_block_hash = BITCOIND
+        let next_block_hash = get_bitcoind()
             .client
             .get_block_hash(22)
             .unwrap()
@@ -666,14 +713,14 @@ mod test {
     async fn test_get_block_by_hash() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let block_hash = BITCOIND
+        let block_hash = get_bitcoind()
             .client
             .get_block_hash(21)
             .unwrap()
             .block_hash()
             .unwrap();
 
-        let expected = Some(BITCOIND.client.get_block(block_hash).unwrap());
+        let expected = Some(get_bitcoind().client.get_block(block_hash).unwrap());
 
         let block = blocking_client.get_block_by_hash(&block_hash).unwrap();
         let block_async = async_client.get_block_by_hash(&block_hash).await.unwrap();
@@ -686,17 +733,17 @@ mod test {
     async fn test_that_errors_are_propagated() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
-        let txid = BITCOIND
+        let txid = get_bitcoind()
             .client
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         generate_blocks_and_wait(1);
 
         let tx = blocking_client.get_tx(&txid).unwrap();
@@ -735,17 +782,17 @@ mod test {
     async fn test_get_merkle_proof() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
-        let txid = BITCOIND
+        let txid = get_bitcoind()
             .client
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         generate_blocks_and_wait(1);
 
         let merkle_proof = blocking_client.get_merkle_proof(&txid).unwrap().unwrap();
@@ -759,17 +806,17 @@ mod test {
     async fn test_get_merkle_block() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
-        let txid = BITCOIND
+        let txid = get_bitcoind()
             .client
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         generate_blocks_and_wait(1);
 
         let merkle_block = blocking_client.get_merkle_block(&txid).unwrap().unwrap();
@@ -792,17 +839,17 @@ mod test {
     async fn test_get_output_status() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
-        let txid = BITCOIND
+        let txid = get_bitcoind()
             .client
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         generate_blocks_and_wait(1);
 
         let output_status = blocking_client
@@ -842,7 +889,7 @@ mod test {
     async fn test_get_block_hash() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let block_hash = BITCOIND
+        let block_hash = get_bitcoind()
             .client
             .get_block_hash(21)
             .unwrap()
@@ -860,7 +907,7 @@ mod test {
     async fn test_get_txid_at_block_index() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let block_hash = BITCOIND
+        let block_hash = get_bitcoind()
             .client
             .get_block_hash(23)
             .unwrap()
@@ -893,20 +940,20 @@ mod test {
     async fn test_scripthash_txs() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
-        let txid = BITCOIND
+        let txid = get_bitcoind()
             .client
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         generate_blocks_and_wait(1);
 
-        let expected_tx = BITCOIND
+        let expected_tx = get_bitcoind()
             .client
             .get_transaction(txid)
             .unwrap()
@@ -957,7 +1004,7 @@ mod test {
     async fn test_get_block_txids() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
@@ -965,7 +1012,7 @@ mod test {
         // Create 5 transactions and mine a block.
         let txids: Vec<_> = (0..5)
             .map(|_| {
-                BITCOIND
+                get_bitcoind()
                     .client
                     .send_to_address(&address, Amount::from_sat(1000))
                     .unwrap()
@@ -974,7 +1021,7 @@ mod test {
             })
             .collect();
 
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         generate_blocks_and_wait(1);
 
         // Get the block hash at the chain's tip.
@@ -996,7 +1043,7 @@ mod test {
     async fn test_get_block_txs() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         let blockhash = blocking_client.get_tip_hash().unwrap();
 
         let txs_blocking = blocking_client.get_block_txs(&blockhash, None).unwrap();
@@ -1010,7 +1057,7 @@ mod test {
     #[tokio::test]
     async fn test_get_blocks() {
         let (blocking_client, async_client) = setup_clients().await;
-        let start_height = BITCOIND.client.get_block_count().unwrap().0;
+        let start_height = get_bitcoind().client.get_block_count().unwrap().0;
         let blocks1 = blocking_client.get_blocks(None).unwrap();
         let blocks_async1 = async_client.get_blocks(None).await.unwrap();
         assert_eq!(blocks1[0].time.height, start_height as u32);
@@ -1045,17 +1092,17 @@ mod test {
         .into();
         let (blocking_client, async_client) = setup_clients_with_headers(headers).await;
 
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
-        let txid = BITCOIND
+        let txid = get_bitcoind()
             .client
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         generate_blocks_and_wait(1);
 
         let tx = blocking_client.get_tx(&txid).unwrap();
@@ -1068,12 +1115,12 @@ mod test {
     async fn test_get_address_stats() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
 
-        let _txid = BITCOIND
+        let _txid = get_bitcoind()
             .client
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
@@ -1085,7 +1132,7 @@ mod test {
         assert_eq!(address_stats_blocking, address_stats_async);
         assert_eq!(address_stats_async.chain_stats.funded_txo_count, 0);
 
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         generate_blocks_and_wait(1);
 
         let address_stats_blocking = blocking_client.get_address_stats(&address).unwrap();
@@ -1101,50 +1148,50 @@ mod test {
         let (blocking_client, async_client) = setup_clients().await;
 
         // Create an address of each type.
-        let address_legacy = BITCOIND
+        let address_legacy = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
-        let address_p2sh_segwit = BITCOIND
+        let address_p2sh_segwit = get_bitcoind()
             .client
             .new_address_with_type(AddressType::P2shSegwit)
             .unwrap();
-        let address_bech32 = BITCOIND
+        let address_bech32 = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Bech32)
             .unwrap();
-        let address_bech32m = BITCOIND
+        let address_bech32m = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Bech32m)
             .unwrap();
 
         // Send a transaction to each address.
-        let _txid = BITCOIND
+        let _txid = get_bitcoind()
             .client
             .send_to_address(&address_legacy, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _txid = BITCOIND
+        let _txid = get_bitcoind()
             .client
             .send_to_address(&address_p2sh_segwit, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _txid = BITCOIND
+        let _txid = get_bitcoind()
             .client
             .send_to_address(&address_bech32, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _txid = BITCOIND
+        let _txid = get_bitcoind()
             .client
             .send_to_address(&address_bech32m, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
 
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         generate_blocks_and_wait(1);
 
         // Derive each addresses script.
@@ -1236,19 +1283,19 @@ mod test {
     async fn test_get_address_txs() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
 
-        let txid = BITCOIND
+        let txid = get_bitcoind()
             .client
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
 
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         generate_blocks_and_wait(1);
 
         let address_txs_blocking = blocking_client.get_address_txs(&address, None).unwrap();
@@ -1263,19 +1310,19 @@ mod test {
     async fn test_get_address_utxos() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
 
-        let _txid = BITCOIND
+        let _txid = get_bitcoind()
             .client
             .send_to_address(&address, Amount::from_sat(21000))
             .unwrap()
             .txid()
             .unwrap();
 
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         generate_blocks_and_wait(1);
 
         let address_utxos_blocking = blocking_client.get_address_utxos(&address).unwrap();
@@ -1291,20 +1338,20 @@ mod test {
     async fn test_get_scripthash_utxos() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
         let script = address.script_pubkey();
 
-        let _txid = BITCOIND
+        let _txid = get_bitcoind()
             .client
             .send_to_address(&address, Amount::from_sat(21000))
             .unwrap()
             .txid()
             .unwrap();
 
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         generate_blocks_and_wait(1);
 
         let scripthash_utxos_blocking = blocking_client.get_scripthash_utxos(&script).unwrap();
@@ -1320,19 +1367,19 @@ mod test {
     async fn test_get_tx_outspends() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
 
-        let txid = BITCOIND
+        let txid = get_bitcoind()
             .client
             .send_to_address(&address, Amount::from_sat(21000))
             .unwrap()
             .txid()
             .unwrap();
 
-        let _miner = MINER.lock().await;
+        let _miner = get_miner().lock().await;
         generate_blocks_and_wait(1);
 
         let outspends_blocking = blocking_client.get_tx_outspends(&txid).unwrap();
@@ -1352,13 +1399,13 @@ mod test {
     async fn test_mempool_methods() {
         let (blocking_client, async_client) = setup_clients().await;
 
-        let address = BITCOIND
+        let address = get_bitcoind()
             .client
             .new_address_with_type(AddressType::Legacy)
             .unwrap();
 
         for _ in 0..5 {
-            let _txid = BITCOIND
+            let _txid = get_bitcoind()
                 .client
                 .send_to_address(&address, Amount::from_sat(1000))
                 .unwrap()
