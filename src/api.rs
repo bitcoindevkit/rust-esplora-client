@@ -18,22 +18,12 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 pub use bitcoin::consensus::{deserialize, serialize};
-use bitcoin::hash_types::TxMerkleNode;
 pub use bitcoin::hex::FromHex;
 pub use bitcoin::{
     absolute, block, transaction, Address, Amount, Block, BlockHash, CompactTarget, FeeRate,
     OutPoint, Script, ScriptBuf, ScriptHash, Transaction, TxIn, TxOut, Txid, Weight, Witness,
     Wtxid,
 };
-
-/// Information about a previous output.
-#[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct PrevOut {
-    /// The value of the previous output, in satoshis.
-    pub value: u64,
-    /// The ScriptPubKey that the previous output is locked to, as a [`ScriptBuf`].
-    pub scriptpubkey: ScriptBuf,
-}
 
 /// Information about an input from a [`Transaction`].
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -44,7 +34,7 @@ pub struct Vin {
     pub vout: u32,
     /// The previous output amount and ScriptPubKey.
     /// `None` if this is a coinbase input.
-    pub prevout: Option<PrevOut>,
+    pub prevout: Option<Vout>,
     /// The ScriptSig authorizes spending this input.
     pub scriptsig: ScriptBuf,
     /// The Witness that authorizes spending this input, if this is a SegWit spend.
@@ -60,7 +50,8 @@ pub struct Vin {
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Vout {
     /// The value of the output, in satoshis.
-    pub value: u64,
+    #[serde(with = "bitcoin::amount::serde::as_sat")]
+    pub value: Amount,
     /// The ScriptPubKey that the output is locked to, as a [`ScriptBuf`].
     pub scriptpubkey: ScriptBuf,
 }
@@ -135,11 +126,12 @@ pub struct Tx {
     /// The [`Transaction`] size in raw bytes (NOT virtual bytes).
     pub size: usize,
     /// The [`Transaction`]'s weight units.
-    pub weight: u64,
+    pub weight: Weight,
     /// The confirmation status of the [`Transaction`].
     pub status: TxStatus,
     /// The fee amount paid by the [`Transaction`], in satoshis.
-    pub fee: u64,
+    #[serde(with = "bitcoin::amount::serde::as_sat")]
+    pub fee: Amount,
 }
 
 /// Information about a bitcoin [`Block`].
@@ -204,20 +196,6 @@ pub struct BlockTime {
     pub height: u32,
 }
 
-/// Summary about a [`Block`].
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-pub struct BlockSummary {
-    /// The [`Block`]'s hash.
-    pub id: BlockHash,
-    /// The [`Block`]'s timestamp and height.
-    #[serde(flatten)]
-    pub time: BlockTime,
-    /// The [`BlockHash`] of the previous [`Block`] (`None` for the genesis [`Block`]).
-    pub previousblockhash: Option<BlockHash>,
-    /// The Merkle root of the [`Block`]'s [`Transaction`]s.
-    pub merkle_root: TxMerkleNode,
-}
-
 /// Statistics about an [`Address`].
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct AddressStats {
@@ -235,11 +213,13 @@ pub struct AddressTxsSummary {
     /// The number of funded [`TxOut`]s.
     pub funded_txo_count: u32,
     /// The sum of the funded [`TxOut`]s, in satoshis.
-    pub funded_txo_sum: u64,
+    #[serde(with = "bitcoin::amount::serde::as_sat")]
+    pub funded_txo_sum: Amount,
     /// The number of spent [`TxOut`]s.
     pub spent_txo_count: u32,
     /// The sum of the spent [`TxOut`]s, in satoshis.
-    pub spent_txo_sum: u64,
+    #[serde(with = "bitcoin::amount::serde::as_sat")]
+    pub spent_txo_sum: Amount,
     /// The total number of [`Transaction`]s.
     pub tx_count: u32,
 }
@@ -280,6 +260,7 @@ pub struct Utxo {
     /// The confirmation status of the [`TxOut`].
     pub status: UtxoStatus,
     /// The value of the [`TxOut`] as an [`Amount`].
+    #[serde(with = "bitcoin::amount::serde::as_sat")]
     pub value: Amount,
 }
 
@@ -291,7 +272,8 @@ pub struct MempoolStats {
     /// The total size of mempool [`Transaction`]s, in virtual bytes.
     pub vsize: usize,
     /// The total fee paid by mempool [`Transaction`]s, in satoshis.
-    pub total_fee: u64,
+    #[serde(with = "bitcoin::amount::serde::as_sat")]
+    pub total_fee: Amount,
     /// The mempool's fee rate distribution histogram.
     ///
     /// An array of `(feerate, vsize)` tuples, where each entry's `vsize` is the total vsize
@@ -306,11 +288,13 @@ pub struct MempoolRecentTx {
     /// The [`Transaction`]'s ID, as a [`Txid`].
     pub txid: Txid,
     /// The [`Amount`] of fees paid by the transaction, in satoshis.
-    pub fee: u64,
+    #[serde(with = "bitcoin::amount::serde::as_sat")]
+    pub fee: Amount,
     /// The [`Transaction`]'s size, in virtual bytes.
     pub vsize: usize,
     /// Combined [`Amount`] of the [`Transaction`], in satoshis.
-    pub value: u64,
+    #[serde(with = "bitcoin::amount::serde::as_sat")]
+    pub value: Amount,
 }
 
 /// The result for a broadcasted package of [`Transaction`]s.
@@ -394,7 +378,7 @@ impl Tx {
                 .iter()
                 .cloned()
                 .map(|vout| TxOut {
-                    value: Amount::from_sat(vout.value),
+                    value: vout.value,
                     script_pubkey: vout.scriptpubkey,
                 })
                 .collect(),
@@ -422,20 +406,10 @@ impl Tx {
             .map(|vin| {
                 vin.prevout.map(|po| TxOut {
                     script_pubkey: po.scriptpubkey,
-                    value: Amount::from_sat(po.value),
+                    value: po.value,
                 })
             })
             .collect()
-    }
-
-    /// Get the weight of a [`Tx`].
-    pub fn weight(&self) -> Weight {
-        Weight::from_wu(self.weight)
-    }
-
-    /// Get the fee paid by a [`Tx`].
-    pub fn fee(&self) -> Amount {
-        Amount::from_sat(self.fee)
     }
 }
 
