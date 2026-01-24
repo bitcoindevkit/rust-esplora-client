@@ -1006,6 +1006,7 @@ mod test {
         assert_eq!(txs_blocking.len(), txs_async.len());
     }
 
+    #[allow(deprecated)]
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_blocks() {

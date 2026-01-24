@@ -498,6 +498,7 @@ impl BlockingClient {
     ///
     /// The maximum number of summaries returned depends on the backend itself:
     /// esplora returns `10` while [mempool.space](https://mempool.space/docs/api) returns `15`.
+    #[deprecated(since = "0.12.3", note = "use `get_block_infos` instead")]
     pub fn get_blocks(&self, height: Option<u32>) -> Result<Vec<BlockSummary>, Error> {
         let path = match height {
             Some(height) => format!("/blocks/{height}"),
