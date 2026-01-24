@@ -511,6 +511,24 @@ impl BlockingClient {
         Ok(blocks)
     }
 
+    /// Get summaries about recent blocks as [`BlockInfo`]s,
+    /// starting at the tip, or at `height`, if provided.
+    ///
+    /// The maximum number of elements returned depends on the backend itself:
+    /// - Esplora returns `10`
+    /// - [mempool.space](https://mempool.space/docs/api) returns `15`
+    pub fn get_block_infos(&self, height: Option<u32>) -> Result<Vec<BlockInfo>, Error> {
+        let path = match height {
+            Some(height) => format!("/blocks/{height}"),
+            None => "/blocks".to_string(),
+        };
+        let blocks: Vec<BlockInfo> = self.get_response_json(&path)?;
+        if blocks.is_empty() {
+            return Err(Error::InvalidResponse);
+        }
+        Ok(blocks)
+    }
+
     /// Get all UTXOs locked to an address.
     pub fn get_address_utxos(&self, address: &Address) -> Result<Vec<Utxo>, Error> {
         let path = format!("/address/{address}/utxo");
