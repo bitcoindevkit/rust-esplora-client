@@ -1006,6 +1006,7 @@ mod test {
         assert_eq!(txs_blocking.len(), txs_async.len());
     }
 
+    #[allow(deprecated)]
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_blocks() {
@@ -1033,6 +1034,41 @@ mod test {
         let blocks_genesis = blocking_client.get_blocks(Some(0)).unwrap();
         let blocks_genesis_async = async_client.get_blocks(Some(0)).await.unwrap();
         assert_eq!(blocks_genesis, blocks_genesis_async);
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_get_block_infos() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let start_height = BITCOIND.client.get_block_count().unwrap().0;
+
+        let blocks_blocking_0 = blocking_client.get_block_infos(None).unwrap();
+        let blocks_async_0 = async_client.get_block_infos(None).await.unwrap();
+        assert_eq!(blocks_blocking_0[0].height, start_height as u32);
+        assert_eq!(blocks_blocking_0, blocks_async_0);
+
+        generate_blocks_and_wait(10);
+
+        let blocks_blocking_1 = blocking_client.get_block_infos(None).unwrap();
+        let blocks_async_1 = async_client.get_block_infos(None).await.unwrap();
+        assert_eq!(blocks_blocking_1, blocks_async_1);
+        assert_ne!(blocks_blocking_0, blocks_blocking_1);
+
+        let blocks_blocking_2 = blocking_client
+            .get_block_infos(Some(start_height as u32))
+            .unwrap();
+        let blocks_async_3 = async_client
+            .get_block_infos(Some(start_height as u32))
+            .await
+            .unwrap();
+        assert_eq!(blocks_blocking_2, blocks_async_3);
+        assert_eq!(blocks_blocking_2[0].height, start_height as u32);
+        assert_eq!(blocks_blocking_2, blocks_blocking_0);
+
+        let blocks_blocking_genesis = blocking_client.get_block_infos(Some(0)).unwrap();
+        let blocks_async_genesis = async_client.get_block_infos(Some(0)).await.unwrap();
+        assert_eq!(blocks_blocking_genesis, blocks_async_genesis);
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
