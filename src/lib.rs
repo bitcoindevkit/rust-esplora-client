@@ -206,7 +206,7 @@ pub enum Error {
     #[cfg(feature = "blocking")]
     Minreq(::minreq::Error),
     /// Error during reqwest HTTP request
-    #[cfg(feature = "reqwest")]
+    #[cfg(feature = "async")]
     Reqwest(::reqwest::Error),
     /// Error during serde_json serialization/deserialization
     SerdeJson(serde_json::Error),
