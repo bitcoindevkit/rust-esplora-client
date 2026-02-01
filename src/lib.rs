@@ -208,6 +208,8 @@ pub enum Error {
     /// Error during reqwest HTTP request
     #[cfg(feature = "async")]
     Reqwest(::reqwest::Error),
+    /// Error during serde_json serialization/deserialization
+    SerdeJson(serde_json::Error),
     /// HTTP response error
     HttpResponse {
         /// The HTTP status code returned by the server.
@@ -267,6 +269,7 @@ impl_error!(std::num::ParseIntError, Parsing, Error);
 impl_error!(bitcoin::consensus::encode::Error, BitcoinEncoding, Error);
 impl_error!(bitcoin::hex::HexToArrayError, HexToArray, Error);
 impl_error!(bitcoin::hex::HexToBytesError, HexToBytes, Error);
+impl_error!(serde_json::Error, SerdeJson, Error);
 
 #[cfg(test)]
 mod test {
