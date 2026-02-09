@@ -3,6 +3,7 @@ alias c := check
 alias f := fmt
 alias t := test
 alias p := pre-push
+alias m := msrv
 
 _default:
    @just --list
@@ -31,3 +32,7 @@ test:
 
 # Run pre-push suite: format, check, and test
 pre-push: fmt check test
+
+# set the rust version to the msrv and pin dependencies
+msrv:
+   ./ci/pin-msrv.sh
