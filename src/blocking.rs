@@ -332,7 +332,7 @@ impl BlockingClient {
         let mut request = self.post_request(
             "/txs/package",
             serde_json::to_string(&serialized_txs)
-                .unwrap_or_default()
+                .map_err(Error::SerdeJson)?
                 .into_bytes(),
         )?;
 
