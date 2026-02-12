@@ -1,8 +1,9 @@
 alias b := build
 alias c := check
 alias f := fmt
-alias t := test
+alias m := msrv
 alias p := pre-push
+alias t := test
 
 _default:
    @just --list
@@ -11,7 +12,7 @@ _default:
 build:
    cargo build
 
-# Check code: formatting, compilation, linting, doc comments, and commit signature
+# Check code formatting, compilation, linting, documentation and commit signature
 check:
    cargo +nightly fmt --all -- --check
    cargo check --all-features --all-targets
@@ -25,9 +26,15 @@ check:
 fmt:
    cargo +nightly fmt
 
-# Run all tests on the workspace with all features
-test:
-   cargo test --all-features -- --test-threads=1
+# Build and test using the MSRV toolchain (1.75.0)
+msrv:
+    bash ci/pin-msrv.sh
+    cargo +1.75.0 build --all-features
+    cargo +1.75.0 test --all-features -- --test-threads=1
 
 # Run pre-push suite: format, check, and test
 pre-push: fmt check test
+
+# Run all tests on the workspace with all features
+test:
+   cargo test --all-features -- --test-threads=1
