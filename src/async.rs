@@ -394,6 +394,11 @@ impl<S: Sleeper> AsyncClient<S> {
         maxfeerate: Option<f64>,
         maxburnamount: Option<f64>,
     ) -> Result<SubmitPackageResult, Error> {
+        let serialized_txs = transactions
+            .iter()
+            .map(|tx| serialize_hex(&tx))
+            .collect::<Vec<_>>();
+
         let mut queryparams = HashSet::<(&str, String)>::new();
         if let Some(maxfeerate) = maxfeerate {
             queryparams.insert(("maxfeerate", maxfeerate.to_string()));
@@ -402,15 +407,10 @@ impl<S: Sleeper> AsyncClient<S> {
             queryparams.insert(("maxburnamount", maxburnamount.to_string()));
         }
 
-        let serialized_txs = transactions
-            .iter()
-            .map(|tx| serialize_hex(&tx))
-            .collect::<Vec<_>>();
-
         let response = self
             .post_request_bytes(
                 "/txs/package",
-                serde_json::to_string(&serialized_txs).unwrap_or_default(),
+                serde_json::to_string(&serialized_txs).map_err(Error::SerdeJson)?,
                 Some(queryparams),
             )
             .await?;

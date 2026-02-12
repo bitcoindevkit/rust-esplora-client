@@ -204,10 +204,12 @@ impl Builder {
 pub enum Error {
     /// Error during `minreq` HTTP request
     #[cfg(feature = "blocking")]
-    Minreq(::minreq::Error),
-    /// Error during reqwest HTTP request
+    Minreq(minreq::Error),
+    /// Error during `reqwest` HTTP request
     #[cfg(feature = "async")]
-    Reqwest(::reqwest::Error),
+    Reqwest(reqwest::Error),
+    /// Error during JSON (de)serialization
+    SerdeJson(serde_json::Error),
     /// HTTP response error
     HttpResponse {
         /// The HTTP status code returned by the server.
@@ -263,6 +265,7 @@ impl std::error::Error for Error {}
 impl_error!(::minreq::Error, Minreq, Error);
 #[cfg(feature = "async")]
 impl_error!(::reqwest::Error, Reqwest, Error);
+impl_error!(serde_json::Error, SerdeJson, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
 impl_error!(bitcoin::consensus::encode::Error, BitcoinEncoding, Error);
 impl_error!(bitcoin::hex::HexToArrayError, HexToArray, Error);
