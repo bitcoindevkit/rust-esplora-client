@@ -7,6 +7,17 @@ Contributors do not need to change this file but do need to add changelog detail
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.12.3]
+
+### Added
+
+- feat(client): add `get_block_infos` #164
+
+### Changed
+
+- chore(client): deprecate `get_blocks` #164
+- chore: use the `alloc` feature on `serde_json #168
+
 ## [v0.12.2]
 
 ### Added
