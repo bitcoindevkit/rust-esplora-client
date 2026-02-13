@@ -371,13 +371,12 @@ impl<S: Sleeper> AsyncClient<S> {
             .await
     }
 
-    /// Broadcast a [`Transaction`] to Esplora.
-    pub async fn broadcast(&self, transaction: &Transaction) -> Result<(), Error> {
+    /// Broadcast a [`Transaction`] to Esplora
+    pub async fn broadcast(&self, transaction: &Transaction) -> Result<Txid, Error> {
         let body = serialize::<Transaction>(transaction).to_lower_hex_string();
-        match self.post_request_bytes("/tx", body, None).await {
-            Ok(_resp) => Ok(()),
-            Err(e) => Err(e),
-        }
+        let response = self.post_request_bytes("/tx", body, None).await?;
+        let txid = Txid::from_str(&response.text().await?).map_err(Error::HexToArray)?;
+        Ok(txid)
     }
 
     /// Broadcast a package of [`Transaction`]s to Esplora.

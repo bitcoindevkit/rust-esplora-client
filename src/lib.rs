@@ -1411,4 +1411,41 @@ mod test {
         assert_eq!(mempool_address_txs_blocking, mempool_address_txs_async);
         assert_eq!(mempool_address_txs_blocking.len(), 5);
     }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_broadcast() {
+        let (blocking_client, async_client) = setup_clients().await;
+
+        let address = BITCOIND
+            .client
+            .new_address_with_type(AddressType::Legacy)
+            .unwrap();
+
+        let txid = BITCOIND
+            .client
+            .send_to_address(&address, Amount::from_sat(1000))
+            .unwrap()
+            .txid()
+            .unwrap();
+
+        let tx = BITCOIND
+            .client
+            .get_transaction(txid)
+            .expect("tx should exist for given `txid`")
+            .into_model()
+            .expect("should convert successfully")
+            .tx;
+
+        let blocking_res = blocking_client
+            .broadcast(&tx)
+            .expect("should succesfully broadcast tx");
+        let async_res = async_client
+            .broadcast(&tx)
+            .await
+            .expect("should successfully broadcast tx");
+
+        assert_eq!(blocking_res, txid);
+        assert_eq!(async_res, txid);
+    }
 }
