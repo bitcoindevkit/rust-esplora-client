@@ -42,4 +42,3 @@ cargo update -p hyper-util --precise "0.1.19"
 cargo update -p unicode-ident --precise "1.0.22"
 
 cargo update -p bzip2-sys@0.1.13+1.0.8 --precise "0.1.12+1.0.8" # dev-dependency
-

@@ -1,6 +1,7 @@
 alias b := build
 alias c := check
 alias f := fmt
+alias m := msrv
 alias t := test
 alias p := pre-push
 
@@ -24,6 +25,12 @@ check:
 # Format all code
 fmt:
    cargo +nightly fmt
+
+# Build and test using the MSRV toolchain (1.63.0)
+msrv:
+    bash ci/pin-msrv.sh
+    cargo +1.63.0 build --all-features
+    cargo +1.63.0 test --all-features -- --test-threads=1
 
 # Run all tests on the workspace with all features
 test:
