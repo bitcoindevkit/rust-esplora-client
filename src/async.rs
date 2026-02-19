@@ -29,9 +29,9 @@ use log::{debug, error, info, trace};
 use reqwest::{header, Body, Client, Response};
 
 use crate::{
-    AddressStats, BlockInfo, BlockStatus, BlockSummary, Builder, Error, MempoolRecentTx,
-    MempoolStats, MerkleProof, OutputStatus, ScriptHashStats, SubmitPackageResult, Tx, TxStatus,
-    Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
+    AddressStats, BlockInfo, BlockStatus, Builder, Error, MempoolRecentTx, MempoolStats,
+    MerkleProof, OutputStatus, ScriptHashStats, SubmitPackageResult, Tx, TxStatus, Utxo,
+    BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
 /// An async client for interacting with an Esplora API server.
@@ -476,11 +476,11 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json(&path).await
     }
 
-    /// Get transaction history for the specified address/scripthash,
-    /// sorted with newest first. Returns 25 transactions per page.
-    /// More can be requested by specifying the last txid seen by the previous
-    /// query.
-    pub async fn scripthash_txs(
+    /// Get transaction history for the specified [`Script`] hash,
+    /// sorted by newest first. Returns 25 transactions per page.
+    /// More can be requested by specifying
+    /// the last [`Txid`] seen by the previous query.
+    pub async fn get_scripthash_txs(
         &self,
         script: &Script,
         last_seen: Option<Txid>,
@@ -563,12 +563,12 @@ impl<S: Sleeper> AsyncClient<S> {
     ///
     /// The maximum number of summaries returned depends on the backend itself:
     /// esplora returns `10` while [mempool.space](https://mempool.space/docs/api) returns `15`.
-    pub async fn get_blocks(&self, height: Option<u32>) -> Result<Vec<BlockSummary>, Error> {
+    pub async fn get_blocks(&self, height: Option<u32>) -> Result<Vec<BlockInfo>, Error> {
         let path = match height {
             Some(height) => format!("/blocks/{height}"),
             None => "/blocks".to_string(),
         };
-        let blocks: Vec<BlockSummary> = self.get_response_json(&path).await?;
+        let blocks: Vec<BlockInfo> = self.get_response_json(&path).await?;
         if blocks.is_empty() {
             return Err(Error::InvalidResponse);
         }

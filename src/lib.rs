@@ -577,8 +577,8 @@ mod test {
         assert_eq!(tx_info.txid, txid);
         assert_eq!(tx_info.to_tx(), tx_exp);
         assert_eq!(tx_info.size, tx_exp.total_size());
-        assert_eq!(tx_info.weight(), tx_exp.weight());
-        assert_eq!(tx_info.fee(), tx_res.fee.unwrap().unsigned_abs());
+        assert_eq!(tx_info.weight, tx_exp.weight());
+        assert_eq!(tx_info.fee, tx_res.fee.unwrap().unsigned_abs());
         assert!(tx_info.status.confirmed);
         assert_eq!(tx_info.status.block_height, Some(tx_block_height));
         assert_eq!(tx_info.status.block_hash, tx_res.block_hash);
@@ -918,13 +918,13 @@ mod test {
             .tx;
         let script = &expected_tx.output[0].script_pubkey;
         let scripthash_txs_txids: Vec<Txid> = blocking_client
-            .scripthash_txs(script, None)
+            .get_scripthash_txs(script, None)
             .unwrap()
             .iter()
             .map(|tx| tx.txid)
             .collect();
         let scripthash_txs_txids_async: Vec<Txid> = async_client
-            .scripthash_txs(script, None)
+            .get_scripthash_txs(script, None)
             .await
             .unwrap()
             .iter()
@@ -1016,7 +1016,7 @@ mod test {
         let start_height = BITCOIND.client.get_block_count().unwrap().0;
         let blocks1 = blocking_client.get_blocks(None).unwrap();
         let blocks_async1 = async_client.get_blocks(None).await.unwrap();
-        assert_eq!(blocks1[0].time.height, start_height as u32);
+        assert_eq!(blocks1[0].height, start_height as u32);
         assert_eq!(blocks1, blocks_async1);
         generate_blocks_and_wait(10);
         let blocks2 = blocking_client.get_blocks(None).unwrap();
@@ -1031,7 +1031,7 @@ mod test {
             .await
             .unwrap();
         assert_eq!(blocks3, blocks_async3);
-        assert_eq!(blocks3[0].time.height, start_height as u32);
+        assert_eq!(blocks3[0].height, start_height as u32);
         assert_eq!(blocks3, blocks1);
         let blocks_genesis = blocking_client.get_blocks(Some(0)).unwrap();
         let blocks_genesis_async = async_client.get_blocks(Some(0)).await.unwrap();
@@ -1095,7 +1095,10 @@ mod test {
         let address_stats_async = async_client.get_address_stats(&address).await.unwrap();
         assert_eq!(address_stats_blocking, address_stats_async);
         assert_eq!(address_stats_async.chain_stats.funded_txo_count, 1);
-        assert_eq!(address_stats_async.chain_stats.funded_txo_sum, 1000);
+        assert_eq!(
+            address_stats_async.chain_stats.funded_txo_sum,
+            Amount::from_sat(1000)
+        );
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
@@ -1170,7 +1173,7 @@ mod test {
         );
         assert_eq!(
             scripthash_stats_blocking_legacy.chain_stats.funded_txo_sum,
-            1000
+            Amount::from_sat(1000)
         );
         assert_eq!(scripthash_stats_blocking_legacy.chain_stats.tx_count, 1);
 
@@ -1190,7 +1193,7 @@ mod test {
             scripthash_stats_blocking_p2sh_segwit
                 .chain_stats
                 .funded_txo_sum,
-            1000
+            Amount::from_sat(1000)
         );
         assert_eq!(
             scripthash_stats_blocking_p2sh_segwit.chain_stats.tx_count,
@@ -1211,7 +1214,7 @@ mod test {
         );
         assert_eq!(
             scripthash_stats_blocking_bech32.chain_stats.funded_txo_sum,
-            1000
+            Amount::from_sat(1000)
         );
         assert_eq!(scripthash_stats_blocking_bech32.chain_stats.tx_count, 1);
 
@@ -1229,7 +1232,7 @@ mod test {
         );
         assert_eq!(
             scripthash_stats_blocking_bech32m.chain_stats.funded_txo_sum,
-            1000
+            Amount::from_sat(1000)
         );
         assert_eq!(scripthash_stats_blocking_bech32m.chain_stats.tx_count, 1);
     }
