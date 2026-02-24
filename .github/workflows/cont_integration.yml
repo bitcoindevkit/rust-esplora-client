@@ -18,9 +18,9 @@ jobs:
           - default
           - blocking
           - blocking-https
-          - blocking-https-rustls
           - blocking-https-native
-          - blocking-https-bundled
+          - blocking-https-rustls
+          - blocking-https-rustls-probe
           - async
           - async-https
           - async-https-native

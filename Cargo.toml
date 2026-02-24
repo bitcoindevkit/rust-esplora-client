@@ -25,8 +25,8 @@ serde_json = { version = "1.0", default-features = false }
 bitcoin = { version = "0.32", features = ["serde", "std"], default-features = false }
 hex = { version = "0.2", package = "hex-conservative" }
 log = "^0.4"
-minreq = { version = "2.11.0", features = ["json-using-serde"], optional = true }
 reqwest = { version = "0.12",  features = ["json"], default-features = false, optional = true }
+bitreq = { version = "0.3.4", optional = true }
 
 # default async runtime
 tokio = { version = "1", features = ["time"], optional = true }
@@ -37,11 +37,11 @@ electrsd = { version = "0.38.0", features = ["legacy", "esplora_a33e97e1", "bitc
 
 [features]
 default = ["blocking", "async", "async-https", "tokio"]
-blocking = ["minreq", "minreq/proxy"]
-blocking-https = ["blocking", "minreq/https"]
-blocking-https-rustls = ["blocking", "minreq/https-rustls"]
-blocking-https-native = ["blocking", "minreq/https-native"]
-blocking-https-bundled = ["blocking", "minreq/https-bundled"]
+blocking = ["bitreq", "bitreq/proxy", "bitreq/json-using-serde"]
+blocking-https = ["blocking", "bitreq/https"]
+blocking-https-native = ["blocking", "bitreq/https-native-tls"]
+blocking-https-rustls = ["blocking", "bitreq/https-rustls"]
+blocking-https-rustls-probe = ["blocking", "bitreq/https-rustls-probe"]
 
 tokio = ["dep:tokio"]
 async = ["reqwest", "reqwest/socks", "tokio?/time"]
