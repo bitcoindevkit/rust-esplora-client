@@ -17,10 +17,9 @@ use std::str::FromStr;
 use std::thread;
 
 use bitcoin::consensus::encode::serialize_hex;
+use bitreq::{Proxy, Request, Response};
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
-
-use minreq::{Proxy, Request, Response};
 
 use bitcoin::block::Header as BlockHeader;
 use bitcoin::consensus::{deserialize, serialize, Decodable};
@@ -68,10 +67,10 @@ impl BlockingClient {
 
     /// Perform a raw HTTP GET request with the given URI `path`.
     pub fn get_request(&self, path: &str) -> Result<Request, Error> {
-        let mut request = minreq::get(format!("{}{}", self.url, path));
+        let mut request = bitreq::get(format!("{}{}", self.url, path));
 
         if let Some(proxy) = &self.proxy {
-            let proxy = Proxy::new(proxy.as_str())?;
+            let proxy = Proxy::new_http(proxy.as_str())?;
             request = request.with_proxy(proxy);
         }
 
@@ -92,10 +91,10 @@ impl BlockingClient {
     where
         T: Into<Vec<u8>>,
     {
-        let mut request = minreq::post(format!("{}{}", self.url, path)).with_body(body);
+        let mut request = bitreq::post(format!("{}{}", self.url, path)).with_body(body);
 
         if let Some(proxy) = &self.proxy {
-            let proxy = Proxy::new(proxy.as_str())?;
+            let proxy = Proxy::new_http(proxy.as_str())?;
             request = request.with_proxy(proxy);
         }
 
@@ -128,7 +127,7 @@ impl BlockingClient {
                 Err(Error::HttpResponse { status, message })
             }
             Ok(resp) => Ok(Some(
-                Txid::from_str(resp.as_str().map_err(Error::Minreq)?).map_err(Error::HexToArray)?,
+                Txid::from_str(resp.as_str().map_err(Error::BitReq)?).map_err(Error::HexToArray)?,
             )),
             Err(e) => Err(e),
         }
@@ -143,7 +142,7 @@ impl BlockingClient {
                 Err(Error::HttpResponse { status, message })
             }
             Ok(resp) => {
-                let hex_str = resp.as_str().map_err(Error::Minreq)?;
+                let hex_str = resp.as_str().map_err(Error::BitReq)?;
                 let hex_vec = Vec::from_hex(hex_str)?;
                 deserialize::<T>(&hex_vec)
                     .map_err(Error::BitcoinEncoding)
@@ -161,7 +160,7 @@ impl BlockingClient {
                 Err(Error::HttpResponse { status, message })
             }
             Ok(resp) => {
-                let hex_str = resp.as_str().map_err(Error::Minreq)?;
+                let hex_str = resp.as_str().map_err(Error::BitReq)?;
                 let hex_vec = Vec::from_hex(hex_str)?;
                 deserialize::<T>(&hex_vec).map_err(Error::BitcoinEncoding)
             }
@@ -180,7 +179,7 @@ impl BlockingClient {
                 let message = resp.as_str().unwrap_or_default().to_string();
                 Err(Error::HttpResponse { status, message })
             }
-            Ok(resp) => Ok(resp.json::<T>().map_err(Error::Minreq)?),
+            Ok(resp) => Ok(resp.json::<T>().map_err(Error::BitReq)?),
             Err(e) => Err(e),
         }
     }
@@ -309,7 +308,7 @@ impl BlockingClient {
                 let txid = Txid::from_str(resp.as_str()?).map_err(Error::HexToArray)?;
                 Ok(txid)
             }
-            Err(e) => Err(Error::Minreq(e)),
+            Err(e) => Err(Error::BitReq(e)),
         }
     }
 
@@ -353,8 +352,8 @@ impl BlockingClient {
                 let message = resp.as_str().unwrap_or_default().to_string();
                 Err(Error::HttpResponse { status, message })
             }
-            Ok(resp) => Ok(resp.json::<SubmitPackageResult>().map_err(Error::Minreq)?),
-            Err(e) => Err(Error::Minreq(e)),
+            Ok(resp) => Ok(resp.json::<SubmitPackageResult>().map_err(Error::BitReq)?),
+            Err(e) => Err(Error::BitReq(e)),
         }
     }
 

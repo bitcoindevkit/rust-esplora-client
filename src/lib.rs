@@ -4,7 +4,7 @@
 //! async Esplora client to query Esplora's backend.
 //!
 //! The library provides the possibility to build a blocking
-//! client using [`minreq`] and an async client using [`reqwest`].
+//! or async client, both using [`bitreq`].
 //! The library supports communicating to Esplora via a proxy
 //! and also using TLS (SSL) for secure communication.
 //!
@@ -44,31 +44,32 @@
 //! `esplora-client = { version = "*", default-features = false, features =
 //! ["blocking"] }`
 //!
-//! * `blocking` enables [`minreq`], the blocking client with proxy.
-//! * `blocking-https` enables [`minreq`], the blocking client with proxy and TLS (SSL) capabilities
-//!   using the default [`minreq`] backend.
-//! * `blocking-https-rustls` enables [`minreq`], the blocking client with proxy and TLS (SSL)
+//! * `blocking` enables [`bitreq`], the blocking client with proxy.
+//! * `blocking-https` enables [`bitreq`], the blocking client with proxy and TLS (SSL) capabilities
+//!   using the default [`bitreq`] backend.
+//! * `blocking-https-rustls` enables [`bitreq`], the blocking client with proxy and TLS (SSL)
 //!   capabilities using the `rustls` backend.
-//! * `blocking-https-native` enables [`minreq`], the blocking client with proxy and TLS (SSL)
+//! * `blocking-https-native` enables [`bitreq`], the blocking client with proxy and TLS (SSL)
 //!   capabilities using the platform's native TLS backend (likely OpenSSL).
-//! * `blocking-https-bundled` enables [`minreq`], the blocking client with proxy and TLS (SSL)
+//! * `blocking-https-bundled` enables [`bitreq`], the blocking client with proxy and TLS (SSL)
 //!   capabilities using a bundled OpenSSL library backend.
-//! * `async` enables [`reqwest`], the async client with proxy capabilities.
-//! * `async-https` enables [`reqwest`], the async client with support for proxying and TLS (SSL)
-//!   using the default [`reqwest`] TLS backend.
-//! * `async-https-native` enables [`reqwest`], the async client with support for proxying and TLS
+//! * `async` enables [`bitreq`], the async client with proxy capabilities.
+//! * `async-https` enables [`bitreq`], the async client with support for proxying and TLS (SSL)
+//!   using the default [`bitreq`] TLS backend.
+//! * `async-https-native` enables [`bitreq`], the async client with support for proxying and TLS
 //!   (SSL) using the platform's native TLS backend (likely OpenSSL).
-//! * `async-https-rustls` enables [`reqwest`], the async client with support for proxying and TLS
+//! * `async-https-rustls` enables [`bitreq`], the async client with support for proxying and TLS
 //!   (SSL) using the `rustls` TLS backend.
-//! * `async-https-rustls-manual-roots` enables [`reqwest`], the async client with support for
+//! * `async-https-rustls-manual-roots` enables [`bitreq`], the async client with support for
 //!   proxying and TLS (SSL) using the `rustls` TLS backend without using the default root
 //!   certificates.
 //!
 //! [`dont remove this line or cargo doc will break`]: https://example.com
-#![cfg_attr(not(feature = "minreq"), doc = "[`minreq`]: https://docs.rs/minreq")]
-#![cfg_attr(not(feature = "reqwest"), doc = "[`reqwest`]: https://docs.rs/reqwest")]
+#![cfg_attr(not(feature = "bitreq"), doc = "[`bitreq`]: https://docs.rs/bitreq")]
 #![allow(clippy::result_large_err)]
 #![warn(missing_docs)]
+
+// TODO: (@oleonardolima) update the documentation regarding the features (above) accordingly.
 
 use std::collections::HashMap;
 use std::fmt;
@@ -128,7 +129,7 @@ pub struct Builder {
     ///
     /// Note that the format of this value and the supported protocols change
     /// slightly between the blocking version of the client (using `minreq`)
-    /// and the async version (using `reqwest`). For more details check with
+    /// and the async version (using `bitreq`). For more details check with
     /// the documentation of the two crates. Both of them are compiled with
     /// the `socks` feature enabled.
     ///
@@ -202,12 +203,9 @@ impl Builder {
 /// Errors that can happen during a request to `Esplora` servers.
 #[derive(Debug)]
 pub enum Error {
-    /// Error during `minreq` HTTP request
-    #[cfg(feature = "blocking")]
-    Minreq(minreq::Error),
-    /// Error during `reqwest` HTTP request
-    #[cfg(feature = "async")]
-    Reqwest(reqwest::Error),
+    /// Error during `bitreq` HTTP request
+    #[cfg(any(feature = "blocking", feature = "async"))]
+    BitReq(bitreq::Error),
     /// Error during JSON (de)serialization
     SerdeJson(serde_json::Error),
     /// HTTP response error
@@ -261,10 +259,8 @@ macro_rules! impl_error {
 }
 
 impl std::error::Error for Error {}
-#[cfg(feature = "blocking")]
-impl_error!(::minreq::Error, Minreq, Error);
-#[cfg(feature = "async")]
-impl_error!(::reqwest::Error, Reqwest, Error);
+#[cfg(any(feature = "blocking", feature = "async"))]
+impl_error!(::bitreq::Error, BitReq, Error);
 impl_error!(serde_json::Error, SerdeJson, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
 impl_error!(bitcoin::consensus::encode::Error, BitcoinEncoding, Error);
@@ -704,6 +700,7 @@ mod test {
 
         let tx = blocking_client.get_tx(&txid).unwrap();
         let async_res = async_client.broadcast(tx.as_ref().unwrap()).await;
+        println!("{:?}", async_res);
         let blocking_res = blocking_client.broadcast(tx.as_ref().unwrap());
         assert!(async_res.is_err());
         assert!(matches!(

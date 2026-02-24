@@ -18,14 +18,14 @@ jobs:
           - default
           - blocking
           - blocking-https
-          - blocking-https-rustls
           - blocking-https-native
-          - blocking-https-bundled
+          - blocking-https-rustls
+          - blocking-https-rustls-probe
           - async
           - async-https
           - async-https-native
           - async-https-rustls
-          - async-https-rustls-manual-roots
+          - async-https-rustls-probe
     steps:
     - name: Checkout
       uses: actions/checkout@v4
