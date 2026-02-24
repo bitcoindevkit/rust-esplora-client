@@ -6,7 +6,7 @@
 //! async Esplora client to query Esplora's backend.
 //!
 //! The library provides the possibility to build a blocking
-//! client using [`bitreq`] and an async client using [`reqwest`].
+//! or async client, both using [`bitreq`].
 //! The library supports communicating to Esplora via a proxy
 //! and also using TLS (SSL) for secure communication.
 //!
@@ -55,20 +55,19 @@
 //!   capabilities using the platform's native TLS backend (likely OpenSSL).
 //! * `blocking-https-bundled` enables [`bitreq`], the blocking client with proxy and TLS (SSL)
 //!   capabilities using a bundled OpenSSL library backend.
-//! * `async` enables [`reqwest`], the async client with proxy capabilities.
-//! * `async-https` enables [`reqwest`], the async client with support for proxying and TLS (SSL)
-//!   using the default [`reqwest`] TLS backend.
-//! * `async-https-native` enables [`reqwest`], the async client with support for proxying and TLS
+//! * `async` enables [`bitreq`], the async client with proxy capabilities.
+//! * `async-https` enables [`bitreq`], the async client with support for proxying and TLS (SSL)
+//!   using the default [`bitreq`] TLS backend.
+//! * `async-https-native` enables [`bitreq`], the async client with support for proxying and TLS
 //!   (SSL) using the platform's native TLS backend (likely OpenSSL).
-//! * `async-https-rustls` enables [`reqwest`], the async client with support for proxying and TLS
+//! * `async-https-rustls` enables [`bitreq`], the async client with support for proxying and TLS
 //!   (SSL) using the `rustls` TLS backend.
-//! * `async-https-rustls-manual-roots` enables [`reqwest`], the async client with support for
+//! * `async-https-rustls-manual-roots` enables [`bitreq`], the async client with support for
 //!   proxying and TLS (SSL) using the `rustls` TLS backend without using the default root
 //!   certificates.
 //!
 //! [`dont remove this line or cargo doc will break`]: https://example.com
 #![cfg_attr(not(feature = "bitreq"), doc = "[`bitreq`]: https://docs.rs/bitreq")]
-#![cfg_attr(not(feature = "reqwest"), doc = "[`reqwest`]: https://docs.rs/reqwest")]
 #![allow(clippy::result_large_err)]
 #![warn(missing_docs)]
 
@@ -87,6 +86,7 @@ pub mod r#async;
 pub mod blocking;
 
 pub use api::*;
+use bitreq::Response;
 #[cfg(feature = "blocking")]
 pub use blocking::BlockingClient;
 #[cfg(feature = "async")]
@@ -104,6 +104,44 @@ const BASE_BACKOFF_MILLIS: Duration = Duration::from_millis(256);
 
 /// Default max retries.
 const DEFAULT_MAX_RETRIES: usize = 6;
+
+/// Default max cached connections
+#[cfg(feature = "async")]
+const DEFAULT_MAX_CONNECTIONS: usize = 10;
+
+/// Check if [`Response`] status is within 100-199.
+#[allow(unused)]
+fn is_informational(response: &Response) -> bool {
+    (100..200).contains(&response.status_code)
+}
+
+/// Check if [`Response`] status is within 200-299.
+fn is_success(response: &Response) -> bool {
+    (200..300).contains(&response.status_code)
+}
+
+/// Check if [`Response`] status is within 300-399.
+#[allow(unused)]
+fn is_redirection(response: &Response) -> bool {
+    (300..400).contains(&response.status_code)
+}
+
+/// Check if [`Response`] status is within 400-499.
+#[allow(unused)]
+fn is_client_error(response: &Response) -> bool {
+    (400..500).contains(&response.status_code)
+}
+
+/// Check if [`Response`] status is within 500-599.
+#[allow(unused)]
+fn is_server_error(response: &Response) -> bool {
+    (500..600).contains(&response.status_code)
+}
+
+/// Check if [`Response`] status is within the retryable ones.
+fn is_retryable(response: &Response) -> bool {
+    RETRYABLE_ERROR_CODES.contains(&(response.status_code as u16))
+}
 
 /// Get a fee value in sats/vbytes from the estimates
 /// that matches the confirmation target set as parameter.
@@ -130,7 +168,7 @@ pub struct Builder {
     ///
     /// Note that the format of this value and the supported protocols change
     /// slightly between the blocking version of the client (using `minreq`)
-    /// and the async version (using `reqwest`). For more details check with
+    /// and the async version (using `bitreq`). For more details check with
     /// the documentation of the two crates. Both of them are compiled with
     /// the `socks` feature enabled.
     ///
@@ -142,6 +180,9 @@ pub struct Builder {
     pub headers: HashMap<String, String>,
     /// Max retries
     pub max_retries: usize,
+    /// The maximum number of cached connections.
+    #[cfg(feature = "async")]
+    pub max_connections: usize,
 }
 
 impl Builder {
@@ -153,6 +194,8 @@ impl Builder {
             timeout: None,
             headers: HashMap::new(),
             max_retries: DEFAULT_MAX_RETRIES,
+            #[cfg(feature = "async")]
+            max_connections: DEFAULT_MAX_CONNECTIONS,
         }
     }
 
@@ -181,6 +224,13 @@ impl Builder {
         self
     }
 
+    /// Set the maximum number of cached connections in the client.
+    #[cfg(feature = "async")]
+    pub fn max_connections(mut self, count: usize) -> Self {
+        self.max_connections = count;
+        self
+    }
+
     /// Build a blocking client from builder
     #[cfg(feature = "blocking")]
     pub fn build_blocking(self) -> BlockingClient {
@@ -205,11 +255,8 @@ impl Builder {
 #[derive(Debug)]
 pub enum Error {
     /// Error during `bitreq` HTTP request
-    #[cfg(feature = "blocking")]
+    #[cfg(any(feature = "blocking", feature = "async"))]
     BitReq(bitreq::Error),
-    /// Error during `reqwest` HTTP request
-    #[cfg(feature = "async")]
-    Reqwest(reqwest::Error),
     /// Error during JSON (de)serialization
     SerdeJson(serde_json::Error),
     /// HTTP response error
@@ -263,10 +310,8 @@ macro_rules! impl_error {
 }
 
 impl std::error::Error for Error {}
-#[cfg(feature = "blocking")]
+#[cfg(any(feature = "blocking", feature = "async"))]
 impl_error!(::bitreq::Error, BitReq, Error);
-#[cfg(feature = "async")]
-impl_error!(::reqwest::Error, Reqwest, Error);
 impl_error!(serde_json::Error, SerdeJson, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
 impl_error!(bitcoin::consensus::encode::Error, BitcoinEncoding, Error);
@@ -766,6 +811,7 @@ mod test {
 
         let tx = blocking_client.get_tx(&txid).unwrap();
         let async_res = async_client.broadcast(tx.as_ref().unwrap()).await;
+        println!("{:?}", async_res);
         let blocking_res = blocking_client.broadcast(tx.as_ref().unwrap());
         assert!(async_res.is_err());
         assert!(matches!(
@@ -1176,10 +1222,9 @@ mod test {
             );
         };
 
-        // minreq's blocking client sends title-case headers: "Authorization"
+        // both clients should send the expected headers properly
         assert_request("User-Agent: blocking", exp_header_key);
-        // reqwest's async client sends lowercase headers: "authorization"
-        assert_request("user-agent: async", &exp_header_key.to_lowercase());
+        assert_request("User-Agent: async", exp_header_key);
 
         // cleanup any remaining spawned tasks
         let _ = blocking_task.await.expect("blocking task should not panic");

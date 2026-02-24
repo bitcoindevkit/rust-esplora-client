@@ -25,7 +25,7 @@ jobs:
           - async-https
           - async-https-native
           - async-https-rustls
-          - async-https-rustls-manual-roots
+          - async-https-rustls-probe
     steps:
     - name: Checkout
       uses: actions/checkout@v4
