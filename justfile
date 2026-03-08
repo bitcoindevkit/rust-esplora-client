@@ -31,11 +31,11 @@ msrv:
    rm -rf Cargo.lock
    bash ci/pin-msrv.sh
    cargo +1.75.0 build --all-features
-   cargo +1.75.0 test --all-features -- --test-threads=1
+   cargo +1.75.0 test --all-features -- --test-threads=16
 
 # Run pre-push suite: format, check, and test
 pre-push: fmt check test msrv
 
 # Run all tests on the workspace with all features
 test:
-   cargo test --all-features -- --test-threads=1
+   cargo test --all-features -- --test-threads=16
