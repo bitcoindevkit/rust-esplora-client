@@ -358,22 +358,27 @@ mod test {
 
         /// Setup both [`BlockingClient`] and [`AsyncClient`].
         fn setup_clients(&self) -> (BlockingClient, AsyncClient) {
-            self.setup_clients_with_headers(HashMap::new())
+            self.setup_clients_with_headers(
+                self.electrsd.esplora_url.as_ref().unwrap(),
+                HashMap::new(),
+            )
         }
 
         /// Setup both [`BlockingClient`] and [`AsyncClient`] with custom HTTP headers.
         fn setup_clients_with_headers(
             &self,
+            url: &str,
             headers: HashMap<String, String>,
         ) -> (BlockingClient, AsyncClient) {
-            let esplora_url = self.electrsd.esplora_url.as_ref().unwrap();
-
-            let mut builder = Builder::new(&format!("http://{esplora_url}"));
+            let mut builder = Builder::new(&format!("http://{url}"));
             for (k, v) in &headers {
                 builder = builder.header(k, v);
             }
-            let blocking_client = builder.clone().build_blocking();
-            let async_client = builder.build_async().unwrap();
+            let blocking_client = builder
+                .clone()
+                .header("User-Agent", "blocking")
+                .build_blocking();
+            let async_client = builder.header("User-Agent", "async").build_async().unwrap();
 
             (blocking_client, async_client)
         }
@@ -1092,14 +1097,41 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
-    async fn test_get_tx_with_http_header() {
+    async fn test_get_tx_with_http_headers() {
+        use corepc_node::get_available_port;
+        use tokio::io::AsyncReadExt;
+        use tokio::net::TcpListener;
+
+        async fn handle_requests(listener: TcpListener, count: usize) -> Vec<[u8; 4096]> {
+            let mut raw_requests = vec![];
+            for _ in 0..count {
+                let (mut stream, _) = listener.accept().await.expect("should accept connection!");
+                let mut buf = [0u8; 4096];
+                AsyncReadExt::read(&mut stream, &mut buf)
+                    .await
+                    .expect("should read from stream");
+                raw_requests.push(buf);
+            }
+            raw_requests
+        }
+
+        // setup a mocked HTTP server.
+        let base_url = format!(
+            "127.0.0.1:{}",
+            get_available_port().expect("should get an available port successfully!")
+        );
+
+        let listener = TcpListener::bind(&base_url)
+            .await
+            .expect("should bind the TCP listener successfully");
+
+        // setup `TestEnv` and expected HTTP headers.
         let env = TestEnv::new();
-        let headers = [(
-            "Authorization".to_string(),
-            "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==".to_string(),
-        )]
-        .into();
-        let (blocking_client, async_client) = env.setup_clients_with_headers(headers);
+        let exp_header_key = "Authorization";
+        let exp_header_value = "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==";
+        let headers = HashMap::from([(exp_header_key.to_string(), exp_header_value.to_string())]);
+
+        let (blocking_client, async_client) = env.setup_clients_with_headers(&base_url, headers);
 
         let address = env.get_legacy_address();
         let txid = env
@@ -1110,9 +1142,45 @@ mod test {
             .unwrap();
         env.mine_and_wait(1);
 
-        let tx = blocking_client.get_tx(&txid).unwrap();
-        let tx_async = async_client.get_tx(&txid).await.unwrap();
-        assert_eq!(tx, tx_async);
+        let blocking_task = tokio::task::spawn_blocking(move || blocking_client.get_tx(&txid));
+        let async_task = tokio::task::spawn(async move { async_client.get_tx(&txid).await });
+
+        let raw_requests = handle_requests(listener, 2).await;
+        let requests = raw_requests
+            .iter()
+            .map(|raw| {
+                String::from_utf8(raw.to_vec()).expect("should parse HTTP requests successfully")
+            })
+            .collect::<Vec<String>>();
+
+        assert_eq!(
+            requests.len(),
+            2,
+            "it MUST contain ONLY two requests (i.e a single one from each client)"
+        );
+
+        let assert_request = |user_agent: &str, header_key: &str| {
+            let expected_path = format!("GET /tx/{txid}/raw");
+            let expected_auth = format!("{header_key}: {exp_header_value}");
+
+            assert!(
+                requests.iter().any(|req| {
+                    req.contains(&expected_path)
+                        && req.contains(&expected_auth)
+                        && req.contains(user_agent)
+                }),
+                "request MUST call `{expected_path}` with `{user_agent}` and expected authorization header"
+            );
+        };
+
+        // minreq's blocking client sends title-case headers: "Authorization"
+        assert_request("User-Agent: blocking", exp_header_key);
+        // reqwest's async client sends lowercase headers: "authorization"
+        assert_request("user-agent: async", &exp_header_key.to_lowercase());
+
+        // cleanup any remaining spawned tasks
+        let _ = blocking_task.await.expect("blocking task should not panic");
+        let _ = async_task.await.expect("async task should not panic");
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
