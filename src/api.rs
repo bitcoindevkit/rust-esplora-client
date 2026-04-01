@@ -126,7 +126,7 @@ pub struct Tx {
     /// The [`Transaction`] size in raw bytes (NOT virtual bytes).
     pub size: usize,
     /// The [`Transaction`]'s weight units.
-    pub weight: u64,
+    pub weight: Weight,
     /// The confirmation status of the [`Transaction`].
     pub status: TxStatus,
     /// The fee amount paid by the [`Transaction`], in satoshis.
@@ -150,7 +150,7 @@ pub struct BlockInfo {
     /// The [`Block`]'s size, in bytes.
     pub size: usize,
     /// The [`Block`]'s weight.
-    pub weight: u64,
+    pub weight: Weight,
     /// The Merkle root of the transactions in the block.
     pub merkle_root: hash_types::TxMerkleNode,
     /// The [`BlockHash`] of the previous [`Block`] (`None` for the genesis block).
@@ -410,11 +410,6 @@ impl Tx {
                 })
             })
             .collect()
-    }
-
-    /// Get the weight of a [`Tx`].
-    pub fn weight(&self) -> Weight {
-        Weight::from_wu(self.weight)
     }
 
     /// Get the fee paid by a [`Tx`].
