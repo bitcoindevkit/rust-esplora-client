@@ -274,131 +274,201 @@ impl_error!(bitcoin::hex::HexToBytesError, HexToBytes, Error);
 #[cfg(test)]
 mod test {
     use super::*;
-    use electrsd::{corepc_node, ElectrsD};
-    use lazy_static::lazy_static;
-    use std::env;
-    use std::str::FromStr;
-    use tokio::sync::Mutex;
+
     #[cfg(all(feature = "blocking", feature = "async"))]
     use {
-        bitcoin::{hashes::Hash, Amount},
-        corepc_node::AddressType,
-        electrsd::electrum_client::ElectrumApi,
+        bitcoin::{hashes::Hash, Address, Amount},
+        core::str::FromStr,
+        electrsd::{corepc_node, electrum_client::ElectrumApi, ElectrsD},
         std::time::Duration,
-        tokio::sync::OnceCell,
     };
 
-    lazy_static! {
-        static ref BITCOIND: corepc_node::Node = {
-            let bitcoind_exe = env::var("BITCOIND_EXE")
+    /// Struct that holds regtest `bitcoind` and `electrsd` instances.
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    struct TestEnv {
+        bitcoind: corepc_node::Node,
+        electrsd: ElectrsD,
+    }
+
+    /// Configuration parameters for the [`TestEnv`].
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    pub struct Config<'a> {
+        /// Configuration params for the [`corepc_node::Node`].
+        pub bitcoind: corepc_node::Conf<'a>,
+        /// Configuration params for the [`electrsd::ElectrsD`].
+        pub electrsd: electrsd::Conf<'a>,
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    impl Default for Config<'_> {
+        /// Use the default configuration for [`corepc_node::Node`], and enable
+        /// HTTP for [`electrsd::ElectrsD`], exposing an Esplora API endpoint.
+        fn default() -> Self {
+            Self {
+                bitcoind: corepc_node::Conf::default(),
+                electrsd: {
+                    let mut config = electrsd::Conf::default();
+                    config.http_enabled = true;
+                    config
+                },
+            }
+        }
+    }
+
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    impl TestEnv {
+        /// Instantiate a [`TestEnv`] with default [`Config`].
+        pub fn new() -> Self {
+            TestEnv::new_with_config(Config::default())
+        }
+
+        /// Instantiate a [`TestEnv`] with a custom [`Config`].
+        fn new_with_config(config: Config) -> Self {
+            const SETUP_BLOCK_COUNT: usize = 101;
+
+            let bitcoind_exe = std::env::var("BITCOIND_EXE")
                 .ok()
                 .or_else(|| corepc_node::downloaded_exe_path().ok())
                 .expect(
-                    "you need to provide an env var BITCOIND_EXE or specify a bitcoind version feature",
+                    "Provide a BITCOIND_EXE environment variable, or specify a `bitcoind` version feature",
                 );
-            let conf = corepc_node::Conf::default();
-            corepc_node::Node::with_conf(bitcoind_exe, &conf).unwrap()
-        };
-        static ref ELECTRSD: ElectrsD = {
-            let electrs_exe = env::var("ELECTRS_EXE")
+            let bitcoind = corepc_node::Node::with_conf(bitcoind_exe, &config.bitcoind).unwrap();
+
+            let electrs_exe = std::env::var("ELECTRS_EXE")
                 .ok()
                 .or_else(electrsd::downloaded_exe_path)
                 .expect(
-                    "you need to provide env var ELECTRS_EXE or specify an electrsd version feature",
+                    "Provide an ELECTRS_EXE environment variable, or specify an `electrsd` version feature",
                 );
-            let mut conf = electrsd::Conf::default();
-            conf.http_enabled = true;
-            ElectrsD::with_conf(electrs_exe, &BITCOIND, &conf).unwrap()
-        };
-        static ref MINER: Mutex<()> = Mutex::new(());
-    }
+            let electrsd = ElectrsD::with_conf(electrs_exe, &bitcoind, &config.electrsd).unwrap();
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
-    static PREMINE: OnceCell<()> = OnceCell::const_new();
+            let env = Self { bitcoind, electrsd };
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
-    async fn setup_clients() -> (BlockingClient, AsyncClient) {
-        setup_clients_with_headers(HashMap::new()).await
-    }
-
-    #[cfg(all(feature = "blocking", feature = "async"))]
-    async fn setup_clients_with_headers(
-        headers: HashMap<String, String>,
-    ) -> (BlockingClient, AsyncClient) {
-        PREMINE
-            .get_or_init(|| async {
-                let _miner = MINER.lock().await;
-                generate_blocks_and_wait(101);
-            })
-            .await;
-
-        let esplora_url = ELECTRSD.esplora_url.as_ref().unwrap();
-
-        let mut builder = Builder::new(&format!("http://{esplora_url}"));
-        if !headers.is_empty() {
-            builder.headers = headers;
+            env.bitcoind_client()
+                .generate_to_address(SETUP_BLOCK_COUNT, &env.get_mining_address())
+                .unwrap();
+            env.wait_until_electrum_sees_block(SETUP_BLOCK_COUNT);
+            env
         }
 
-        let blocking_client = builder.build_blocking();
-
-        let builder_async = Builder::new(&format!("http://{esplora_url}"));
-
-        #[cfg(feature = "tokio")]
-        let async_client = builder_async.build_async().unwrap();
-
-        #[cfg(not(feature = "tokio"))]
-        let async_client = builder_async
-            .build_async_with_sleeper::<r#async::DefaultSleeper>()
-            .unwrap();
-
-        (blocking_client, async_client)
-    }
-
-    #[cfg(all(feature = "blocking", feature = "async"))]
-    fn generate_blocks_and_wait(num: usize) {
-        let cur_height = BITCOIND.client.get_block_count().unwrap().0;
-        generate_blocks(num);
-        wait_for_block(cur_height as usize + num);
-    }
-
-    #[cfg(all(feature = "blocking", feature = "async"))]
-    fn generate_blocks(num: usize) {
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-        let _block_hashes = BITCOIND.client.generate_to_address(num, &address).unwrap();
-    }
-
-    #[cfg(all(feature = "blocking", feature = "async"))]
-    fn wait_for_block(min_height: usize) {
-        let mut header = ELECTRSD.client.block_headers_subscribe().unwrap();
-        loop {
-            if header.height >= min_height {
-                break;
-            }
-            header = exponential_backoff_poll(|| {
-                ELECTRSD.trigger().unwrap();
-                ELECTRSD.client.ping().unwrap();
-                ELECTRSD.client.block_headers_pop().unwrap()
-            });
+        /// Get the [`bitcoind` RPC client](corepc_node::Client).
+        fn bitcoind_client(&self) -> &corepc_node::Client {
+            &self.bitcoind.client
         }
-    }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
-    fn exponential_backoff_poll<T, F>(mut poll: F) -> T
-    where
-        F: FnMut() -> Option<T>,
-    {
-        let mut delay = Duration::from_millis(64);
-        loop {
-            match poll() {
-                Some(data) => break data,
-                None if delay.as_millis() < 512 => delay = delay.mul_f32(2.0),
-                None => {}
+        /// Setup both [`BlockingClient`] and [`AsyncClient`].
+        fn setup_clients(&self) -> (BlockingClient, AsyncClient) {
+            self.setup_clients_with_headers(
+                self.electrsd.esplora_url.as_ref().unwrap(),
+                HashMap::new(),
+            )
+        }
+
+        /// Setup both [`BlockingClient`] and [`AsyncClient`] with custom HTTP headers.
+        fn setup_clients_with_headers(
+            &self,
+            url: &str,
+            headers: HashMap<String, String>,
+        ) -> (BlockingClient, AsyncClient) {
+            let mut builder = Builder::new(&format!("http://{url}"));
+            for (k, v) in &headers {
+                builder = builder.header(k, v);
             }
+            let blocking_client = builder
+                .clone()
+                .header("User-Agent", "blocking")
+                .build_blocking();
+            let async_client = builder.header("User-Agent", "async").build_async().unwrap();
 
-            std::thread::sleep(delay);
+            (blocking_client, async_client)
+        }
+
+        /// Mine `count` blocks.
+        fn mine_blocks(&self, count: usize) {
+            self.bitcoind
+                .client
+                .generate_to_address(count, &self.get_mining_address())
+                .unwrap();
+        }
+
+        /// Wait until the [electrum server](electrsd::ElectrsD) sees a new block.
+        fn wait_until_electrum_sees_block(&self, min_height: usize) {
+            let electrsd = &self.electrsd;
+            let mut header = electrsd.client.block_headers_subscribe().unwrap();
+            loop {
+                if header.height >= min_height {
+                    break;
+                }
+                header = self.poll_exp_backoff(|| {
+                    electrsd.trigger().unwrap();
+                    electrsd.client.ping().unwrap();
+                    electrsd.client.block_headers_pop().unwrap()
+                });
+            }
+        }
+
+        /// Mine `count` blocks and wait until the
+        /// [electrum server](electrsd::ElectrsD) sees a new block.
+        fn mine_and_wait(&self, count: usize) {
+            let current_height = self
+                .electrsd
+                .client
+                .block_headers_subscribe()
+                .unwrap()
+                .height;
+            self.mine_blocks(count);
+            self.wait_until_electrum_sees_block(current_height + count);
+        }
+
+        /// Poll the [electrum server](electrsd::ElectrsD) in exponentially increasing intervals.
+        fn poll_exp_backoff<T, F>(&self, mut poll: F) -> T
+        where
+            F: FnMut() -> Option<T>,
+        {
+            let mut delay = Duration::from_millis(64);
+            loop {
+                match poll() {
+                    Some(data) => break data,
+                    None if delay.as_millis() < 512 => delay = delay.mul_f32(2.0),
+                    None => {}
+                }
+                std::thread::sleep(delay);
+            }
+        }
+
+        /// Get a `Legacy` regtest address.
+        fn get_legacy_address(&self) -> Address {
+            Address::from_str("mvUsRD2pNeQQ8nZq8CDEx6fjVQsyzqyhVC")
+                .unwrap()
+                .assume_checked()
+        }
+
+        /// Get a `Nested SegWit` (P2SH-P2WSH) regtest address.
+        fn get_nested_segwit_address(&self) -> Address {
+            Address::from_str("2N2bJevrSwzv5C6dGm9kQAivDYnvDBPbUxM")
+                .unwrap()
+                .assume_checked()
+        }
+
+        /// Get a `bech32` regtest address.
+        fn get_bech32_address(&self) -> Address {
+            Address::from_str("bcrt1qedegah48k0uft3ez7u8ywg2hf0ygexgvhps0wp")
+                .unwrap()
+                .assume_checked()
+        }
+
+        /// Get a `bech32m` regtest address.
+        fn get_bech32m_address(&self) -> Address {
+            Address::from_str("bcrt1p970nsjmz8ls34ty229n6zu534mumc2j74skuxe2lzcqdqxuwwhxsftk7al")
+                .unwrap()
+                .assume_checked()
+        }
+
+        /// Get an address which coinbase outputs should be sent to.
+        fn get_mining_address(&self) -> Address {
+            Address::from_str("bcrt1qj5gx4t0n8lrl0clddmpn0pee4r4fds7stwyj0j")
+                .unwrap()
+                .assume_checked()
         }
     }
 
@@ -454,20 +524,17 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tx() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-        let txid = BITCOIND
-            .client
+        let address = env.get_legacy_address();
+        let txid = env
+            .bitcoind_client()
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
-        generate_blocks_and_wait(1);
+        env.mine_and_wait(1);
 
         let tx = blocking_client.get_tx(&txid).unwrap();
         let tx_async = async_client.get_tx(&txid).await.unwrap();
@@ -477,20 +544,17 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tx_no_opt() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-        let txid = BITCOIND
-            .client
+        let address = env.get_legacy_address();
+        let txid = env
+            .bitcoind_client()
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
-        generate_blocks_and_wait(1);
+        env.mine_and_wait(1);
 
         let tx_no_opt = blocking_client.get_tx_no_opt(&txid).unwrap();
         let tx_no_opt_async = async_client.get_tx_no_opt(&txid).await.unwrap();
@@ -500,20 +564,17 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tx_status() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-        let txid = BITCOIND
-            .client
+        let address = env.get_legacy_address();
+        let txid = env
+            .bitcoind_client()
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
-        generate_blocks_and_wait(1);
+        env.mine_and_wait(1);
 
         let tx_status = blocking_client.get_tx_status(&txid).unwrap();
         let tx_status_async = async_client.get_tx_status(&txid).await.unwrap();
@@ -534,30 +595,27 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tx_info() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-        let txid = BITCOIND
-            .client
+        let address = env.get_legacy_address();
+        let txid = env
+            .bitcoind_client()
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
-        generate_blocks_and_wait(1);
+        env.mine_and_wait(1);
 
-        let tx_res = BITCOIND
-            .client
+        let tx_res = env
+            .bitcoind_client()
             .get_transaction(txid)
             .unwrap()
             .into_model()
             .unwrap();
         let tx_exp: Transaction = tx_res.tx;
-        let tx_block_height = BITCOIND
-            .client
+        let tx_block_height = env
+            .bitcoind_client()
             .get_block_header_verbose(&tx_res.block_hash.unwrap())
             .unwrap()
             .into_model()
@@ -595,10 +653,11 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_header_by_hash() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let block_hash = BITCOIND
-            .client
+        let block_hash = env
+            .bitcoind_client()
             .get_block_hash(23)
             .unwrap()
             .block_hash()
@@ -612,16 +671,17 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_status() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let block_hash = BITCOIND
-            .client
+        let block_hash = env
+            .bitcoind_client()
             .get_block_hash(21)
             .unwrap()
             .block_hash()
             .unwrap();
-        let next_block_hash = BITCOIND
-            .client
+        let next_block_hash = env
+            .bitcoind_client()
             .get_block_hash(22)
             .unwrap()
             .block_hash()
@@ -648,7 +708,8 @@ mod test {
         // (Here the block is cited as orphaned: https://bitcoinchain.com/block_explorer/block/000000000000000000181b1a2354620f66868a723c0c4d5b24e4be8bdfc35a7f/ )
         // For this reason, we only test for the non-existing case here.
 
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
         let block_hash = BlockHash::all_zeros();
 
@@ -667,16 +728,17 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_by_hash() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let block_hash = BITCOIND
-            .client
+        let block_hash = env
+            .bitcoind_client()
             .get_block_hash(21)
             .unwrap()
             .block_hash()
             .unwrap();
 
-        let expected = Some(BITCOIND.client.get_block(block_hash).unwrap());
+        let expected = Some(env.bitcoind_client().get_block(block_hash).unwrap());
 
         let block = blocking_client.get_block_by_hash(&block_hash).unwrap();
         let block_async = async_client.get_block_by_hash(&block_hash).await.unwrap();
@@ -687,20 +749,17 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_that_errors_are_propagated() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-        let txid = BITCOIND
-            .client
+        let address = env.get_legacy_address();
+        let txid = env
+            .bitcoind_client()
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
-        generate_blocks_and_wait(1);
+        env.mine_and_wait(1);
 
         let tx = blocking_client.get_tx(&txid).unwrap();
         let async_res = async_client.broadcast(tx.as_ref().unwrap()).await;
@@ -720,7 +779,8 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_by_hash_not_existing() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
         let block = blocking_client
             .get_block_by_hash(&BlockHash::all_zeros())
@@ -736,20 +796,17 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_merkle_proof() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-        let txid = BITCOIND
-            .client
+        let address = env.get_legacy_address();
+        let txid = env
+            .bitcoind_client()
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
-        generate_blocks_and_wait(1);
+        env.mine_and_wait(1);
 
         let merkle_proof = blocking_client.get_merkle_proof(&txid).unwrap().unwrap();
         let merkle_proof_async = async_client.get_merkle_proof(&txid).await.unwrap().unwrap();
@@ -760,20 +817,17 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_merkle_block() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-        let txid = BITCOIND
-            .client
+        let address = env.get_legacy_address();
+        let txid = env
+            .bitcoind_client()
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
-        generate_blocks_and_wait(1);
+        env.mine_and_wait(1);
 
         let merkle_block = blocking_client.get_merkle_block(&txid).unwrap().unwrap();
         let merkle_block_async = async_client.get_merkle_block(&txid).await.unwrap().unwrap();
@@ -793,20 +847,17 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_output_status() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-        let txid = BITCOIND
-            .client
+        let address = env.get_legacy_address();
+        let txid = env
+            .bitcoind_client()
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
-        generate_blocks_and_wait(1);
+        env.mine_and_wait(1);
 
         let output_status = blocking_client
             .get_output_status(&txid, 1)
@@ -824,7 +875,9 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_height() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
+
         let block_height = blocking_client.get_height().unwrap();
         let block_height_async = async_client.get_height().await.unwrap();
         assert!(block_height > 0);
@@ -834,7 +887,9 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tip_hash() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
+
         let tip_hash = blocking_client.get_tip_hash().unwrap();
         let tip_hash_async = async_client.get_tip_hash().await.unwrap();
         assert_eq!(tip_hash, tip_hash_async);
@@ -843,10 +898,11 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_hash() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let block_hash = BITCOIND
-            .client
+        let block_hash = env
+            .bitcoind_client()
             .get_block_hash(21)
             .unwrap()
             .block_hash()
@@ -861,10 +917,11 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_txid_at_block_index() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let block_hash = BITCOIND
-            .client
+        let block_hash = env
+            .bitcoind_client()
             .get_block_hash(23)
             .unwrap()
             .block_hash()
@@ -885,7 +942,9 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_fee_estimates() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
+
         let fee_estimates = blocking_client.get_fee_estimates().unwrap();
         let fee_estimates_async = async_client.get_fee_estimates().await.unwrap();
         assert_eq!(fee_estimates.len(), fee_estimates_async.len());
@@ -894,23 +953,20 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_scripthash_txs() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-        let txid = BITCOIND
-            .client
+        let address = env.get_legacy_address();
+        let txid = env
+            .bitcoind_client()
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
-        generate_blocks_and_wait(1);
+        env.mine_and_wait(1);
 
-        let expected_tx = BITCOIND
-            .client
+        let expected_tx = env
+            .bitcoind_client()
             .get_transaction(txid)
             .unwrap()
             .into_model()
@@ -936,7 +992,8 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_info() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
         // Genesis block `BlockHash` on regtest.
         let blockhash_genesis =
@@ -958,27 +1015,22 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_txids() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
+        let address = env.get_legacy_address();
 
         // Create 5 transactions and mine a block.
         let txids: Vec<_> = (0..5)
             .map(|_| {
-                BITCOIND
-                    .client
+                env.bitcoind_client()
                     .send_to_address(&address, Amount::from_sat(1000))
                     .unwrap()
                     .txid()
                     .unwrap()
             })
             .collect();
-
-        let _miner = MINER.lock().await;
-        generate_blocks_and_wait(1);
+        env.mine_and_wait(1);
 
         // Get the block hash at the chain's tip.
         let blockhash = blocking_client.get_tip_hash().unwrap();
@@ -997,9 +1049,9 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_txs() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let _miner = MINER.lock().await;
         let blockhash = blocking_client.get_tip_hash().unwrap();
 
         let txs_blocking = blocking_client.get_block_txs(&blockhash, None).unwrap();
@@ -1012,17 +1064,21 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_blocks() {
-        let (blocking_client, async_client) = setup_clients().await;
-        let start_height = BITCOIND.client.get_block_count().unwrap().0;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
+
+        let start_height = env.bitcoind_client().get_block_count().unwrap().0;
         let blocks1 = blocking_client.get_blocks(None).unwrap();
         let blocks_async1 = async_client.get_blocks(None).await.unwrap();
         assert_eq!(blocks1[0].time.height, start_height as u32);
         assert_eq!(blocks1, blocks_async1);
-        generate_blocks_and_wait(10);
+        env.mine_and_wait(1);
+
         let blocks2 = blocking_client.get_blocks(None).unwrap();
         let blocks_async2 = async_client.get_blocks(None).await.unwrap();
         assert_eq!(blocks2, blocks_async2);
         assert_ne!(blocks2, blocks1);
+
         let blocks3 = blocking_client
             .get_blocks(Some(start_height as u32))
             .unwrap();
@@ -1033,6 +1089,7 @@ mod test {
         assert_eq!(blocks3, blocks_async3);
         assert_eq!(blocks3[0].time.height, start_height as u32);
         assert_eq!(blocks3, blocks1);
+
         let blocks_genesis = blocking_client.get_blocks(Some(0)).unwrap();
         let blocks_genesis_async = async_client.get_blocks(Some(0)).await.unwrap();
         assert_eq!(blocks_genesis, blocks_genesis_async);
@@ -1040,44 +1097,101 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
-    async fn test_get_tx_with_http_header() {
-        let headers = [(
-            "Authorization".to_string(),
-            "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==".to_string(),
-        )]
-        .into();
-        let (blocking_client, async_client) = setup_clients_with_headers(headers).await;
+    async fn test_get_tx_with_http_headers() {
+        use corepc_node::get_available_port;
+        use tokio::io::AsyncReadExt;
+        use tokio::net::TcpListener;
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-        let txid = BITCOIND
-            .client
+        async fn handle_requests(listener: TcpListener, count: usize) -> Vec<[u8; 4096]> {
+            let mut raw_requests = vec![];
+            for _ in 0..count {
+                let (mut stream, _) = listener.accept().await.expect("should accept connection!");
+                let mut buf = [0u8; 4096];
+                AsyncReadExt::read(&mut stream, &mut buf)
+                    .await
+                    .expect("should read from stream");
+                raw_requests.push(buf);
+            }
+            raw_requests
+        }
+
+        // setup a mocked HTTP server.
+        let base_url = format!(
+            "127.0.0.1:{}",
+            get_available_port().expect("should get an available port successfully!")
+        );
+
+        let listener = TcpListener::bind(&base_url)
+            .await
+            .expect("should bind the TCP listener successfully");
+
+        // setup `TestEnv` and expected HTTP headers.
+        let env = TestEnv::new();
+        let exp_header_key = "Authorization";
+        let exp_header_value = "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==";
+        let headers = HashMap::from([(exp_header_key.to_string(), exp_header_value.to_string())]);
+
+        let (blocking_client, async_client) = env.setup_clients_with_headers(&base_url, headers);
+
+        let address = env.get_legacy_address();
+        let txid = env
+            .bitcoind_client()
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _miner = MINER.lock().await;
-        generate_blocks_and_wait(1);
+        env.mine_and_wait(1);
 
-        let tx = blocking_client.get_tx(&txid).unwrap();
-        let tx_async = async_client.get_tx(&txid).await.unwrap();
-        assert_eq!(tx, tx_async);
+        let blocking_task = tokio::task::spawn_blocking(move || blocking_client.get_tx(&txid));
+        let async_task = tokio::task::spawn(async move { async_client.get_tx(&txid).await });
+
+        let raw_requests = handle_requests(listener, 2).await;
+        let requests = raw_requests
+            .iter()
+            .map(|raw| {
+                String::from_utf8(raw.to_vec()).expect("should parse HTTP requests successfully")
+            })
+            .collect::<Vec<String>>();
+
+        assert_eq!(
+            requests.len(),
+            2,
+            "it MUST contain ONLY two requests (i.e a single one from each client)"
+        );
+
+        let assert_request = |user_agent: &str, header_key: &str| {
+            let expected_path = format!("GET /tx/{txid}/raw");
+            let expected_auth = format!("{header_key}: {exp_header_value}");
+
+            assert!(
+                requests.iter().any(|req| {
+                    req.contains(&expected_path)
+                        && req.contains(&expected_auth)
+                        && req.contains(user_agent)
+                }),
+                "request MUST call `{expected_path}` with `{user_agent}` and expected authorization header"
+            );
+        };
+
+        // minreq's blocking client sends title-case headers: "Authorization"
+        assert_request("User-Agent: blocking", exp_header_key);
+        // reqwest's async client sends lowercase headers: "authorization"
+        assert_request("user-agent: async", &exp_header_key.to_lowercase());
+
+        // cleanup any remaining spawned tasks
+        let _ = blocking_task.await.expect("blocking task should not panic");
+        let _ = async_task.await.expect("async task should not panic");
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_address_stats() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-
-        let _txid = BITCOIND
-            .client
+        let address = env.get_legacy_address();
+        let _txid = env
+            .bitcoind_client()
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
@@ -1088,8 +1202,7 @@ mod test {
         assert_eq!(address_stats_blocking, address_stats_async);
         assert_eq!(address_stats_async.chain_stats.funded_txo_count, 0);
 
-        let _miner = MINER.lock().await;
-        generate_blocks_and_wait(1);
+        env.mine_and_wait(1);
 
         let address_stats_blocking = blocking_client.get_address_stats(&address).unwrap();
         let address_stats_async = async_client.get_address_stats(&address).await.unwrap();
@@ -1101,62 +1214,48 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_scripthash_stats() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        // Create an address of each type.
-        let address_legacy = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-        let address_p2sh_segwit = BITCOIND
-            .client
-            .new_address_with_type(AddressType::P2shSegwit)
-            .unwrap();
-        let address_bech32 = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Bech32)
-            .unwrap();
-        let address_bech32m = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Bech32m)
-            .unwrap();
+        let address_legacy = env.get_legacy_address();
+        let address_nested_segwit = env.get_nested_segwit_address();
+        let address_bech32 = env.get_bech32_address();
+        let address_bech32m = env.get_bech32m_address();
 
         // Send a transaction to each address.
-        let _txid = BITCOIND
-            .client
+        let _txid = env
+            .bitcoind_client()
             .send_to_address(&address_legacy, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _txid = BITCOIND
-            .client
-            .send_to_address(&address_p2sh_segwit, Amount::from_sat(1000))
+        let _txid = env
+            .bitcoind_client()
+            .send_to_address(&address_nested_segwit, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _txid = BITCOIND
-            .client
+        let _txid = env
+            .bitcoind_client()
             .send_to_address(&address_bech32, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-        let _txid = BITCOIND
-            .client
+        let _txid = env
+            .bitcoind_client()
             .send_to_address(&address_bech32m, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-
-        let _miner = MINER.lock().await;
-        generate_blocks_and_wait(1);
+        env.mine_and_wait(1);
 
         // Derive each addresses script.
         let script_legacy = address_legacy.script_pubkey();
-        let script_p2sh_segwit = address_p2sh_segwit.script_pubkey();
+        let script_nested_segwit = address_nested_segwit.script_pubkey();
         let script_bech32 = address_bech32.script_pubkey();
         let script_bech32m = address_bech32m.script_pubkey();
 
-        // P2PKH
+        // Legacy (P2PKH)
         let scripthash_stats_blocking_legacy = blocking_client
             .get_scripthash_stats(&script_legacy)
             .unwrap();
@@ -1174,12 +1273,12 @@ mod test {
         );
         assert_eq!(scripthash_stats_blocking_legacy.chain_stats.tx_count, 1);
 
-        // P2SH-P2WSH
+        // Nested SegWit (P2SH-P2WSH)
         let scripthash_stats_blocking_p2sh_segwit = blocking_client
-            .get_scripthash_stats(&script_p2sh_segwit)
+            .get_scripthash_stats(&script_nested_segwit)
             .unwrap();
         let scripthash_stats_async_p2sh_segwit = async_client
-            .get_scripthash_stats(&script_p2sh_segwit)
+            .get_scripthash_stats(&script_nested_segwit)
             .await
             .unwrap();
         assert_eq!(
@@ -1197,7 +1296,7 @@ mod test {
             1
         );
 
-        // P2WPKH / P2WSH
+        // Bech32 (P2WPKH / P2WSH)
         let scripthash_stats_blocking_bech32 = blocking_client
             .get_scripthash_stats(&script_bech32)
             .unwrap();
@@ -1215,7 +1314,7 @@ mod test {
         );
         assert_eq!(scripthash_stats_blocking_bech32.chain_stats.tx_count, 1);
 
-        // P2TR
+        // Bech32m (P2TR)
         let scripthash_stats_blocking_bech32m = blocking_client
             .get_scripthash_stats(&script_bech32m)
             .unwrap();
@@ -1237,22 +1336,17 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_address_txs() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-
-        let txid = BITCOIND
-            .client
+        let address = env.get_legacy_address();
+        let txid = env
+            .bitcoind_client()
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
-
-        let _miner = MINER.lock().await;
-        generate_blocks_and_wait(1);
+        env.mine_and_wait(1);
 
         let address_txs_blocking = blocking_client.get_address_txs(&address, None).unwrap();
         let address_txs_async = async_client.get_address_txs(&address, None).await.unwrap();
@@ -1264,22 +1358,18 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_address_utxos() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-
-        let _txid = BITCOIND
-            .client
+        let address = env.get_legacy_address();
+        let _txid = env
+            .bitcoind_client()
             .send_to_address(&address, Amount::from_sat(21000))
             .unwrap()
             .txid()
             .unwrap();
 
-        let _miner = MINER.lock().await;
-        generate_blocks_and_wait(1);
+        env.mine_and_wait(1);
 
         let address_utxos_blocking = blocking_client.get_address_utxos(&address).unwrap();
         let address_utxos_async = async_client.get_address_utxos(&address).await.unwrap();
@@ -1292,24 +1382,19 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_scripthash_utxos() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-        let script = address.script_pubkey();
-
-        let _txid = BITCOIND
-            .client
+        let address = env.get_legacy_address();
+        let _txid = env
+            .bitcoind_client()
             .send_to_address(&address, Amount::from_sat(21000))
             .unwrap()
             .txid()
             .unwrap();
+        env.mine_and_wait(1);
 
-        let _miner = MINER.lock().await;
-        generate_blocks_and_wait(1);
-
+        let script = address.script_pubkey();
         let scripthash_utxos_blocking = blocking_client.get_scripthash_utxos(&script).unwrap();
         let scripthash_utxos_async = async_client.get_scripthash_utxos(&script).await.unwrap();
 
@@ -1321,22 +1406,17 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tx_outspends() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-
-        let txid = BITCOIND
-            .client
+        let address = env.get_legacy_address();
+        let txid = env
+            .bitcoind_client()
             .send_to_address(&address, Amount::from_sat(21000))
             .unwrap()
             .txid()
             .unwrap();
-
-        let _miner = MINER.lock().await;
-        generate_blocks_and_wait(1);
+        env.mine_and_wait(1);
 
         let outspends_blocking = blocking_client.get_tx_outspends(&txid).unwrap();
         let outspends_async = async_client.get_tx_outspends(&txid).await.unwrap();
@@ -1353,16 +1433,13 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_mempool_methods() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-
+        let address = env.get_legacy_address();
         for _ in 0..5 {
-            let _txid = BITCOIND
-                .client
+            let _txid = env
+                .bitcoind_client()
                 .send_to_address(&address, Amount::from_sat(1000))
                 .unwrap()
                 .txid()
@@ -1415,22 +1492,19 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_broadcast() {
-        let (blocking_client, async_client) = setup_clients().await;
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
 
-        let address = BITCOIND
-            .client
-            .new_address_with_type(AddressType::Legacy)
-            .unwrap();
-
-        let txid = BITCOIND
-            .client
+        let address = env.get_legacy_address();
+        let txid = env
+            .bitcoind_client()
             .send_to_address(&address, Amount::from_sat(1000))
             .unwrap()
             .txid()
             .unwrap();
 
-        let tx = BITCOIND
-            .client
+        let tx = env
+            .bitcoind_client()
             .get_transaction(txid)
             .expect("tx should exist for given `txid`")
             .into_model()
@@ -1439,7 +1513,7 @@ mod test {
 
         let blocking_res = blocking_client
             .broadcast(&tx)
-            .expect("should succesfully broadcast tx");
+            .expect("should successfully broadcast tx");
         let async_res = async_client
             .broadcast(&tx)
             .await
