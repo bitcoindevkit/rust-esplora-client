@@ -42,9 +42,9 @@ use bitcoin::{Address, Block, BlockHash, FeeRate, MerkleBlock, Script, Transacti
 use reqwest::{header, Body, Client, Response};
 
 use crate::{
-    sat_per_vbyte_to_feerate, AddressStats, BlockInfo, BlockStatus, Builder, Error, EsploraTx,
-    MempoolRecentTx, MempoolStats, MerkleProof, OutputStatus, ScriptHashStats, SubmitPackageResult,
-    TxStatus, Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
+    sat_per_vbyte_to_feerate, AddressStats, Amount, BlockInfo, BlockStatus, Builder, Error,
+    EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof, OutputStatus, ScriptHashStats,
+    SubmitPackageResult, TxStatus, Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
 /// Returns `true` if the given HTTP status code should trigger a retry.
@@ -383,8 +383,9 @@ impl<S: Sleeper> AsyncClient<S> {
     /// Returns a [`SubmitPackageResult`] containing the result for each
     /// transaction in the package, keyed by [`Wtxid`](bitcoin::Wtxid).
     ///
-    /// Optionally, `maxfeerate` (in sat/vB) and `maxburnamount` (in BTC) can
-    /// be provided to reject transactions that exceed these thresholds.
+    /// Optionally, `maxfeerate` (as a [`FeeRate`]) and `maxburnamount`
+    /// (as an [`Amount`]) can be provided to reject transactions that
+    /// exceed these thresholds.
     ///
     /// # Errors
     ///
@@ -392,8 +393,8 @@ impl<S: Sleeper> AsyncClient<S> {
     pub async fn submit_package(
         &self,
         transactions: &[Transaction],
-        maxfeerate: Option<f64>,
-        maxburnamount: Option<f64>,
+        maxfeerate: Option<FeeRate>,
+        maxburnamount: Option<Amount>,
     ) -> Result<SubmitPackageResult, Error> {
         let serialized_txs = transactions
             .iter()
@@ -401,11 +402,14 @@ impl<S: Sleeper> AsyncClient<S> {
             .collect::<Vec<_>>();
 
         let mut queryparams = HashSet::<(&str, String)>::new();
+
+        // Esplora expects `maxfeerate` in sats/vB.
         if let Some(maxfeerate) = maxfeerate {
-            queryparams.insert(("maxfeerate", maxfeerate.to_string()));
+            queryparams.insert(("maxfeerate", maxfeerate.to_sat_per_vb_ceil().to_string()));
         }
+        // Esplora expects `maxburnamount` in BTC.
         if let Some(maxburnamount) = maxburnamount {
-            queryparams.insert(("maxburnamount", maxburnamount.to_string()));
+            queryparams.insert(("maxburnamount", maxburnamount.to_btc().to_string()));
         }
 
         let response = self
