@@ -36,7 +36,7 @@ use bitcoin::consensus::encode::serialize_hex;
 use bitcoin::consensus::{deserialize, serialize, Decodable};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
-use bitcoin::{Address, Block, BlockHash, FeeRate, MerkleBlock, Script, Transaction, Txid};
+use bitcoin::{Address, Amount, Block, BlockHash, FeeRate, MerkleBlock, Script, Transaction, Txid};
 
 use crate::{
     sat_per_vbyte_to_feerate, AddressStats, BlockInfo, BlockStatus, Builder, Error, EsploraTx,
@@ -383,8 +383,9 @@ impl BlockingClient {
     /// Returns a [`SubmitPackageResult`] containing the result for each
     /// transaction in the package, keyed by [`Wtxid`](bitcoin::Wtxid).
     ///
-    /// Optionally, `maxfeerate` (in sat/vB) and `maxburnamount` (in BTC) can
-    /// be provided to reject transactions that exceed these thresholds.
+    /// Optionally, `maxfeerate` (as a [`FeeRate`]) and `maxburnamount`
+    /// (as an [`Amount`]) can be provided to reject transactions that
+    /// exceed these thresholds.
     ///
     /// # Errors
     ///
@@ -392,8 +393,8 @@ impl BlockingClient {
     pub fn submit_package(
         &self,
         transactions: &[Transaction],
-        maxfeerate: Option<f64>,
-        maxburnamount: Option<f64>,
+        maxfeerate: Option<FeeRate>,
+        maxburnamount: Option<Amount>,
     ) -> Result<SubmitPackageResult, Error> {
         let serialized_txs = transactions
             .iter()
@@ -407,12 +408,14 @@ impl BlockingClient {
                 .into_bytes(),
         )?;
 
+        // Esplora expects `maxfeerate` in sats/vB.
         if let Some(maxfeerate) = maxfeerate {
-            request = request.with_param("maxfeerate", maxfeerate.to_string())
+            request = request.with_param("maxfeerate", maxfeerate.to_sat_per_vb_ceil().to_string())
         }
 
+        // Esplora expects `maxburnamount` in BTC.
         if let Some(maxburnamount) = maxburnamount {
-            request = request.with_param("maxburnamount", maxburnamount.to_string())
+            request = request.with_param("maxburnamount", maxburnamount.to_btc().to_string())
         }
 
         match request.send() {
