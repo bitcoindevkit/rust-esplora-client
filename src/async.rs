@@ -37,14 +37,14 @@ use bitcoin::consensus::encode::serialize_hex;
 use bitcoin::consensus::{deserialize, serialize, Decodable};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
-use bitcoin::{Address, Block, BlockHash, MerkleBlock, Script, Transaction, Txid};
+use bitcoin::{Address, Block, BlockHash, FeeRate, MerkleBlock, Script, Transaction, Txid};
 
 use reqwest::{header, Body, Client, Response};
 
 use crate::{
-    AddressStats, BlockInfo, BlockStatus, Builder, Error, EsploraTx, MempoolRecentTx, MempoolStats,
-    MerkleProof, OutputStatus, ScriptHashStats, SubmitPackageResult, TxStatus, Utxo,
-    BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
+    sat_per_vbyte_to_feerate, AddressStats, BlockInfo, BlockStatus, Builder, Error, EsploraTx,
+    MempoolRecentTx, MempoolStats, MerkleProof, OutputStatus, ScriptHashStats, SubmitPackageResult,
+    TxStatus, Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
 /// Returns `true` if the given HTTP status code should trigger a retry.
@@ -629,9 +629,12 @@ impl<S: Sleeper> AsyncClient<S> {
     /// Get fee estimates for a range of confirmation targets.
     ///
     /// Returns a [`HashMap`] where the key is the confirmation target in blocks
-    /// and the value is the estimated fee rate in sat/vB.
-    pub async fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
-        self.get_response_json("/fee-estimates").await
+    /// and the value is the estimated [`FeeRate`].
+    pub async fn get_fee_estimates(&self) -> Result<HashMap<u16, FeeRate>, Error> {
+        let estimates_raw: HashMap<u16, f64> = self.get_response_json("/fee-estimates").await?;
+        let estimates = sat_per_vbyte_to_feerate(estimates_raw);
+
+        Ok(estimates)
     }
 
     // ----> ADDRESS

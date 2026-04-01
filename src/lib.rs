@@ -103,17 +103,39 @@ const BASE_BACKOFF_MILLIS: Duration = Duration::from_millis(256);
 /// Default max retries.
 const DEFAULT_MAX_RETRIES: usize = 6;
 
-/// Get a fee value in sats/vbytes from the estimates
-/// that matches the confirmation target set as parameter.
+/// Returns the [`FeeRate`] for the given confirmation target in blocks.
 ///
-/// Returns `None` if no feerate estimate is found at or below `target`
-/// confirmations.
-pub fn convert_fee_rate(target: usize, estimates: HashMap<u16, f64>) -> Option<f32> {
+/// Selects the highest confirmation target from `estimates` that is at or
+/// below `target_blocks`, and returns its [`FeeRate`]. Returns `None` if no
+/// matching estimate is found.
+///
+/// # Example
+///
+/// ```rust
+/// use bitcoin::FeeRate;
+/// use esplora_client::convert_fee_rate;
+/// use std::collections::HashMap;
+///
+/// let mut estimates = HashMap::new();
+/// estimates.insert(1u16, FeeRate::from_sat_per_vb(10).unwrap());
+/// estimates.insert(6u16, FeeRate::from_sat_per_vb(5).unwrap());
+///
+/// assert_eq!(
+///     convert_fee_rate(6, estimates.clone()),
+///     Some(FeeRate::from_sat_per_vb(5).unwrap())
+/// );
+/// assert_eq!(
+///     convert_fee_rate(1, estimates.clone()),
+///     Some(FeeRate::from_sat_per_vb(10).unwrap())
+/// );
+/// assert_eq!(convert_fee_rate(0, estimates), None);
+/// ```
+pub fn convert_fee_rate(target_blocks: usize, estimates: HashMap<u16, FeeRate>) -> Option<FeeRate> {
     estimates
         .into_iter()
-        .filter(|(k, _)| *k as usize <= target)
+        .filter(|(k, _)| *k as usize <= target_blocks)
         .max_by_key(|(k, _)| *k)
-        .map(|(_, v)| v as f32)
+        .map(|(_, feerate)| feerate)
 }
 
 /// A builder for an [`AsyncClient`] or [`BlockingClient`].
@@ -473,8 +495,8 @@ mod test {
     }
 
     #[test]
-    fn feerate_parsing() {
-        let esplora_fees = serde_json::from_str::<HashMap<u16, f64>>(
+    fn test_feerate_parsing() {
+        let esplora_fees_raw = serde_json::from_str::<HashMap<u16, f64>>(
             r#"{
   "25": 1.015,
   "5": 2.3280000000000003,
@@ -508,11 +530,19 @@ mod test {
 "#,
         )
         .unwrap();
+
+        // Convert fees from sat/vB (`f64`) to `FeeRate`.
+        // Note that `get_fee_estimates` already returns `HashMap<u16, FeeRate>`.
+        let esplora_fees = sat_per_vbyte_to_feerate(esplora_fees_raw);
+
         assert!(convert_fee_rate(1, HashMap::new()).is_none());
-        assert_eq!(convert_fee_rate(6, esplora_fees.clone()).unwrap(), 2.236);
         assert_eq!(
-            convert_fee_rate(26, esplora_fees.clone()).unwrap(),
-            1.015,
+            convert_fee_rate(6, esplora_fees.clone()),
+            Some(FeeRate::from_sat_per_kwu((2.236_f64 * 250_000.0) as u64))
+        );
+        assert_eq!(
+            convert_fee_rate(26, esplora_fees.clone()),
+            Some(FeeRate::from_sat_per_kwu((1.015_f64 * 250_000.0) as u64)),
             "should inherit from value for 25"
         );
         assert!(

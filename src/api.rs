@@ -470,6 +470,14 @@ pub struct MempoolFeesSubmitPackage {
     pub effective_includes: Option<Vec<Wtxid>>,
 }
 
+/// Converts a [`HashMap`] of fee estimates in sat/vbyte (`f64`) to [`FeeRate`].
+pub(crate) fn sat_per_vbyte_to_feerate(estimates: HashMap<u16, f64>) -> HashMap<u16, FeeRate> {
+    estimates
+        .into_iter()
+        .map(|(k, v)| (k, FeeRate::from_sat_per_kwu((v * 250_000.0) as u64)))
+        .collect()
+}
+
 /// Deserializes a witness from a list of hex-encoded strings.
 ///
 /// The Esplora API represents witness data as an array of hex strings,
