@@ -1,0 +1,34 @@
+name: Audit
+
+# Performs a security audit of Rust dependencies using `cargo-audit` through the `actions-rust-lang/audit` action.
+# Runs nightly on schedule and when Cargo.toml, Cargo.lock, or audit.toml files are modified.
+# Helps identify known security vulnerabilities in the dependency tree.
+
+on:
+  push:
+    paths:
+      # Run if workflow changes
+      - '.github/workflows/audit.yml'
+      # Run on changed dependencies
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+      # Run if the configuration file changes
+      - '**/audit.toml'
+  # Rerun periodically to pick up new advisories
+  schedule:
+    - cron: '0 0 * * *' # Nightly
+  # Run manually
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/audit@v1
+        name: Audit Rust Dependencies

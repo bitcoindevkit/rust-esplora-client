@@ -1,0 +1,18 @@
+# `cargo audit` config file
+#
+# All of the options which can be passed via CLI arguments can also be
+# permanently specified in this file.
+#
+# See original example: https://raw.githubusercontent.com/rustsec/rustsec/refs/heads/main/cargo-audit/audit.toml.example
+
+[advisories]
+ignore = [] # advisory IDs to ignore e.g. ["RUSTSEC-2019-0001", ...]
+
+# Output Configuration
+[output]
+quiet = false # Only print information on error
+show_tree = true # Show inverse dependency trees along with advisories (default: true)
+
+[yanked]
+enabled = true # Warn for yanked crates in Cargo.lock (default: true)
+update_index = true # Auto-update the crates.io index (default: true)
