@@ -29,9 +29,9 @@ use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::{Address, Block, BlockHash, MerkleBlock, Script, Transaction, Txid};
 
 use crate::{
-    AddressStats, BlockInfo, BlockStatus, BlockSummary, Builder, Error, MempoolRecentTx,
-    MempoolStats, MerkleProof, OutputStatus, ScriptHashStats, SubmitPackageResult, Tx, TxStatus,
-    Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
+    AddressStats, BlockInfo, BlockStatus, Builder, Error, MempoolRecentTx, MempoolStats,
+    MerkleProof, OutputStatus, ScriptHashStats, SubmitPackageResult, Tx, TxStatus, Utxo,
+    BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
 /// A blocking client for interacting with an Esplora API server.
@@ -471,6 +471,25 @@ impl BlockingClient {
         self.get_response_json(&path)
     }
 
+    /// Get [block summaries](BlockInfo) for recent blocks:
+    ///   - If `height` is `None`: from the tip
+    ///   - If `height is `Some(height)`: from `height`
+    ///
+    /// The maximum number of [block summaries](BlockInfo) returned depends on the backend:
+    ///   - Esplora returns 10
+    ///   - [Mempool.space](https://mempool.space/docs/api/rest#get-blocks) returns 10
+    pub fn get_block_infos(&self, height: Option<u32>) -> Result<Vec<BlockInfo>, Error> {
+        let path = match height {
+            Some(height) => format!("/blocks/{height}"),
+            None => "/blocks".to_string(),
+        };
+        let block_infos: Vec<BlockInfo> = self.get_response_json(&path)?;
+        if block_infos.is_empty() {
+            return Err(Error::InvalidResponse);
+        }
+        Ok(block_infos)
+    }
+
     /// Get all [`Txid`]s that belong to a [`Block`] identified by it's [`BlockHash`].
     pub fn get_block_txids(&self, blockhash: &BlockHash) -> Result<Vec<Txid>, Error> {
         let path = format!("/block/{blockhash}/txids");
@@ -494,23 +513,6 @@ impl BlockingClient {
         };
 
         self.get_response_json(&path)
-    }
-
-    /// Gets some recent block summaries starting at the tip or at `height` if
-    /// provided.
-    ///
-    /// The maximum number of summaries returned depends on the backend itself:
-    /// esplora returns `10` while [mempool.space](https://mempool.space/docs/api) returns `15`.
-    pub fn get_blocks(&self, height: Option<u32>) -> Result<Vec<BlockSummary>, Error> {
-        let path = match height {
-            Some(height) => format!("/blocks/{height}"),
-            None => "/blocks".to_string(),
-        };
-        let blocks: Vec<BlockSummary> = self.get_response_json(&path)?;
-        if blocks.is_empty() {
-            return Err(Error::InvalidResponse);
-        }
-        Ok(blocks)
     }
 
     /// Get all UTXOs locked to an address.

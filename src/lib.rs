@@ -1063,35 +1063,35 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
-    async fn test_get_blocks() {
+    async fn test_get_block_infos() {
         let env = TestEnv::new();
         let (blocking_client, async_client) = env.setup_clients();
 
         let start_height = env.bitcoind_client().get_block_count().unwrap().0;
-        let blocks1 = blocking_client.get_blocks(None).unwrap();
-        let blocks_async1 = async_client.get_blocks(None).await.unwrap();
-        assert_eq!(blocks1[0].time.height, start_height as u32);
+        let blocks1 = blocking_client.get_block_infos(None).unwrap();
+        let blocks_async1 = async_client.get_block_infos(None).await.unwrap();
+        assert_eq!(blocks1[0].height, start_height as u32);
         assert_eq!(blocks1, blocks_async1);
         env.mine_and_wait(1);
 
-        let blocks2 = blocking_client.get_blocks(None).unwrap();
-        let blocks_async2 = async_client.get_blocks(None).await.unwrap();
+        let blocks2 = blocking_client.get_block_infos(None).unwrap();
+        let blocks_async2 = async_client.get_block_infos(None).await.unwrap();
         assert_eq!(blocks2, blocks_async2);
         assert_ne!(blocks2, blocks1);
 
         let blocks3 = blocking_client
-            .get_blocks(Some(start_height as u32))
+            .get_block_infos(Some(start_height as u32))
             .unwrap();
         let blocks_async3 = async_client
-            .get_blocks(Some(start_height as u32))
+            .get_block_infos(Some(start_height as u32))
             .await
             .unwrap();
         assert_eq!(blocks3, blocks_async3);
-        assert_eq!(blocks3[0].time.height, start_height as u32);
+        assert_eq!(blocks3[0].height, start_height as u32);
         assert_eq!(blocks3, blocks1);
 
-        let blocks_genesis = blocking_client.get_blocks(Some(0)).unwrap();
-        let blocks_genesis_async = async_client.get_blocks(Some(0)).await.unwrap();
+        let blocks_genesis = blocking_client.get_block_infos(Some(0)).unwrap();
+        let blocks_genesis_async = async_client.get_block_infos(Some(0)).await.unwrap();
         assert_eq!(blocks_genesis, blocks_genesis_async);
     }
 
