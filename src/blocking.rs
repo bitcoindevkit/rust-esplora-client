@@ -438,11 +438,11 @@ impl BlockingClient {
         self.get_response_json(&path)
     }
 
-    /// Get transaction history for the specified scripthash,
-    /// sorted with newest first. Returns 25 transactions per page.
-    /// More can be requested by specifying the last txid seen by the previous
-    /// query.
-    pub fn scripthash_txs(
+    /// Get transaction history for the specified [`Script`] hash, sorted by newest first.
+    ///
+    /// Returns 25 transactions per page. More can be requested by
+    /// specifying the last [`Txid`] seen in the previous query.
+    pub fn get_script_hash_txs(
         &self,
         script: &Script,
         last_seen: Option<Txid>,
@@ -452,6 +452,7 @@ impl BlockingClient {
             Some(last_seen) => format!("/scripthash/{script_hash:x}/txs/chain/{last_seen}"),
             None => format!("/scripthash/{script_hash:x}/txs"),
         };
+
         self.get_response_json(&path)
     }
 

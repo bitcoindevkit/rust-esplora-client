@@ -476,11 +476,11 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json(&path).await
     }
 
-    /// Get transaction history for the specified address/scripthash,
-    /// sorted with newest first. Returns 25 transactions per page.
-    /// More can be requested by specifying the last txid seen by the previous
-    /// query.
-    pub async fn scripthash_txs(
+    /// Get transaction history for the specified [`Script`] hash, sorted by newest first.
+    ///
+    /// Returns 25 transactions per page. More can be requested by
+    /// specifying the last [`Txid`] seen in the previous query.
+    pub async fn get_script_hash_txs(
         &self,
         script: &Script,
         last_seen: Option<Txid>,
@@ -584,7 +584,48 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json(&path).await
     }
 
-    /// Get all [`Utxo`]s locked to a [`Script`].
+    /// Get unconfirmed mempool [`EsploraTx`]s for an [`Address`], sorted newest first.
+    pub async fn get_mempool_address_txs(
+        &self,
+        address: &Address,
+    ) -> Result<Vec<EsploraTx>, Error> {
+        let path = format!("/address/{address}/txs/mempool");
+
+        self.get_response_json(&path).await
+    }
+
+    // ----> SCRIPT HASH
+
+    /// Get statistics about a [`Script`] hash's confirmed and mempool transactions.
+    ///
+    /// Returns a [`ScriptHashStats`] containing
+    /// [transaction summaries](crate::api::AddressTxsSummary)
+    /// for the SHA256 hash of the given [`Script`].
+    pub async fn get_scripthash_stats(&self, script: &Script) -> Result<ScriptHashStats, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        let path = format!("/scripthash/{script_hash}");
+        self.get_response_json(&path).await
+    }
+
+    /// Get confirmed transaction history for a [`Script`] hash, sorted newest first.
+    ///
+    /// Returns 25 transactions per page. To paginate, pass the [`Txid`] of the
+    /// last transaction seen in the previous response as `last_seen`.
+    pub async fn get_scripthash_txs(
+        &self,
+        script: &Script,
+        last_seen: Option<Txid>,
+    ) -> Result<Vec<EsploraTx>, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        let path = match last_seen {
+            Some(last_seen) => format!("/scripthash/{script_hash:x}/txs/chain/{last_seen}"),
+            None => format!("/scripthash/{script_hash:x}/txs"),
+        };
+
+        self.get_response_json(&path).await
+    }
+
+    /// Get all confirmed [`Utxo`]s locked to the given [`Script`].
     pub async fn get_scripthash_utxos(&self, script: &Script) -> Result<Vec<Utxo>, Error> {
         let script_hash = sha256::Hash::hash(script.as_bytes());
         let path = format!("/scripthash/{script_hash}/utxo");
