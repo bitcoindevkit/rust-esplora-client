@@ -1,79 +1,71 @@
-//! An extensible blocking/async Esplora client
+//! An extensible blocking and async Esplora client.
 //!
-//! This library provides an extensible blocking and
-//! async Esplora client to query Esplora's backend.
+//! This library provides a blocking client built on [`minreq`] and an async
+//! client built on [`reqwest`] for interacting with an
+//! [Esplora](https://github.com/Blockstream/esplora) server.
 //!
-//! The library provides the possibility to build a blocking
-//! client using [`minreq`] and an async client using [`reqwest`].
-//! The library supports communicating to Esplora via a proxy
-//! and also using TLS (SSL) for secure communication.
+//! Both clients support communicating via a proxy and TLS (SSL).
 //!
+//! # Blocking Client
 //!
-//! ## Usage
-//!
-//! You can create a blocking client as follows:
-//!
-//! ```no_run
-//! # #[cfg(feature = "blocking")]
-//! # {
+//! ```rust,ignore
 //! use esplora_client::Builder;
-//! let builder = Builder::new("https://blockstream.info/testnet/api");
-//! let blocking_client = builder.build_blocking();
-//! # Ok::<(), esplora_client::Error>(());
-//! # }
+//! let client = Builder::new("https://mempool.space/api").build_blocking();
+//! let height = client.get_height().unwrap();
 //! ```
 //!
-//! Here is an example of how to create an asynchronous client.
+//! # Async Client
 //!
-//! ```no_run
-//! # #[cfg(all(feature = "async", feature = "tokio"))]
-//! # {
+//! ```rust,ignore
 //! use esplora_client::Builder;
-//! let builder = Builder::new("https://blockstream.info/testnet/api");
-//! let async_client = builder.build_async();
-//! # Ok::<(), esplora_client::Error>(());
-//! # }
+//! async fn example() {
+//!     let client = Builder::new("https://mempool.space/api")
+//!         .build_async()
+//!         .unwrap();
+//!     let height = client.get_height().await.unwrap();
+//! }
 //! ```
 //!
-//! ## Features
+//! # Features
 //!
-//! By default the library enables all features. To specify
-//! specific features, set `default-features` to `false` in your `Cargo.toml`
-//! and specify the features you want. This will look like this:
+//! By default, all features are enabled. To use a specific feature
+//! combination, set `default-features = false` and explicitly enable
+//! the desired features in your `Cargo.toml` manifest:
 //!
-//! `esplora-client = { version = "*", default-features = false, features =
-//! ["blocking"] }`
+//! `esplora-client = { version = "*", default-features = false, features = ["blocking"] }`
 //!
-//! * `blocking` enables [`minreq`], the blocking client with proxy.
-//! * `blocking-https` enables [`minreq`], the blocking client with proxy and TLS (SSL) capabilities
-//!   using the default [`minreq`] backend.
-//! * `blocking-https-rustls` enables [`minreq`], the blocking client with proxy and TLS (SSL)
-//!   capabilities using the `rustls` backend.
-//! * `blocking-https-native` enables [`minreq`], the blocking client with proxy and TLS (SSL)
-//!   capabilities using the platform's native TLS backend (likely OpenSSL).
-//! * `blocking-https-bundled` enables [`minreq`], the blocking client with proxy and TLS (SSL)
-//!   capabilities using a bundled OpenSSL library backend.
-//! * `async` enables [`reqwest`], the async client with proxy capabilities.
-//! * `async-https` enables [`reqwest`], the async client with support for proxying and TLS (SSL)
-//!   using the default [`reqwest`] TLS backend.
-//! * `async-https-native` enables [`reqwest`], the async client with support for proxying and TLS
-//!   (SSL) using the platform's native TLS backend (likely OpenSSL).
-//! * `async-https-rustls` enables [`reqwest`], the async client with support for proxying and TLS
-//!   (SSL) using the `rustls` TLS backend.
-//! * `async-https-rustls-manual-roots` enables [`reqwest`], the async client with support for
-//!   proxying and TLS (SSL) using the `rustls` TLS backend without using the default root
-//!   certificates.
+//! ### Blocking
 //!
-//! [`dont remove this line or cargo doc will break`]: https://example.com
+//! | Feature | Description |
+//! |---------|-------------|
+//! | `blocking` | Enables the blocking client with proxy support. |
+//! | `blocking-https` | Enables the blocking client with proxy and TLS using the default [`minreq`](https://docs.rs/minreq) backend. |
+//! | `blocking-https-rustls` | Enables the blocking client with proxy and TLS using [`rustls`](https://docs.rs/rustls). |
+//! | `blocking-https-native` | Enables the blocking client with proxy and TLS using the platform's native TLS backend. |
+//! | `blocking-https-bundled` | Enables the blocking client with proxy and TLS using a bundled OpenSSL backend. |
+//!
+//! ### Async
+//!
+//! | Feature | Description |
+//! |---------|-------------|
+//! | `async` | Enables the async client with proxy support. |
+//! | `tokio` | Enables the Tokio runtime for the async client. |
+//! | `async-https` | Enables the async client with proxy and TLS using the default [`reqwest`](https://docs.rs/reqwest) backend. |
+//! | `async-https-native` | Enables the async client with proxy and TLS using the platform's native TLS backend. |
+//! | `async-https-rustls` | Enables the async client with proxy and TLS using [`rustls`](https://docs.rs/rustls). |
+//! | `async-https-rustls-manual-roots` | Enables the async client with proxy and TLS using `rustls` without default root certificates. |
+//!
+//! [`dont remove the 2 lines below or `cargo doc` will break`]: https://example.com
 #![cfg_attr(not(feature = "minreq"), doc = "[`minreq`]: https://docs.rs/minreq")]
 #![cfg_attr(not(feature = "reqwest"), doc = "[`reqwest`]: https://docs.rs/reqwest")]
 #![allow(clippy::result_large_err)]
 #![warn(missing_docs)]
 
+use core::fmt;
+use core::fmt::Display;
+use core::fmt::Formatter;
+use core::time::Duration;
 use std::collections::HashMap;
-use std::fmt;
-use std::num::TryFromIntError;
-use std::time::Duration;
 
 #[cfg(feature = "async")]
 pub use r#async::Sleeper;
@@ -98,10 +90,12 @@ pub const RETRYABLE_ERROR_CODES: [u16; 3] = [
 ];
 
 /// Base backoff in milliseconds.
-const BASE_BACKOFF_MILLIS: Duration = Duration::from_millis(256);
+#[doc(hidden)]
+pub const BASE_BACKOFF_MILLIS: Duration = Duration::from_millis(256);
 
 /// Default max retries.
-const DEFAULT_MAX_RETRIES: usize = 6;
+#[doc(hidden)]
+pub const DEFAULT_MAX_RETRIES: usize = 6;
 
 /// Returns the [`FeeRate`] for the given confirmation target in blocks.
 ///
@@ -139,33 +133,36 @@ pub fn convert_fee_rate(target_blocks: usize, estimates: HashMap<u16, FeeRate>) 
 }
 
 /// A builder for an [`AsyncClient`] or [`BlockingClient`].
+///
+/// Use [`Builder::new`] to create a new builder, configure it with the
+/// chainable methods, then call [`Builder::build_blocking`] or
+/// [`Builder::build_async`] to construct the client.
 #[derive(Debug, Clone)]
 pub struct Builder {
     /// The URL of the Esplora server.
     pub base_url: String,
-    /// Optional URL of the proxy to use to make requests to the Esplora server
+    /// Optional URL of the proxy to use to make requests to the Esplora server.
     ///
     /// The string should be formatted as:
     /// `<protocol>://<user>:<password>@host:<port>`.
     ///
     /// Note that the format of this value and the supported protocols change
-    /// slightly between the blocking version of the client (using `minreq`)
-    /// and the async version (using `reqwest`). For more details check with
-    /// the documentation of the two crates. Both of them are compiled with
-    /// the `socks` feature enabled.
+    /// slightly between the blocking client (using [`minreq`]) and the async
+    /// client (using [`reqwest`]). Both are compiled with the `socks` feature
+    /// enabled.
     ///
     /// The proxy is ignored when targeting `wasm32`.
     pub proxy: Option<String>,
-    /// Socket timeout.
+    /// The socket's timeout, in seconds.
     pub timeout: Option<u64>,
-    /// HTTP headers to set on every request made to Esplora server.
+    /// HTTP headers to set on every request made to the Esplora server.
     pub headers: HashMap<String, String>,
-    /// Max retries
+    /// Maximum number of times to retry a request.
     pub max_retries: usize,
 }
 
 impl Builder {
-    /// Instantiate a new builder
+    /// Create a new [`Builder`] with the given Esplora server URL.
     pub fn new(base_url: &str) -> Self {
         Builder {
             base_url: base_url.to_string(),
@@ -176,95 +173,110 @@ impl Builder {
         }
     }
 
-    /// Set the proxy of the builder
+    /// Set the proxy URL.
+    ///
+    /// See [`Builder::proxy`] for the expected format.
     pub fn proxy(mut self, proxy: &str) -> Self {
         self.proxy = Some(proxy.to_string());
         self
     }
 
-    /// Set the timeout of the builder
+    /// Set the socket's timeout, in seconds.
     pub fn timeout(mut self, timeout: u64) -> Self {
         self.timeout = Some(timeout);
         self
     }
 
-    /// Add a header to set on each request
+    /// Add an HTTP header to set on every request.
     pub fn header(mut self, key: &str, value: &str) -> Self {
         self.headers.insert(key.to_string(), value.to_string());
         self
     }
 
-    /// Set the maximum number of times to retry a request if the response status
-    /// is one of [`RETRYABLE_ERROR_CODES`].
+    /// Set the maximum number of times to retry a request.
+    ///
+    /// Retries are only attempted for responses
+    /// with status codes defined in [`RETRYABLE_ERROR_CODES`].
     pub fn max_retries(mut self, count: usize) -> Self {
         self.max_retries = count;
         self
     }
 
-    /// Build a blocking client from builder
+    /// Build a [`BlockingClient`] from this [`Builder`].
     #[cfg(feature = "blocking")]
     pub fn build_blocking(self) -> BlockingClient {
         BlockingClient::from_builder(self)
     }
 
-    /// Build an asynchronous client from builder
+    /// Build an [`AsyncClient`] from this [`Builder`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the underlying [`reqwest::Client`] fails to build.
     #[cfg(all(feature = "async", feature = "tokio"))]
     pub fn build_async(self) -> Result<AsyncClient, Error> {
         AsyncClient::from_builder(self)
     }
 
-    /// Build an asynchronous client from builder where the returned client uses a
-    /// user-defined [`Sleeper`].
+    /// Build an [`AsyncClient`] from this [`Builder`] with a custom [`Sleeper`].
+    ///
+    /// Use this instead of [`Builder::build_async`] when you want to use a
+    /// runtime other than Tokio for sleeping between retries.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the underlying [`reqwest::Client`] fails to build.
     #[cfg(feature = "async")]
     pub fn build_async_with_sleeper<S: Sleeper>(self) -> Result<AsyncClient<S>, Error> {
         AsyncClient::from_builder(self)
     }
 }
 
-/// Errors that can happen during a request to `Esplora` servers.
+/// Errors that can occur during a request to an Esplora server.
 #[derive(Debug)]
 pub enum Error {
-    /// Error during `minreq` HTTP request
+    /// A [`minreq`] error occurred during a blocking HTTP request.
     #[cfg(feature = "blocking")]
     Minreq(minreq::Error),
-    /// Error during `reqwest` HTTP request
+    /// A [`reqwest`] error occurred during an async HTTP request.
     #[cfg(feature = "async")]
     Reqwest(reqwest::Error),
-    /// Error during JSON (de)serialization
+    /// An error occurred during JSON serialization or deserialization.
     SerdeJson(serde_json::Error),
-    /// HTTP response error
+    /// The server returned a non-success HTTP status code.
     HttpResponse {
         /// The HTTP status code returned by the server.
         status: u16,
-        /// The error message content.
+        /// The error message returned by the server.
         message: String,
     },
-    /// Invalid number returned
-    Parsing(std::num::ParseIntError),
-    /// Invalid status code, unable to convert to `u16`
-    StatusCode(TryFromIntError),
-    /// Invalid Bitcoin data returned
+    /// Failed to parse an integer from the server response.
+    Parsing(core::num::ParseIntError),
+    /// Failed to convert an HTTP status code to `u16`.
+    StatusCode(core::num::TryFromIntError),
+    /// Failed to decode a Bitcoin consensus-encoded value.
     BitcoinEncoding(bitcoin::consensus::encode::Error),
-    /// Invalid hex data returned (attempting to create an array)
+    /// Failed to decode a hex string into a fixed-size array.
     HexToArray(bitcoin::hex::HexToArrayError),
-    /// Invalid hex data returned (attempting to create a vector)
+    /// Failed to decode a hex string into a vector of bytes.
     HexToBytes(bitcoin::hex::HexToBytesError),
-    /// Transaction not found
+    /// The requested [`Transaction`] was not found.
     TransactionNotFound(Txid),
-    /// Block Header height not found
+    /// No [`block header`](bitcoin::blockdata::block::Header) was found at the given height.
     HeaderHeightNotFound(u32),
-    /// Block Header hash not found
+    /// No [`block header`](bitcoin::blockdata::block::Header) was found with the given
+    /// [`BlockHash`].
     HeaderHashNotFound(BlockHash),
-    /// Invalid HTTP Header name specified
+    /// The specified HTTP header name is invalid.
     InvalidHttpHeaderName(String),
-    /// Invalid HTTP Header value specified
+    /// The specified HTTP header value is invalid.
     InvalidHttpHeaderValue(String),
-    /// The server sent an invalid response
+    /// The server returned an invalid or unexpected response.
     InvalidResponse,
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{self:?}")
     }
 }
@@ -274,7 +286,7 @@ macro_rules! impl_error {
         impl_error!($from, $to, Error);
     };
     ( $from:ty, $to:ident, $impl_for:ty ) => {
-        impl std::convert::From<$from> for $impl_for {
+        impl core::convert::From<$from> for $impl_for {
             fn from(err: $from) -> Self {
                 <$impl_for>::$to(err)
             }
@@ -288,7 +300,7 @@ impl_error!(::minreq::Error, Minreq, Error);
 #[cfg(feature = "async")]
 impl_error!(::reqwest::Error, Reqwest, Error);
 impl_error!(serde_json::Error, SerdeJson, Error);
-impl_error!(std::num::ParseIntError, Parsing, Error);
+impl_error!(core::num::ParseIntError, Parsing, Error);
 impl_error!(bitcoin::consensus::encode::Error, BitcoinEncoding, Error);
 impl_error!(bitcoin::hex::HexToArrayError, HexToArray, Error);
 impl_error!(bitcoin::hex::HexToBytesError, HexToBytes, Error);

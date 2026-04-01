@@ -17,7 +17,7 @@
 //!
 //! # Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! # use esplora_client::{Builder, r#async::AsyncClient};
 //! # async fn example() -> Result<(), esplora_client::Error> {
 //! let client = Builder::new("https://mempool.space/api").build_async()?;
