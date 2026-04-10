@@ -47,6 +47,10 @@ use crate::{
     SubmitPackageResult, TxStatus, Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
+// TODO(@luisschwab): remove on `v0.14.0`
+#[allow(deprecated)]
+use crate::BlockSummary;
+
 /// Returns `true` if the given HTTP status code should trigger a retry.
 ///
 /// See [`RETRYABLE_ERROR_CODES`] for the list of retryable status codes.
@@ -562,6 +566,26 @@ impl<S: Sleeper> AsyncClient<S> {
     pub async fn get_block_status(&self, block_hash: &BlockHash) -> Result<BlockStatus, Error> {
         self.get_response_json(&format!("/block/{block_hash}/status"))
             .await
+    }
+
+    // TODO(@luisschwab): remove on `v0.14.0`
+    /// Gets some recent block summaries starting at the tip or at `height` if
+    /// provided.
+    ///
+    /// The maximum number of summaries returned depends on the backend itself:
+    /// esplora returns `10` while [mempool.space](https://mempool.space/docs/api) returns `15`.
+    #[allow(deprecated)]
+    #[deprecated(since = "0.12.3", note = "use `get_block_infos` instead")]
+    pub async fn get_blocks(&self, height: Option<u32>) -> Result<Vec<BlockSummary>, Error> {
+        let path = match height {
+            Some(height) => format!("/blocks/{height}"),
+            None => "/blocks".to_string(),
+        };
+        let blocks: Vec<BlockSummary> = self.get_response_json(&path).await?;
+        if blocks.is_empty() {
+            return Err(Error::InvalidResponse);
+        }
+        Ok(blocks)
     }
 
     /// Get a [`BlockInfo`] summary for the [`Block`] with the given [`BlockHash`].

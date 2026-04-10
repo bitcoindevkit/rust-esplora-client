@@ -26,8 +26,8 @@ pub use bitcoin::consensus::{deserialize, serialize};
 pub use bitcoin::hex::FromHex;
 pub use bitcoin::{
     absolute, block, transaction, Address, Amount, Block, BlockHash, CompactTarget, FeeRate,
-    OutPoint, Script, ScriptBuf, ScriptHash, Transaction, TxIn, TxOut, Txid, Weight, Witness,
-    Wtxid,
+    OutPoint, Script, ScriptBuf, ScriptHash, Transaction, TxIn, TxMerkleNode, TxOut, Txid, Weight,
+    Witness, Wtxid,
 };
 
 // ----> TRANSACTION
@@ -219,6 +219,15 @@ pub struct OutputStatus {
 
 // ----> BLOCK
 
+/// The timestamp and height of a [`Block`].
+#[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct BlockTime {
+    /// The [`Block`]'s timestamp.
+    pub timestamp: u64,
+    /// The [`Block`]'s height.
+    pub height: u32,
+}
+
 /// The status of a [`Block`].
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct BlockStatus {
@@ -229,6 +238,22 @@ pub struct BlockStatus {
     pub height: Option<u32>,
     /// The [`BlockHash`] of the [`Block`] that builds on top of this one.
     pub next_best: Option<BlockHash>,
+}
+
+// TODO(@luisschwab): remove on `v0.14.0`
+/// Summary about a [`Block`].
+#[deprecated(since = "0.12.3", note = "use `BlockInfo` instead")]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct BlockSummary {
+    /// The [`Block`]'s hash.
+    pub id: BlockHash,
+    /// The [`Block`]'s timestamp and height.
+    #[serde(flatten)]
+    pub time: BlockTime,
+    /// The [`BlockHash`] of the previous [`Block`] (`None` for the genesis [`Block`]).
+    pub previousblockhash: Option<BlockHash>,
+    /// The Merkle root of the [`Block`]'s [`Transaction`]s.
+    pub merkle_root: TxMerkleNode,
 }
 
 /// A summary of a bitcoin [`Block`].
@@ -291,15 +316,6 @@ impl PartialEq for BlockInfo {
     }
 }
 impl Eq for BlockInfo {}
-
-/// The timestamp and height of a [`Block`].
-#[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct BlockTime {
-    /// The [`Block`]'s timestamp.
-    pub timestamp: u64,
-    /// The [`Block`]'s height.
-    pub height: u32,
-}
 
 // ----> ADDRESS
 

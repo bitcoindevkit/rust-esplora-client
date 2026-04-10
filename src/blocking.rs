@@ -44,6 +44,10 @@ use crate::{
     TxStatus, Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
+// TODO(@luisschwab): remove on `v0.14.0`
+#[allow(deprecated)]
+use crate::BlockSummary;
+
 /// Returns `true` if the given HTTP status code indicates a successful response.
 fn is_status_ok(status: i32) -> bool {
     status == 200
@@ -552,6 +556,26 @@ impl BlockingClient {
     /// best chain, its height, and the [`BlockHash`] of the next [`Block`], if any.
     pub fn get_block_status(&self, block_hash: &BlockHash) -> Result<BlockStatus, Error> {
         self.get_response_json(&format!("/block/{block_hash}/status"))
+    }
+
+    // TODO(@luisschwab): remove on `v0.14.0`
+    /// Gets some recent block summaries starting at the tip or at `height` if
+    /// provided.
+    ///
+    /// The maximum number of summaries returned depends on the backend itself:
+    /// esplora returns `10` while [mempool.space](https://mempool.space/docs/api) returns `15`.
+    #[allow(deprecated)]
+    #[deprecated(since = "0.12.3", note = "use `get_block_infos` instead")]
+    pub fn get_blocks(&self, height: Option<u32>) -> Result<Vec<BlockSummary>, Error> {
+        let path = match height {
+            Some(height) => format!("/blocks/{height}"),
+            None => "/blocks".to_string(),
+        };
+        let blocks: Vec<BlockSummary> = self.get_response_json(&path)?;
+        if blocks.is_empty() {
+            return Err(Error::InvalidResponse);
+        }
+        Ok(blocks)
     }
 
     /// Get a [`BlockInfo`] summary for the [`Block`] with the given [`BlockHash`].
