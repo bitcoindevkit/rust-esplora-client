@@ -490,7 +490,7 @@ pub struct MempoolFeesSubmitPackage {
 pub(crate) fn sat_per_vbyte_to_feerate(estimates: HashMap<u16, f64>) -> HashMap<u16, FeeRate> {
     estimates
         .into_iter()
-        .map(|(k, v)| (k, FeeRate::from_sat_per_kwu((v * 250_000.0) as u64)))
+        .map(|(k, v)| (k, FeeRate::from_sat_per_kwu((v * 250_000.0).round() as u64)))
         .collect()
 }
 
