@@ -1052,7 +1052,7 @@ mod test {
             .tx;
         let script = &expected_tx.output[0].script_pubkey;
         let script_hash_txs_txids_blocking: Vec<Txid> = blocking_client
-            .get_script_hash_txs(script, None)
+            .get_scripthash_txs(script, None)
             .unwrap()
             .iter()
             .map(|tx| tx.txid)

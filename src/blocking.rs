@@ -716,7 +716,7 @@ impl BlockingClient {
     ///
     /// Returns 25 transactions per page. To paginate, pass the [`Txid`] of the
     /// last transaction seen in the previous response as `last_seen`.
-    pub fn get_script_hash_txs(
+    pub fn get_scripthash_txs(
         &self,
         script: &Script,
         last_seen: Option<Txid>,
