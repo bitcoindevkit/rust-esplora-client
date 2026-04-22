@@ -1,79 +1,71 @@
-//! An extensible blocking/async Esplora client
+//! An extensible blocking and async Esplora client.
 //!
-//! This library provides an extensible blocking and
-//! async Esplora client to query Esplora's backend.
+//! This library provides a blocking client built on [`minreq`] and an async
+//! client built on [`reqwest`] for interacting with an
+//! [Esplora](https://github.com/Blockstream/esplora) server.
 //!
-//! The library provides the possibility to build a blocking
-//! client using [`minreq`] and an async client using [`reqwest`].
-//! The library supports communicating to Esplora via a proxy
-//! and also using TLS (SSL) for secure communication.
+//! Both clients support communicating via a proxy and TLS (SSL).
 //!
+//! # Blocking Client
 //!
-//! ## Usage
-//!
-//! You can create a blocking client as follows:
-//!
-//! ```no_run
-//! # #[cfg(feature = "blocking")]
-//! # {
+//! ```rust,ignore
 //! use esplora_client::Builder;
-//! let builder = Builder::new("https://blockstream.info/testnet/api");
-//! let blocking_client = builder.build_blocking();
-//! # Ok::<(), esplora_client::Error>(());
-//! # }
+//! let client = Builder::new("https://mempool.space/api").build_blocking();
+//! let height = client.get_height().unwrap();
 //! ```
 //!
-//! Here is an example of how to create an asynchronous client.
+//! # Async Client
 //!
-//! ```no_run
-//! # #[cfg(all(feature = "async", feature = "tokio"))]
-//! # {
+//! ```rust,ignore
 //! use esplora_client::Builder;
-//! let builder = Builder::new("https://blockstream.info/testnet/api");
-//! let async_client = builder.build_async();
-//! # Ok::<(), esplora_client::Error>(());
-//! # }
+//! async fn example() {
+//!     let client = Builder::new("https://mempool.space/api")
+//!         .build_async()
+//!         .unwrap();
+//!     let height = client.get_height().await.unwrap();
+//! }
 //! ```
 //!
-//! ## Features
+//! # Features
 //!
-//! By default the library enables all features. To specify
-//! specific features, set `default-features` to `false` in your `Cargo.toml`
-//! and specify the features you want. This will look like this:
+//! By default, all features are enabled. To use a specific feature
+//! combination, set `default-features = false` and explicitly enable
+//! the desired features in your `Cargo.toml` manifest:
 //!
-//! `esplora-client = { version = "*", default-features = false, features =
-//! ["blocking"] }`
+//! `esplora-client = { version = "*", default-features = false, features = ["blocking"] }`
 //!
-//! * `blocking` enables [`minreq`], the blocking client with proxy.
-//! * `blocking-https` enables [`minreq`], the blocking client with proxy and TLS (SSL) capabilities
-//!   using the default [`minreq`] backend.
-//! * `blocking-https-rustls` enables [`minreq`], the blocking client with proxy and TLS (SSL)
-//!   capabilities using the `rustls` backend.
-//! * `blocking-https-native` enables [`minreq`], the blocking client with proxy and TLS (SSL)
-//!   capabilities using the platform's native TLS backend (likely OpenSSL).
-//! * `blocking-https-bundled` enables [`minreq`], the blocking client with proxy and TLS (SSL)
-//!   capabilities using a bundled OpenSSL library backend.
-//! * `async` enables [`reqwest`], the async client with proxy capabilities.
-//! * `async-https` enables [`reqwest`], the async client with support for proxying and TLS (SSL)
-//!   using the default [`reqwest`] TLS backend.
-//! * `async-https-native` enables [`reqwest`], the async client with support for proxying and TLS
-//!   (SSL) using the platform's native TLS backend (likely OpenSSL).
-//! * `async-https-rustls` enables [`reqwest`], the async client with support for proxying and TLS
-//!   (SSL) using the `rustls` TLS backend.
-//! * `async-https-rustls-manual-roots` enables [`reqwest`], the async client with support for
-//!   proxying and TLS (SSL) using the `rustls` TLS backend without using the default root
-//!   certificates.
+//! ### Blocking
 //!
-//! [`dont remove this line or cargo doc will break`]: https://example.com
+//! | Feature | Description |
+//! |---------|-------------|
+//! | `blocking` | Enables the blocking client with proxy support. |
+//! | `blocking-https` | Enables the blocking client with proxy and TLS using the default [`minreq`](https://docs.rs/minreq) backend. |
+//! | `blocking-https-rustls` | Enables the blocking client with proxy and TLS using [`rustls`](https://docs.rs/rustls). |
+//! | `blocking-https-native` | Enables the blocking client with proxy and TLS using the platform's native TLS backend. |
+//! | `blocking-https-bundled` | Enables the blocking client with proxy and TLS using a bundled OpenSSL backend. |
+//!
+//! ### Async
+//!
+//! | Feature | Description |
+//! |---------|-------------|
+//! | `async` | Enables the async client with proxy support. |
+//! | `tokio` | Enables the Tokio runtime for the async client. |
+//! | `async-https` | Enables the async client with proxy and TLS using the default [`reqwest`](https://docs.rs/reqwest) backend. |
+//! | `async-https-native` | Enables the async client with proxy and TLS using the platform's native TLS backend. |
+//! | `async-https-rustls` | Enables the async client with proxy and TLS using [`rustls`](https://docs.rs/rustls). |
+//! | `async-https-rustls-manual-roots` | Enables the async client with proxy and TLS using `rustls` without default root certificates. |
+//!
+//! [`dont remove the 2 lines below or `cargo doc` will break`]: https://example.com
 #![cfg_attr(not(feature = "minreq"), doc = "[`minreq`]: https://docs.rs/minreq")]
 #![cfg_attr(not(feature = "reqwest"), doc = "[`reqwest`]: https://docs.rs/reqwest")]
 #![allow(clippy::result_large_err)]
 #![warn(missing_docs)]
 
+use core::fmt;
+use core::fmt::Display;
+use core::fmt::Formatter;
+use core::time::Duration;
 use std::collections::HashMap;
-use std::fmt;
-use std::num::TryFromIntError;
-use std::time::Duration;
 
 #[cfg(feature = "async")]
 pub use r#async::Sleeper;
@@ -98,52 +90,79 @@ pub const RETRYABLE_ERROR_CODES: [u16; 3] = [
 ];
 
 /// Base backoff in milliseconds.
-const BASE_BACKOFF_MILLIS: Duration = Duration::from_millis(256);
+#[doc(hidden)]
+pub const BASE_BACKOFF_MILLIS: Duration = Duration::from_millis(256);
 
 /// Default max retries.
-const DEFAULT_MAX_RETRIES: usize = 6;
+#[doc(hidden)]
+pub const DEFAULT_MAX_RETRIES: usize = 6;
 
-/// Get a fee value in sats/vbytes from the estimates
-/// that matches the confirmation target set as parameter.
+/// Returns the [`FeeRate`] for the given confirmation target in blocks.
 ///
-/// Returns `None` if no feerate estimate is found at or below `target`
-/// confirmations.
-pub fn convert_fee_rate(target: usize, estimates: HashMap<u16, f64>) -> Option<f32> {
+/// Selects the highest confirmation target from `estimates` that is at or
+/// below `target_blocks`, and returns its [`FeeRate`]. Returns `None` if no
+/// matching estimate is found.
+///
+/// # Example
+///
+/// ```rust
+/// use bitcoin::FeeRate;
+/// use esplora_client::convert_fee_rate;
+/// use std::collections::HashMap;
+///
+/// let mut estimates = HashMap::new();
+/// estimates.insert(1u16, FeeRate::from_sat_per_vb(10).unwrap());
+/// estimates.insert(6u16, FeeRate::from_sat_per_vb(5).unwrap());
+///
+/// assert_eq!(
+///     convert_fee_rate(6, estimates.clone()),
+///     Some(FeeRate::from_sat_per_vb(5).unwrap())
+/// );
+/// assert_eq!(
+///     convert_fee_rate(1, estimates.clone()),
+///     Some(FeeRate::from_sat_per_vb(10).unwrap())
+/// );
+/// assert_eq!(convert_fee_rate(0, estimates), None);
+/// ```
+pub fn convert_fee_rate(target_blocks: usize, estimates: HashMap<u16, FeeRate>) -> Option<FeeRate> {
     estimates
         .into_iter()
-        .filter(|(k, _)| *k as usize <= target)
+        .filter(|(k, _)| *k as usize <= target_blocks)
         .max_by_key(|(k, _)| *k)
-        .map(|(_, v)| v as f32)
+        .map(|(_, feerate)| feerate)
 }
 
 /// A builder for an [`AsyncClient`] or [`BlockingClient`].
+///
+/// Use [`Builder::new`] to create a new builder, configure it with the
+/// chainable methods, then call [`Builder::build_blocking`] or
+/// [`Builder::build_async`] to construct the client.
 #[derive(Debug, Clone)]
 pub struct Builder {
     /// The URL of the Esplora server.
     pub base_url: String,
-    /// Optional URL of the proxy to use to make requests to the Esplora server
+    /// Optional URL of the proxy to use to make requests to the Esplora server.
     ///
     /// The string should be formatted as:
     /// `<protocol>://<user>:<password>@host:<port>`.
     ///
     /// Note that the format of this value and the supported protocols change
-    /// slightly between the blocking version of the client (using `minreq`)
-    /// and the async version (using `reqwest`). For more details check with
-    /// the documentation of the two crates. Both of them are compiled with
-    /// the `socks` feature enabled.
+    /// slightly between the blocking client (using [`minreq`]) and the async
+    /// client (using [`reqwest`]). Both are compiled with the `socks` feature
+    /// enabled.
     ///
     /// The proxy is ignored when targeting `wasm32`.
     pub proxy: Option<String>,
-    /// Socket timeout.
+    /// The socket's timeout, in seconds.
     pub timeout: Option<u64>,
-    /// HTTP headers to set on every request made to Esplora server.
+    /// HTTP headers to set on every request made to the Esplora server.
     pub headers: HashMap<String, String>,
-    /// Max retries
+    /// Maximum number of times to retry a request.
     pub max_retries: usize,
 }
 
 impl Builder {
-    /// Instantiate a new builder
+    /// Create a new [`Builder`] with the given Esplora server URL.
     pub fn new(base_url: &str) -> Self {
         Builder {
             base_url: base_url.to_string(),
@@ -154,95 +173,110 @@ impl Builder {
         }
     }
 
-    /// Set the proxy of the builder
+    /// Set the proxy URL.
+    ///
+    /// See [`Builder::proxy`] for the expected format.
     pub fn proxy(mut self, proxy: &str) -> Self {
         self.proxy = Some(proxy.to_string());
         self
     }
 
-    /// Set the timeout of the builder
+    /// Set the socket's timeout, in seconds.
     pub fn timeout(mut self, timeout: u64) -> Self {
         self.timeout = Some(timeout);
         self
     }
 
-    /// Add a header to set on each request
+    /// Add an HTTP header to set on every request.
     pub fn header(mut self, key: &str, value: &str) -> Self {
         self.headers.insert(key.to_string(), value.to_string());
         self
     }
 
-    /// Set the maximum number of times to retry a request if the response status
-    /// is one of [`RETRYABLE_ERROR_CODES`].
+    /// Set the maximum number of times to retry a request.
+    ///
+    /// Retries are only attempted for responses
+    /// with status codes defined in [`RETRYABLE_ERROR_CODES`].
     pub fn max_retries(mut self, count: usize) -> Self {
         self.max_retries = count;
         self
     }
 
-    /// Build a blocking client from builder
+    /// Build a [`BlockingClient`] from this [`Builder`].
     #[cfg(feature = "blocking")]
     pub fn build_blocking(self) -> BlockingClient {
         BlockingClient::from_builder(self)
     }
 
-    /// Build an asynchronous client from builder
+    /// Build an [`AsyncClient`] from this [`Builder`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the underlying [`reqwest::Client`] fails to build.
     #[cfg(all(feature = "async", feature = "tokio"))]
     pub fn build_async(self) -> Result<AsyncClient, Error> {
         AsyncClient::from_builder(self)
     }
 
-    /// Build an asynchronous client from builder where the returned client uses a
-    /// user-defined [`Sleeper`].
+    /// Build an [`AsyncClient`] from this [`Builder`] with a custom [`Sleeper`].
+    ///
+    /// Use this instead of [`Builder::build_async`] when you want to use a
+    /// runtime other than Tokio for sleeping between retries.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the underlying [`reqwest::Client`] fails to build.
     #[cfg(feature = "async")]
     pub fn build_async_with_sleeper<S: Sleeper>(self) -> Result<AsyncClient<S>, Error> {
         AsyncClient::from_builder(self)
     }
 }
 
-/// Errors that can happen during a request to `Esplora` servers.
+/// Errors that can occur during a request to an Esplora server.
 #[derive(Debug)]
 pub enum Error {
-    /// Error during `minreq` HTTP request
+    /// A [`minreq`] error occurred during a blocking HTTP request.
     #[cfg(feature = "blocking")]
     Minreq(minreq::Error),
-    /// Error during `reqwest` HTTP request
+    /// A [`reqwest`] error occurred during an async HTTP request.
     #[cfg(feature = "async")]
     Reqwest(reqwest::Error),
-    /// Error during JSON (de)serialization
+    /// An error occurred during JSON serialization or deserialization.
     SerdeJson(serde_json::Error),
-    /// HTTP response error
+    /// The server returned a non-success HTTP status code.
     HttpResponse {
         /// The HTTP status code returned by the server.
         status: u16,
-        /// The error message content.
+        /// The error message returned by the server.
         message: String,
     },
-    /// Invalid number returned
-    Parsing(std::num::ParseIntError),
-    /// Invalid status code, unable to convert to `u16`
-    StatusCode(TryFromIntError),
-    /// Invalid Bitcoin data returned
+    /// Failed to parse an integer from the server response.
+    Parsing(core::num::ParseIntError),
+    /// Failed to convert an HTTP status code to `u16`.
+    StatusCode(core::num::TryFromIntError),
+    /// Failed to decode a Bitcoin consensus-encoded value.
     BitcoinEncoding(bitcoin::consensus::encode::Error),
-    /// Invalid hex data returned (attempting to create an array)
+    /// Failed to decode a hex string into a fixed-size array.
     HexToArray(bitcoin::hex::HexToArrayError),
-    /// Invalid hex data returned (attempting to create a vector)
+    /// Failed to decode a hex string into a vector of bytes.
     HexToBytes(bitcoin::hex::HexToBytesError),
-    /// Transaction not found
+    /// The requested [`Transaction`] was not found.
     TransactionNotFound(Txid),
-    /// Block Header height not found
+    /// No [`block header`](bitcoin::blockdata::block::Header) was found at the given height.
     HeaderHeightNotFound(u32),
-    /// Block Header hash not found
+    /// No [`block header`](bitcoin::blockdata::block::Header) was found with the given
+    /// [`BlockHash`].
     HeaderHashNotFound(BlockHash),
-    /// Invalid HTTP Header name specified
+    /// The specified HTTP header name is invalid.
     InvalidHttpHeaderName(String),
-    /// Invalid HTTP Header value specified
+    /// The specified HTTP header value is invalid.
     InvalidHttpHeaderValue(String),
-    /// The server sent an invalid response
+    /// The server returned an invalid or unexpected response.
     InvalidResponse,
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{self:?}")
     }
 }
@@ -252,7 +286,7 @@ macro_rules! impl_error {
         impl_error!($from, $to, Error);
     };
     ( $from:ty, $to:ident, $impl_for:ty ) => {
-        impl std::convert::From<$from> for $impl_for {
+        impl core::convert::From<$from> for $impl_for {
             fn from(err: $from) -> Self {
                 <$impl_for>::$to(err)
             }
@@ -266,7 +300,7 @@ impl_error!(::minreq::Error, Minreq, Error);
 #[cfg(feature = "async")]
 impl_error!(::reqwest::Error, Reqwest, Error);
 impl_error!(serde_json::Error, SerdeJson, Error);
-impl_error!(std::num::ParseIntError, Parsing, Error);
+impl_error!(core::num::ParseIntError, Parsing, Error);
 impl_error!(bitcoin::consensus::encode::Error, BitcoinEncoding, Error);
 impl_error!(bitcoin::hex::HexToArrayError, HexToArray, Error);
 impl_error!(bitcoin::hex::HexToBytesError, HexToBytes, Error);
@@ -473,51 +507,59 @@ mod test {
     }
 
     #[test]
-    fn feerate_parsing() {
-        let esplora_fees = serde_json::from_str::<HashMap<u16, f64>>(
+    fn test_feerate_parsing() {
+        let esplora_fees_raw = serde_json::from_str::<HashMap<u16, f64>>(
             r#"{
-  "25": 1.015,
-  "5": 2.3280000000000003,
-  "12": 2.0109999999999997,
-  "15": 1.018,
-  "17": 1.018,
-  "11": 2.0109999999999997,
-  "3": 3.01,
-  "2": 4.9830000000000005,
-  "6": 2.2359999999999998,
-  "21": 1.018,
-  "13": 1.081,
-  "7": 2.2359999999999998,
-  "8": 2.2359999999999998,
-  "16": 1.018,
-  "20": 1.018,
-  "22": 1.017,
-  "23": 1.017,
-  "504": 1,
-  "9": 2.2359999999999998,
-  "14": 1.018,
-  "10": 2.0109999999999997,
-  "24": 1.017,
-  "1008": 1,
-  "1": 4.9830000000000005,
-  "4": 2.3280000000000003,
-  "19": 1.018,
-  "144": 1,
-  "18": 1.018
-}
-"#,
+    "1": 1.952,
+    "2": 1.952,
+    "3": 1.199,
+    "4": 1.013,
+    "5": 1.013,
+    "6": 1.013,
+    "7": 1.013,
+    "8": 1.013,
+    "9": 1.013,
+    "10": 1.013,
+    "11": 1.013,
+    "12": 1.013,
+    "13": 0.748,
+    "14": 0.748,
+    "15": 0.748,
+    "16": 0.748,
+    "17": 0.748,
+    "18": 0.748,
+    "19": 0.748,
+    "20": 0.748,
+    "21": 0.748,
+    "22": 0.748,
+    "23": 0.748,
+    "24": 0.748,
+    "25": 0.748,
+    "144": 0.693,
+    "504": 0.693,
+    "1008": 0.693
+}"#,
         )
         .unwrap();
+
+        // Convert fees from sat/vB (`f64`) to `FeeRate`.
+        // Note that `get_fee_estimates` already returns `HashMap<u16, FeeRate>`.
+        let esplora_fees = sat_per_vbyte_to_feerate(esplora_fees_raw);
+
         assert!(convert_fee_rate(1, HashMap::new()).is_none());
-        assert_eq!(convert_fee_rate(6, esplora_fees.clone()).unwrap(), 2.236);
         assert_eq!(
-            convert_fee_rate(26, esplora_fees.clone()).unwrap(),
-            1.015,
-            "should inherit from value for 25"
+            convert_fee_rate(6, esplora_fees.clone()),
+            Some(FeeRate::from_sat_per_kwu((1.013_f64 * 250.0).round() as u64)),
+            "should inherit from value for target=6"
+        );
+        assert_eq!(
+            convert_fee_rate(26, esplora_fees.clone()),
+            Some(FeeRate::from_sat_per_kwu((0.748_f64 * 250.0).round() as u64)),
+            "should inherit from value for target=25"
         );
         assert!(
             convert_fee_rate(0, esplora_fees).is_none(),
-            "should not return feerate for 0 target"
+            "should not return feerate for target=0"
         );
     }
 
@@ -635,8 +677,8 @@ mod test {
         assert_eq!(tx_info.txid, txid);
         assert_eq!(tx_info.to_tx(), tx_exp);
         assert_eq!(tx_info.size, tx_exp.total_size());
-        assert_eq!(tx_info.weight(), tx_exp.weight());
-        assert_eq!(tx_info.fee(), tx_res.fee.unwrap().unsigned_abs());
+        assert_eq!(tx_info.weight, tx_exp.weight());
+        assert_eq!(tx_info.fee, tx_res.fee.unwrap().unsigned_abs());
         assert!(tx_info.status.confirmed);
         assert_eq!(tx_info.status.block_height, Some(tx_block_height));
         assert_eq!(tx_info.status.block_hash, tx_res.block_hash);
@@ -723,6 +765,42 @@ mod test {
         let block_status_async = async_client.get_block_status(&block_hash).await.unwrap();
         assert_eq!(expected, block_status);
         assert_eq!(expected, block_status_async);
+    }
+
+    // TODO(@luisschwab): remove on `v0.14.0`
+    #[allow(deprecated)]
+    #[cfg(all(feature = "blocking", feature = "async"))]
+    #[tokio::test]
+    async fn test_get_blocks() {
+        let env = TestEnv::new();
+        let (blocking_client, async_client) = env.setup_clients();
+
+        let start_height = env.bitcoind_client().get_block_count().unwrap().0;
+        let blocks1 = blocking_client.get_blocks(None).unwrap();
+        let blocks_async1 = async_client.get_blocks(None).await.unwrap();
+        assert_eq!(blocks1[0].time.height, start_height as u32);
+        assert_eq!(blocks1, blocks_async1);
+        env.mine_and_wait(1);
+
+        let blocks2 = blocking_client.get_blocks(None).unwrap();
+        let blocks_async2 = async_client.get_blocks(None).await.unwrap();
+        assert_eq!(blocks2, blocks_async2);
+        assert_ne!(blocks2, blocks1);
+
+        let blocks3 = blocking_client
+            .get_blocks(Some(start_height as u32))
+            .unwrap();
+        let blocks_async3 = async_client
+            .get_blocks(Some(start_height as u32))
+            .await
+            .unwrap();
+        assert_eq!(blocks3, blocks_async3);
+        assert_eq!(blocks3[0].time.height, start_height as u32);
+        assert_eq!(blocks3, blocks1);
+
+        let blocks_genesis = blocking_client.get_blocks(Some(0)).unwrap();
+        let blocks_genesis_async = async_client.get_blocks(Some(0)).await.unwrap();
+        assert_eq!(blocks_genesis, blocks_genesis_async);
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
@@ -952,7 +1030,7 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
-    async fn test_scripthash_txs() {
+    async fn test_get_script_hash_txs() {
         let env = TestEnv::new();
         let (blocking_client, async_client) = env.setup_clients();
 
@@ -973,20 +1051,20 @@ mod test {
             .unwrap()
             .tx;
         let script = &expected_tx.output[0].script_pubkey;
-        let scripthash_txs_txids: Vec<Txid> = blocking_client
-            .scripthash_txs(script, None)
+        let script_hash_txs_txids_blocking: Vec<Txid> = blocking_client
+            .get_scripthash_txs(script, None)
             .unwrap()
             .iter()
             .map(|tx| tx.txid)
             .collect();
-        let scripthash_txs_txids_async: Vec<Txid> = async_client
-            .scripthash_txs(script, None)
+        let script_hash_txs_txids_async: Vec<Txid> = async_client
+            .get_scripthash_txs(script, None)
             .await
             .unwrap()
             .iter()
             .map(|tx| tx.txid)
             .collect();
-        assert_eq!(scripthash_txs_txids, scripthash_txs_txids_async);
+        assert_eq!(script_hash_txs_txids_blocking, script_hash_txs_txids_async);
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
@@ -1063,35 +1141,35 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
-    async fn test_get_blocks() {
+    async fn test_get_block_infos() {
         let env = TestEnv::new();
         let (blocking_client, async_client) = env.setup_clients();
 
         let start_height = env.bitcoind_client().get_block_count().unwrap().0;
-        let blocks1 = blocking_client.get_blocks(None).unwrap();
-        let blocks_async1 = async_client.get_blocks(None).await.unwrap();
-        assert_eq!(blocks1[0].time.height, start_height as u32);
+        let blocks1 = blocking_client.get_block_infos(None).unwrap();
+        let blocks_async1 = async_client.get_block_infos(None).await.unwrap();
+        assert_eq!(blocks1[0].height, start_height as u32);
         assert_eq!(blocks1, blocks_async1);
         env.mine_and_wait(1);
 
-        let blocks2 = blocking_client.get_blocks(None).unwrap();
-        let blocks_async2 = async_client.get_blocks(None).await.unwrap();
+        let blocks2 = blocking_client.get_block_infos(None).unwrap();
+        let blocks_async2 = async_client.get_block_infos(None).await.unwrap();
         assert_eq!(blocks2, blocks_async2);
         assert_ne!(blocks2, blocks1);
 
         let blocks3 = blocking_client
-            .get_blocks(Some(start_height as u32))
+            .get_block_infos(Some(start_height as u32))
             .unwrap();
         let blocks_async3 = async_client
-            .get_blocks(Some(start_height as u32))
+            .get_block_infos(Some(start_height as u32))
             .await
             .unwrap();
         assert_eq!(blocks3, blocks_async3);
-        assert_eq!(blocks3[0].time.height, start_height as u32);
+        assert_eq!(blocks3[0].height, start_height as u32);
         assert_eq!(blocks3, blocks1);
 
-        let blocks_genesis = blocking_client.get_blocks(Some(0)).unwrap();
-        let blocks_genesis_async = async_client.get_blocks(Some(0)).await.unwrap();
+        let blocks_genesis = blocking_client.get_block_infos(Some(0)).unwrap();
+        let blocks_genesis_async = async_client.get_block_infos(Some(0)).await.unwrap();
         assert_eq!(blocks_genesis, blocks_genesis_async);
     }
 
@@ -1208,7 +1286,10 @@ mod test {
         let address_stats_async = async_client.get_address_stats(&address).await.unwrap();
         assert_eq!(address_stats_blocking, address_stats_async);
         assert_eq!(address_stats_async.chain_stats.funded_txo_count, 1);
-        assert_eq!(address_stats_async.chain_stats.funded_txo_sum, 1000);
+        assert_eq!(
+            address_stats_async.chain_stats.funded_txo_sum,
+            Amount::from_sat(1000)
+        );
     }
 
     #[cfg(all(feature = "blocking", feature = "async"))]
@@ -1269,7 +1350,7 @@ mod test {
         );
         assert_eq!(
             scripthash_stats_blocking_legacy.chain_stats.funded_txo_sum,
-            1000
+            Amount::from_sat(1000)
         );
         assert_eq!(scripthash_stats_blocking_legacy.chain_stats.tx_count, 1);
 
@@ -1289,7 +1370,7 @@ mod test {
             scripthash_stats_blocking_p2sh_segwit
                 .chain_stats
                 .funded_txo_sum,
-            1000
+            Amount::from_sat(1000)
         );
         assert_eq!(
             scripthash_stats_blocking_p2sh_segwit.chain_stats.tx_count,
@@ -1310,7 +1391,7 @@ mod test {
         );
         assert_eq!(
             scripthash_stats_blocking_bech32.chain_stats.funded_txo_sum,
-            1000
+            Amount::from_sat(1000)
         );
         assert_eq!(scripthash_stats_blocking_bech32.chain_stats.tx_count, 1);
 
@@ -1328,7 +1409,7 @@ mod test {
         );
         assert_eq!(
             scripthash_stats_blocking_bech32m.chain_stats.funded_txo_sum,
-            1000
+            Amount::from_sat(1000)
         );
         assert_eq!(scripthash_stats_blocking_bech32m.chain_stats.tx_count, 1);
     }
