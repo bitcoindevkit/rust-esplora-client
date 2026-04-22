@@ -52,6 +52,11 @@ impl<S: Sleeper> AsyncClient<S> {
     pub fn from_builder(builder: Builder) -> Result<Self, Error> {
         let mut client_builder = Client::builder();
 
+        #[cfg(feature = "async-https-rustls-manual-roots")]
+        {
+            client_builder = client_builder.tls_certs_only([]);
+        }
+
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(proxy) = &builder.proxy {
             client_builder = client_builder.proxy(reqwest::Proxy::all(proxy)?);
