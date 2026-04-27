@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! An extensible blocking/async Esplora client
 //!
 //! This library provides an extensible blocking and
