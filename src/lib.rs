@@ -954,7 +954,7 @@ mod test {
 
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
-    async fn test_scripthash_txs() {
+    async fn test_get_scripthash_txs() {
         let env = TestEnv::new();
         let (blocking_client, async_client) = env.setup_clients();
 
@@ -976,13 +976,13 @@ mod test {
             .tx;
         let script = &expected_tx.output[0].script_pubkey;
         let scripthash_txs_txids: Vec<Txid> = blocking_client
-            .scripthash_txs(script, None)
+            .get_scripthash_txs(script, None)
             .unwrap()
             .iter()
             .map(|tx| tx.txid)
             .collect();
         let scripthash_txs_txids_async: Vec<Txid> = async_client
-            .scripthash_txs(script, None)
+            .get_scripthash_txs(script, None)
             .await
             .unwrap()
             .iter()
