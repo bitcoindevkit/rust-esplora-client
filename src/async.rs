@@ -15,7 +15,7 @@ use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::{Address, Block, BlockHash, MerkleBlock, Script, Transaction, Txid};
 
-use bitreq::{Client, RequestExt, Response};
+use bitreq::{Client, Method, Proxy, Request, RequestExt, Response};
 
 use crate::{
     is_retryable, is_success, AddressStats, BlockInfo, BlockStatus, BlockSummary, Builder, Error,
@@ -57,6 +57,57 @@ impl<S: Sleeper> AsyncClient<S> {
         })
     }
 
+    /// Get the underlying base URL.
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    /// Get the underlying [`Client`].
+    pub fn client(&self) -> &Client {
+        &self.client
+    }
+
+    /// Build a HTTP [`Request`] with given [`Method`] and URI `path`.
+    pub(crate) fn build_request(&self, method: Method, path: &str) -> Result<Request, Error> {
+        let mut request = Request::new(method, format!("{}{}", self.url, path));
+
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(proxy) = &self.proxy {
+            request = request.with_proxy(Proxy::new_http(proxy)?);
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(timeout) = &self.timeout {
+            request = request.with_timeout(*timeout);
+        }
+
+        if !self.headers.is_empty() {
+            request = request.with_headers(&self.headers);
+        }
+
+        Ok(request)
+    }
+
+    /// Sends a GET request to the given `url`, retrying failed attempts
+    /// for retryable error codes until max retries hit.
+    async fn get_with_retry(&self, path: &str) -> Result<Response, Error> {
+        let mut delay = BASE_BACKOFF_MILLIS;
+        let mut attempts = 0;
+
+        let request = self.build_request(Method::Get, path)?;
+
+        loop {
+            match request.clone().send_async_with_client(&self.client).await? {
+                response if attempts < self.max_retries && is_retryable(&response) => {
+                    S::sleep(delay).await;
+                    attempts += 1;
+                    delay *= 2;
+                }
+                response => return Ok(response),
+            }
+        }
+    }
+
     /// Make an HTTP GET request to given URL, deserializing to any `T` that
     /// implement [`bitcoin::consensus::Decodable`].
     ///
@@ -69,8 +120,7 @@ impl<S: Sleeper> AsyncClient<S> {
     /// This function will return an error either from the HTTP client, or the
     /// [`bitcoin::consensus::Decodable`] deserialization.
     async fn get_response<T: Decodable>(&self, path: &str) -> Result<T, Error> {
-        let url = format!("{}{}", self.url, path);
-        let response = self.get_with_retry(&url).await?;
+        let response = self.get_with_retry(path).await?;
 
         if !is_success(&response) {
             let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
@@ -108,8 +158,7 @@ impl<S: Sleeper> AsyncClient<S> {
         &self,
         path: &str,
     ) -> Result<T, Error> {
-        let url = format!("{}{}", self.url, path);
-        let response = self.get_with_retry(&url).await?;
+        let response = self.get_with_retry(path).await?;
 
         if !is_success(&response) {
             let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
@@ -149,8 +198,7 @@ impl<S: Sleeper> AsyncClient<S> {
     /// This function will return an error either from the HTTP client, or the
     /// [`bitcoin::consensus::Decodable`] deserialization.
     async fn get_response_hex<T: Decodable>(&self, path: &str) -> Result<T, Error> {
-        let url = format!("{}{}", self.url, path);
-        let response = self.get_with_retry(&url).await?;
+        let response = self.get_with_retry(path).await?;
 
         if !is_success(&response) {
             let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
@@ -185,8 +233,7 @@ impl<S: Sleeper> AsyncClient<S> {
     ///
     /// This function will return an error either from the HTTP client.
     async fn get_response_text(&self, path: &str) -> Result<String, Error> {
-        let url = format!("{}{}", self.url, path);
-        let response = self.get_with_retry(&url).await?;
+        let response = self.get_with_retry(path).await?;
 
         if !is_success(&response) {
             let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
@@ -224,8 +271,7 @@ impl<S: Sleeper> AsyncClient<S> {
         body: T,
         query_params: Option<HashSet<(&str, String)>>,
     ) -> Result<Response, Error> {
-        let url: String = format!("{}{}", self.url, path);
-        let mut request: bitreq::Request = bitreq::post(url).with_body(body);
+        let mut request: bitreq::Request = self.build_request(Method::Post, path)?.with_body(body);
 
         for (key, value) in query_params.unwrap_or_default() {
             request = request.with_param(key, value);
@@ -548,53 +594,6 @@ impl<S: Sleeper> AsyncClient<S> {
         let path = format!("/scripthash/{script_hash}/utxo");
 
         self.get_response_json(&path).await
-    }
-
-    /// Get the underlying base URL.
-    pub fn url(&self) -> &str {
-        &self.url
-    }
-
-    /// Get the underlying [`Client`].
-    pub fn client(&self) -> &Client {
-        &self.client
-    }
-
-    /// Sends a GET request to the given `url`, retrying failed attempts
-    /// for retryable error codes until max retries hit.
-    async fn get_with_retry(&self, url: &str) -> Result<Response, Error> {
-        let mut delay = BASE_BACKOFF_MILLIS;
-        let mut attempts = 0;
-
-        let mut request = bitreq::get(url);
-
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(proxy) = &self.proxy {
-            use bitreq::Proxy;
-
-            let proxy = Proxy::new_http(proxy.as_str())?;
-            request = request.with_proxy(proxy);
-        }
-
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(timeout) = &self.timeout {
-            request = request.with_timeout(*timeout);
-        }
-
-        if !self.headers.is_empty() {
-            request = request.with_headers(&self.headers);
-        }
-
-        loop {
-            match request.clone().send_async_with_client(&self.client).await? {
-                response if attempts < self.max_retries && is_retryable(&response) => {
-                    S::sleep(delay).await;
-                    attempts += 1;
-                    delay *= 2;
-                }
-                response => return Ok(response),
-            }
-        }
     }
 }
 
