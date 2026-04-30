@@ -416,11 +416,6 @@ impl EsploraTx {
             })
             .collect()
     }
-
-    /// Get the fee paid by an [`EsploraTx`].
-    pub fn fee(&self) -> Amount {
-        self.fee
-    }
 }
 
 impl From<EsploraTx> for Transaction {
