@@ -2,16 +2,15 @@
 
 //! Esplora by way of `minreq` HTTP client.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::str::FromStr;
 use std::thread;
 
 use bitcoin::consensus::encode::serialize_hex;
+use bitreq::{Method, Proxy, Request, Response};
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
-
-use minreq::{Proxy, Request, Response};
 
 use bitcoin::block::Header as BlockHeader;
 use bitcoin::consensus::{deserialize, serialize, Decodable};
@@ -20,9 +19,9 @@ use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::{Address, Block, BlockHash, MerkleBlock, Script, Transaction, Txid};
 
 use crate::{
-    AddressStats, BlockInfo, BlockStatus, BlockSummary, Builder, Error, MempoolRecentTx,
-    MempoolStats, MerkleProof, OutputStatus, ScriptHashStats, SubmitPackageResult, Tx, TxStatus,
-    Utxo, BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
+    is_retryable, is_success, AddressStats, BlockInfo, BlockStatus, BlockSummary, Builder, Error,
+    MempoolRecentTx, MempoolStats, MerkleProof, OutputStatus, ScriptHashStats, SubmitPackageResult,
+    Tx, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
 };
 
 /// A blocking client for interacting with an Esplora API server.
@@ -57,13 +56,12 @@ impl BlockingClient {
         &self.url
     }
 
-    /// Perform a raw HTTP GET request with the given URI `path`.
-    pub fn get_request(&self, path: &str) -> Result<Request, Error> {
-        let mut request = minreq::get(format!("{}{}", self.url, path));
+    /// Build a HTTP [`Request`] with given [`Method`] and URI `path`.
+    pub(crate) fn build_request(&self, method: Method, path: &str) -> Result<Request, Error> {
+        let mut request = Request::new(method, format!("{}{}", self.url, path));
 
         if let Some(proxy) = &self.proxy {
-            let proxy = Proxy::new(proxy.as_str())?;
-            request = request.with_proxy(proxy);
+            request = request.with_proxy(Proxy::new_http(proxy)?);
         }
 
         if let Some(timeout) = &self.timeout {
@@ -71,135 +69,206 @@ impl BlockingClient {
         }
 
         if !self.headers.is_empty() {
-            for (key, value) in &self.headers {
-                request = request.with_header(key, value);
+            request = request.with_headers(&self.headers);
+        }
+
+        Ok(request)
+    }
+
+    /// Make an HTTP POST request to given URL, converting any `T` that
+    /// implement [`Into<Body>`] and setting query parameters, if any.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error either from the HTTP client, or the
+    /// response's [`serde_json`] deserialization.
+    pub fn post_request<T: Into<Vec<u8>>>(
+        &self,
+        path: &str,
+        body: T,
+        query_params: Option<HashSet<(&str, String)>>,
+    ) -> Result<Response, Error> {
+        let mut request = self.build_request(Method::Post, path)?.with_body(body);
+
+        for (key, value) in query_params.unwrap_or_default() {
+            request = request.with_param(key, value);
+        }
+
+        let response = request.send()?;
+
+        if !is_success(&response) {
+            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+            let message = response.as_str().unwrap_or_default().to_string();
+            return Err(Error::HttpResponse { status, message });
+        }
+
+        Ok(response)
+    }
+
+    /// Makes a HTTP GET request to the given `url`, retrying failed attempts
+    /// for retryable error codes until max retries hit.
+    fn get_with_retry(&self, url: &str) -> Result<Response, Error> {
+        let mut delay = BASE_BACKOFF_MILLIS;
+        let mut attempts = 0;
+
+        loop {
+            match self.build_request(Method::Get, url)?.send()? {
+                resp if attempts < self.max_retries && is_retryable(&resp) => {
+                    thread::sleep(delay);
+                    attempts += 1;
+                    delay *= 2;
+                }
+                resp => return Ok(resp),
             }
         }
-
-        Ok(request)
     }
 
-    fn post_request<T>(&self, path: &str, body: T) -> Result<Request, Error>
-    where
-        T: Into<Vec<u8>>,
-    {
-        let mut request = minreq::post(format!("{}{}", self.url, path)).with_body(body);
+    /// Make an HTTP GET request to given URL, deserializing to any `T` that
+    /// implement [`bitcoin::consensus::Decodable`].
+    ///
+    /// It should be used when requesting Esplora endpoints that can be directly
+    /// deserialized to native `rust-bitcoin` types, which implements
+    /// [`bitcoin::consensus::Decodable`] from `&[u8]`.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error either from the HTTP client, or the
+    /// [`bitcoin::consensus::Decodable`] deserialization.
+    fn get_response<T: Decodable>(&self, path: &str) -> Result<T, Error> {
+        let response = self.get_with_retry(path)?;
 
-        if let Some(proxy) = &self.proxy {
-            let proxy = Proxy::new(proxy.as_str())?;
-            request = request.with_proxy(proxy);
+        if !is_success(&response) {
+            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+            let message = response.as_str().unwrap_or_default().to_string();
+            return Err(Error::HttpResponse { status, message });
         }
 
-        if let Some(timeout) = &self.timeout {
-            request = request.with_timeout(*timeout);
-        }
-
-        Ok(request)
+        Ok(deserialize::<T>(response.as_bytes())?)
     }
 
+    /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
+    ///
+    /// It uses [`BlockingClient::get_response`] internally.
+    ///
+    /// See [`BlockingClient::get_response`] above for full documentation.
     fn get_opt_response<T: Decodable>(&self, path: &str) -> Result<Option<T>, Error> {
-        match self.get_with_retry(path) {
-            Ok(resp) if is_status_not_found(resp.status_code) => Ok(None),
-            Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
-                let message = resp.as_str().unwrap_or_default().to_string();
-                Err(Error::HttpResponse { status, message })
-            }
-            Ok(resp) => Ok(Some(deserialize::<T>(resp.as_bytes())?)),
+        match self.get_response(path) {
+            Ok(response) => Ok(Some(response)),
+            Err(Error::HttpResponse { status: 404, .. }) => Ok(None),
             Err(e) => Err(e),
         }
     }
 
-    fn get_opt_response_txid(&self, path: &str) -> Result<Option<Txid>, Error> {
-        match self.get_with_retry(path) {
-            Ok(resp) if is_status_not_found(resp.status_code) => Ok(None),
-            Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
-                let message = resp.as_str().unwrap_or_default().to_string();
-                Err(Error::HttpResponse { status, message })
-            }
-            Ok(resp) => Ok(Some(
-                Txid::from_str(resp.as_str().map_err(Error::Minreq)?).map_err(Error::HexToArray)?,
-            )),
-            Err(e) => Err(e),
-        }
-    }
-
-    fn get_opt_response_hex<T: Decodable>(&self, path: &str) -> Result<Option<T>, Error> {
-        match self.get_with_retry(path) {
-            Ok(resp) if is_status_not_found(resp.status_code) => Ok(None),
-            Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
-                let message = resp.as_str().unwrap_or_default().to_string();
-                Err(Error::HttpResponse { status, message })
-            }
-            Ok(resp) => {
-                let hex_str = resp.as_str().map_err(Error::Minreq)?;
-                let hex_vec = Vec::from_hex(hex_str)?;
-                deserialize::<T>(&hex_vec)
-                    .map_err(Error::BitcoinEncoding)
-                    .map(|r| Some(r))
-            }
-            Err(e) => Err(e),
-        }
-    }
-
+    /// Make an HTTP GET request to given URL, deserializing to any `T` that
+    /// implements [`bitcoin::consensus::Decodable`].
+    ///
+    /// It should be used when requesting Esplora endpoints that are expected
+    /// to return a hex string decodable to native `rust-bitcoin` types which
+    /// implement [`bitcoin::consensus::Decodable`] from `&[u8]`.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error either from the HTTP client, or the
+    /// [`bitcoin::consensus::Decodable`] deserialization.
     fn get_response_hex<T: Decodable>(&self, path: &str) -> Result<T, Error> {
-        match self.get_with_retry(path) {
-            Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
-                let message = resp.as_str().unwrap_or_default().to_string();
-                Err(Error::HttpResponse { status, message })
-            }
-            Ok(resp) => {
-                let hex_str = resp.as_str().map_err(Error::Minreq)?;
-                let hex_vec = Vec::from_hex(hex_str)?;
-                deserialize::<T>(&hex_vec).map_err(Error::BitcoinEncoding)
-            }
+        let response = self.get_with_retry(path)?;
+
+        if !is_success(&response) {
+            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+            let message = response.as_str().unwrap_or_default().to_string();
+            return Err(Error::HttpResponse { status, message });
+        }
+
+        let hex_str = response.as_str()?;
+        deserialize(&Vec::from_hex(hex_str)?).map_err(Error::BitcoinEncoding)
+    }
+
+    /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
+    ///
+    /// It uses [`BlockingClient::get_response_hex`] internally.
+    ///
+    /// See [`BlockingClient::get_response_hex`] above for full
+    /// documentation.
+    fn get_opt_response_hex<T: Decodable>(&self, path: &str) -> Result<Option<T>, Error> {
+        match self.get_response_hex(path) {
+            Ok(res) => Ok(Some(res)),
+            Err(Error::HttpResponse { status: 404, .. }) => Ok(None),
             Err(e) => Err(e),
         }
     }
 
+    /// Make an HTTP GET request to given URL, deserializing to any `T` that
+    /// implements [`serde::de::DeserializeOwned`].
+    ///
+    /// It should be used when requesting Esplora endpoints that have a specific
+    /// defined API, mostly defined in [`crate::api`].
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error either from the HTTP client, or the
+    /// [`serde::de::DeserializeOwned`] deserialization.
     fn get_response_json<'a, T: serde::de::DeserializeOwned>(
         &'a self,
         path: &'a str,
     ) -> Result<T, Error> {
-        let response = self.get_with_retry(path);
-        match response {
-            Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
-                let message = resp.as_str().unwrap_or_default().to_string();
-                Err(Error::HttpResponse { status, message })
-            }
-            Ok(resp) => Ok(resp.json::<T>().map_err(Error::Minreq)?),
-            Err(e) => Err(e),
+        let response = self.get_with_retry(path)?;
+
+        if !is_success(&response) {
+            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+            let message = response.as_str().unwrap_or_default().to_string();
+            return Err(Error::HttpResponse { status, message });
         }
+
+        response.json::<T>().map_err(Error::BitReq)
     }
 
+    /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
+    ///
+    /// It uses [`BlockingClient::get_response_json`] internally.
+    ///
+    /// See [`BlockingClient::get_response_json`] above for full
+    /// documentation.
     fn get_opt_response_json<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
     ) -> Result<Option<T>, Error> {
-        match self.get_with_retry(path) {
-            Ok(resp) if is_status_not_found(resp.status_code) => Ok(None),
-            Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
-                let message = resp.as_str().unwrap_or_default().to_string();
-                Err(Error::HttpResponse { status, message })
-            }
-            Ok(resp) => Ok(Some(resp.json::<T>()?)),
+        match self.get_response_json(path) {
+            Ok(res) => Ok(Some(res)),
+            Err(Error::HttpResponse { status: 404, .. }) => Ok(None),
             Err(e) => Err(e),
         }
     }
 
-    fn get_response_str(&self, path: &str) -> Result<String, Error> {
-        match self.get_with_retry(path) {
-            Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
-                let message = resp.as_str().unwrap_or_default().to_string();
-                Err(Error::HttpResponse { status, message })
-            }
-            Ok(resp) => Ok(resp.as_str()?.to_string()),
+    /// Make an HTTP GET request to given URL, deserializing to `String`.
+    ///
+    /// It should be used when requesting Esplora endpoints that can return
+    /// `String` formatted data that can be parsed downstream.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error either from the HTTP client.
+    fn get_response_text(&self, path: &str) -> Result<String, Error> {
+        let response = self.get_with_retry(path)?;
+
+        if !is_success(&response) {
+            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+            let message = response.as_str().unwrap_or_default().to_string();
+            return Err(Error::HttpResponse { status, message });
+        }
+
+        Ok(response.as_str()?.to_string())
+    }
+
+    /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
+    ///
+    /// It uses [`BlockingClient::get_response_text`] internally.
+    ///
+    /// See [`BlockingClient::get_response_text`] above for full
+    /// documentation.
+    fn get_opt_response_text(&self, path: &str) -> Result<Option<String>, Error> {
+        match self.get_response_text(path) {
+            Ok(s) => Ok(Some(s)),
+            Err(Error::HttpResponse { status: 404, .. }) => Ok(None),
             Err(e) => Err(e),
         }
     }
@@ -225,7 +294,10 @@ impl BlockingClient {
         block_hash: &BlockHash,
         index: usize,
     ) -> Result<Option<Txid>, Error> {
-        self.get_opt_response_txid(&format!("/block/{block_hash}/txid/{index}"))
+        match self.get_opt_response_text(&format!("/block/{block_hash}/txid/{index}"))? {
+            Some(s) => Ok(Some(Txid::from_str(&s).map_err(Error::HexToArray)?)),
+            None => Ok(None),
+        }
     }
 
     /// Get the status of a [`Transaction`] given its [`Txid`].
@@ -282,26 +354,12 @@ impl BlockingClient {
 
     /// Broadcast a [`Transaction`] to Esplora
     pub fn broadcast(&self, transaction: &Transaction) -> Result<Txid, Error> {
-        let request = self.post_request(
-            "/tx",
-            serialize(transaction)
-                .to_lower_hex_string()
-                .as_bytes()
-                .to_vec(),
-        )?;
+        let body = serialize::<Transaction>(transaction).to_lower_hex_string();
 
-        match request.send() {
-            Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
-                let message = resp.as_str().unwrap_or_default().to_string();
-                Err(Error::HttpResponse { status, message })
-            }
-            Ok(resp) => {
-                let txid = Txid::from_str(resp.as_str()?).map_err(Error::HexToArray)?;
-                Ok(txid)
-            }
-            Err(e) => Err(Error::Minreq(e)),
-        }
+        let response = self.post_request("/tx", body, None)?;
+        let txid = Txid::from_str(response.as_str()?).map_err(Error::HexToArray)?;
+
+        Ok(txid)
     }
 
     /// Broadcast a package of [`Transaction`]s to Esplora.
@@ -323,47 +381,38 @@ impl BlockingClient {
             .map(|tx| serialize_hex(&tx))
             .collect::<Vec<_>>();
 
-        let mut request = self.post_request(
+        let mut queryparams = HashSet::<(&str, String)>::new();
+        if let Some(maxfeerate) = maxfeerate {
+            queryparams.insert(("maxfeerate", maxfeerate.to_string()));
+        }
+        if let Some(maxburnamount) = maxburnamount {
+            queryparams.insert(("maxburnamount", maxburnamount.to_string()));
+        }
+
+        let response = self.post_request(
             "/txs/package",
-            serde_json::to_string(&serialized_txs)
-                .map_err(Error::SerdeJson)?
-                .into_bytes(),
+            serde_json::to_string(&serialized_txs).map_err(Error::SerdeJson)?,
+            Some(queryparams),
         )?;
 
-        if let Some(maxfeerate) = maxfeerate {
-            request = request.with_param("maxfeerate", maxfeerate.to_string())
-        }
-
-        if let Some(maxburnamount) = maxburnamount {
-            request = request.with_param("maxburnamount", maxburnamount.to_string())
-        }
-
-        match request.send() {
-            Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
-                let message = resp.as_str().unwrap_or_default().to_string();
-                Err(Error::HttpResponse { status, message })
-            }
-            Ok(resp) => Ok(resp.json::<SubmitPackageResult>().map_err(Error::Minreq)?),
-            Err(e) => Err(Error::Minreq(e)),
-        }
+        Ok(response.json::<SubmitPackageResult>()?)
     }
 
     /// Get the height of the current blockchain tip.
     pub fn get_height(&self) -> Result<u32, Error> {
-        self.get_response_str("/blocks/tip/height")
+        self.get_response_text("/blocks/tip/height")
             .map(|s| u32::from_str(s.as_str()).map_err(Error::Parsing))?
     }
 
     /// Get the [`BlockHash`] of the current blockchain tip.
     pub fn get_tip_hash(&self) -> Result<BlockHash, Error> {
-        self.get_response_str("/blocks/tip/hash")
+        self.get_response_text("/blocks/tip/hash")
             .map(|s| BlockHash::from_str(s.as_str()).map_err(Error::HexToArray))?
     }
 
     /// Get the [`BlockHash`] of a specific block height
     pub fn get_block_hash(&self, block_height: u32) -> Result<BlockHash, Error> {
-        self.get_response_str(&format!("/block-height/{block_height}"))
+        self.get_response_text(&format!("/block-height/{block_height}"))
             .map(|s| BlockHash::from_str(s.as_str()).map_err(Error::HexToArray))?
     }
 
@@ -518,35 +567,4 @@ impl BlockingClient {
 
         self.get_response_json(&path)
     }
-
-    /// Sends a GET request to the given `url`, retrying failed attempts
-    /// for retryable error codes until max retries hit.
-    fn get_with_retry(&self, url: &str) -> Result<Response, Error> {
-        let mut delay = BASE_BACKOFF_MILLIS;
-        let mut attempts = 0;
-
-        loop {
-            match self.get_request(url)?.send()? {
-                resp if attempts < self.max_retries && is_status_retryable(resp.status_code) => {
-                    thread::sleep(delay);
-                    attempts += 1;
-                    delay *= 2;
-                }
-                resp => return Ok(resp),
-            }
-        }
-    }
-}
-
-fn is_status_ok(status: i32) -> bool {
-    status == 200
-}
-
-fn is_status_not_found(status: i32) -> bool {
-    status == 404
-}
-
-fn is_status_retryable(status: i32) -> bool {
-    let status = status as u16;
-    RETRYABLE_ERROR_CODES.contains(&status)
 }
