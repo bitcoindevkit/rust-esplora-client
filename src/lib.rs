@@ -281,14 +281,15 @@ mod test {
     use {
         bitcoin::{hashes::Hash, Address, Amount},
         core::str::FromStr,
-        electrsd::{corepc_node, electrum_client::ElectrumApi, ElectrsD},
+        electrsd::bitcoind::{self, BitcoinD},
+        electrsd::{electrum_client::ElectrumApi, ElectrsD},
         std::time::Duration,
     };
 
     /// Struct that holds regtest `bitcoind` and `electrsd` instances.
     #[cfg(all(feature = "blocking", feature = "async"))]
     struct TestEnv {
-        bitcoind: corepc_node::Node,
+        bitcoind: BitcoinD,
         electrsd: ElectrsD,
     }
 
@@ -296,7 +297,7 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     pub struct Config<'a> {
         /// Configuration params for the [`corepc_node::Node`].
-        pub bitcoind: corepc_node::Conf<'a>,
+        pub bitcoind: bitcoind::Conf<'a>,
         /// Configuration params for the [`electrsd::ElectrsD`].
         pub electrsd: electrsd::Conf<'a>,
     }
@@ -307,7 +308,7 @@ mod test {
         /// HTTP for [`electrsd::ElectrsD`], exposing an Esplora API endpoint.
         fn default() -> Self {
             Self {
-                bitcoind: corepc_node::Conf::default(),
+                bitcoind: bitcoind::Conf::default(),
                 electrsd: {
                     let mut config = electrsd::Conf::default();
                     config.http_enabled = true;
@@ -330,11 +331,11 @@ mod test {
 
             let bitcoind_exe = std::env::var("BITCOIND_EXE")
                 .ok()
-                .or_else(|| corepc_node::downloaded_exe_path().ok())
+                .or_else(|| bitcoind::downloaded_exe_path().ok())
                 .expect(
                     "Provide a BITCOIND_EXE environment variable, or specify a `bitcoind` version feature",
                 );
-            let bitcoind = corepc_node::Node::with_conf(bitcoind_exe, &config.bitcoind).unwrap();
+            let bitcoind = BitcoinD::with_conf(bitcoind_exe, &config.bitcoind).unwrap();
 
             let electrs_exe = std::env::var("ELECTRS_EXE")
                 .ok()
@@ -353,8 +354,8 @@ mod test {
             env
         }
 
-        /// Get the [`bitcoind` RPC client](corepc_node::Client).
-        fn bitcoind_client(&self) -> &corepc_node::Client {
+        /// Get the [`bitcoind` RPC client](bitcoind::Client).
+        fn bitcoind_client(&self) -> &bitcoind::Client {
             &self.bitcoind.client
         }
 
@@ -1100,7 +1101,7 @@ mod test {
     #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tx_with_http_headers() {
-        use corepc_node::get_available_port;
+        use bitcoind::get_available_port;
         use tokio::io::AsyncReadExt;
         use tokio::net::TcpListener;
 
