@@ -20,8 +20,8 @@ use bitcoin::{Address, Block, BlockHash, MerkleBlock, Script, Transaction, Txid}
 
 use crate::{
     is_retryable, is_success, AddressStats, BlockInfo, BlockStatus, BlockSummary, Builder, Error,
-    MempoolRecentTx, MempoolStats, MerkleProof, OutputStatus, ScriptHashStats, SubmitPackageResult,
-    Tx, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
+    EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof, OutputStatus, ScriptHashStats,
+    SubmitPackageResult, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
 };
 
 /// A blocking client for interacting with an Esplora API server.
@@ -306,7 +306,7 @@ impl BlockingClient {
     }
 
     /// Get transaction info given its [`Txid`].
-    pub fn get_tx_info(&self, txid: &Txid) -> Result<Option<Tx>, Error> {
+    pub fn get_tx_info(&self, txid: &Txid) -> Result<Option<EsploraTx>, Error> {
         self.get_opt_response_json(&format!("/tx/{txid}"))
     }
 
@@ -462,7 +462,7 @@ impl BlockingClient {
         &self,
         address: &Address,
         last_seen: Option<Txid>,
-    ) -> Result<Vec<Tx>, Error> {
+    ) -> Result<Vec<EsploraTx>, Error> {
         let path = match last_seen {
             Some(last_seen) => format!("/address/{address}/txs/chain/{last_seen}"),
             None => format!("/address/{address}/txs"),
@@ -472,7 +472,7 @@ impl BlockingClient {
     }
 
     /// Get mempool [`Transaction`]s for the specified [`Address`], sorted with newest first.
-    pub fn get_mempool_address_txs(&self, address: &Address) -> Result<Vec<Tx>, Error> {
+    pub fn get_mempool_address_txs(&self, address: &Address) -> Result<Vec<EsploraTx>, Error> {
         let path = format!("/address/{address}/txs/mempool");
 
         self.get_response_json(&path)
@@ -486,7 +486,7 @@ impl BlockingClient {
         &self,
         script: &Script,
         last_seen: Option<Txid>,
-    ) -> Result<Vec<Tx>, Error> {
+    ) -> Result<Vec<EsploraTx>, Error> {
         let script_hash = sha256::Hash::hash(script.as_bytes());
         let path = match last_seen {
             Some(last_seen) => format!("/scripthash/{script_hash:x}/txs/chain/{last_seen}"),
@@ -497,7 +497,7 @@ impl BlockingClient {
 
     /// Get mempool [`Transaction`] history for the
     /// specified [`Script`] hash, sorted with newest first.
-    pub fn get_mempool_scripthash_txs(&self, script: &Script) -> Result<Vec<Tx>, Error> {
+    pub fn get_mempool_scripthash_txs(&self, script: &Script) -> Result<Vec<EsploraTx>, Error> {
         let script_hash = sha256::Hash::hash(script.as_bytes());
         let path = format!("/scripthash/{script_hash:x}/txs/mempool");
 
@@ -527,7 +527,7 @@ impl BlockingClient {
         &self,
         blockhash: &BlockHash,
         start_index: Option<u32>,
-    ) -> Result<Vec<Tx>, Error> {
+    ) -> Result<Vec<EsploraTx>, Error> {
         let path = match start_index {
             None => format!("/block/{blockhash}/txs"),
             Some(start_index) => format!("/block/{blockhash}/txs/{start_index}"),
