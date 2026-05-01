@@ -684,7 +684,7 @@ mod test {
         assert_eq!(tx_info.to_tx(), tx_exp);
         assert_eq!(tx_info.size, tx_exp.total_size());
         assert_eq!(tx_info.weight, tx_exp.weight());
-        assert_eq!(tx_info.fee(), tx_res.fee.unwrap().unsigned_abs());
+        assert_eq!(tx_info.fee, tx_res.fee.unwrap().unsigned_abs());
         assert!(tx_info.status.confirmed);
         assert_eq!(tx_info.status.block_height, Some(tx_block_height));
         assert_eq!(tx_info.status.block_hash, tx_res.block_hash);

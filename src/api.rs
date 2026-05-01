@@ -103,7 +103,7 @@ pub struct BlockStatus {
 
 /// A [`Transaction`] in the format returned by Esplora.
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct Tx {
+pub struct EsploraTx {
     /// The [`Txid`] of the [`Transaction`].
     pub txid: Txid,
     /// The version number of the [`Transaction`].
@@ -358,9 +358,8 @@ pub struct MempoolFeesSubmitPackage {
     pub effective_includes: Option<Vec<Wtxid>>,
 }
 
-impl Tx {
-    /// Convert a transaction from the format returned by Esplora into a `rust-bitcoin`
-    /// [`Transaction`].
+impl EsploraTx {
+    /// Convert a transaction from the format returned by Esplora into a [`Transaction`].
     pub fn to_tx(&self) -> Transaction {
         Transaction {
             version: transaction::Version::non_standard(self.version),
@@ -391,7 +390,7 @@ impl Tx {
         }
     }
 
-    /// Get the confirmation time from a [`Tx`].
+    /// Get the confirmation time from an [`EsploraTx`].
     pub fn confirmation_time(&self) -> Option<BlockTime> {
         match self.status {
             TxStatus {
@@ -404,7 +403,7 @@ impl Tx {
         }
     }
 
-    /// Get a list of the [`Tx`]'s previous outputs.
+    /// Get a list of the [`EsploraTx`]'s previous outputs.
     pub fn previous_outputs(&self) -> Vec<Option<TxOut>> {
         self.vin
             .iter()
@@ -417,10 +416,17 @@ impl Tx {
             })
             .collect()
     }
+}
 
-    /// Get the fee paid by a [`Tx`].
-    pub fn fee(&self) -> Amount {
-        self.fee
+impl From<EsploraTx> for Transaction {
+    fn from(tx: EsploraTx) -> Self {
+        tx.to_tx()
+    }
+}
+
+impl From<&EsploraTx> for Transaction {
+    fn from(tx: &EsploraTx) -> Self {
+        tx.to_tx()
     }
 }
 
