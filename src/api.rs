@@ -286,7 +286,8 @@ pub struct MempoolStats {
     /// An array of `(feerate, vsize)` tuples, where each entry's `vsize` is the total vsize
     /// of [`Transaction`]s paying more than `feerate` but less than the previous entry's `feerate`
     /// (except for the first entry, which has no upper bound).
-    pub fee_histogram: Vec<(f64, usize)>,
+    #[serde(deserialize_with = "deserialize_fee_histogram")]
+    pub fee_histogram: Vec<(FeeRate, Weight)>,
 }
 
 /// A [`Transaction`] that recently entered the mempool.
@@ -457,4 +458,21 @@ where
         return Err(D::Error::custom("feerate overflow"));
     }
     Ok(Some(FeeRate::from_sat_per_kwu(sat_per_kwu as u64)))
+}
+
+fn deserialize_fee_histogram<'de, D>(d: D) -> Result<Vec<(FeeRate, Weight)>, D::Error>
+where
+    D: serde::de::Deserializer<'de>,
+{
+    use serde::de::Error;
+    let raw = Vec::<(f64, Weight)>::deserialize(d)?;
+    raw.into_iter()
+        .map(|(sat_per_vb, vsize)| {
+            let sat_per_kwu = sat_per_vb * 250.0;
+            if !sat_per_kwu.is_finite() {
+                return Err(D::Error::custom("feerate overflow"));
+            }
+            Ok((FeeRate::from_sat_per_kwu(sat_per_kwu as u64), vsize))
+        })
+        .collect()
 }
