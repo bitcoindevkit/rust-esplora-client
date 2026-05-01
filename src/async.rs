@@ -18,10 +18,13 @@ use bitcoin::{Address, Block, BlockHash, MerkleBlock, Script, Transaction, Txid}
 use bitreq::{Client, Method, Proxy, Request, RequestExt, Response};
 
 use crate::{
-    is_retryable, is_success, AddressStats, BlockInfo, BlockStatus, BlockSummary, Builder, Error,
-    EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof, OutputStatus, ScriptHashStats,
-    SubmitPackageResult, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
+    is_retryable, is_success, AddressStats, BlockInfo, BlockStatus, Builder, Error, EsploraTx,
+    MempoolRecentTx, MempoolStats, MerkleProof, OutputStatus, ScriptHashStats, SubmitPackageResult,
+    TxStatus, Utxo, BASE_BACKOFF_MILLIS,
 };
+
+#[allow(deprecated)]
+use crate::BlockSummary;
 
 /// An async client for interacting with an Esplora API server.
 // FIXME: (@oleonardolima) there's no `Debug` implementation for `bitreq::Client`.
@@ -575,6 +578,8 @@ impl<S: Sleeper> AsyncClient<S> {
     ///
     /// The maximum number of summaries returned depends on the backend itself:
     /// esplora returns `10` while [mempool.space](https://mempool.space/docs/api) returns `15`.
+    #[allow(deprecated)]
+    #[deprecated(since = "0.13.0", note = "use `get_block_infos` instead")]
     pub async fn get_blocks(&self, height: Option<u32>) -> Result<Vec<BlockSummary>, Error> {
         let path = match height {
             Some(height) => format!("/blocks/{height}"),

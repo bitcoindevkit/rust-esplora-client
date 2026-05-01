@@ -189,6 +189,7 @@ pub struct BlockTime {
 }
 
 /// Summary about a [`Block`].
+#[deprecated(since = "0.13.0", note = "use `BlockInfo` instead")]
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct BlockSummary {
     /// The [`Block`]'s hash.
