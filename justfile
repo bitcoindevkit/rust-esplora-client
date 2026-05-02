@@ -6,7 +6,13 @@ alias p := pre-push
 alias t := test
 
 _default:
-   @just --list
+    @echo "> rust-esplora-client"
+    @echo "> Bitcoin Esplora API client library\n"
+    @just --list
+
+[doc: "Checks whether all commits in this branch are signed"]
+check-sigs:
+    bash contrib/check-signatures.sh
 
 # Build the project
 build:
@@ -34,7 +40,7 @@ msrv:
    cargo +1.75.0 test --all-features -- --test-threads=16
 
 # Run pre-push suite: format, check, and test
-pre-push: fmt check test msrv
+pre-push: check-sigs check test msrv
 
 # Run all tests on the workspace with all features
 test:
