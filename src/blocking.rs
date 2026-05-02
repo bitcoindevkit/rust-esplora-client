@@ -16,12 +16,12 @@ use bitcoin::block::Header as BlockHeader;
 use bitcoin::consensus::{deserialize, serialize, Decodable};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
-use bitcoin::{Address, Block, BlockHash, MerkleBlock, Script, Transaction, Txid};
+use bitcoin::{Address, Amount, Block, BlockHash, FeeRate, MerkleBlock, Script, Transaction, Txid};
 
 use crate::{
-    is_retryable, is_success, AddressStats, BlockInfo, BlockStatus, Builder, Error, EsploraTx,
-    MempoolRecentTx, MempoolStats, MerkleProof, OutputStatus, ScriptHashStats, SubmitPackageResult,
-    TxStatus, Utxo, BASE_BACKOFF_MILLIS,
+    is_retryable, is_success, sat_per_vbyte_to_feerate, AddressStats, BlockInfo, BlockStatus,
+    Builder, Error, EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof, OutputStatus,
+    ScriptHashStats, SubmitPackageResult, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
 };
 
 #[allow(deprecated)]
@@ -376,29 +376,34 @@ impl BlockingClient {
     pub fn submit_package(
         &self,
         transactions: &[Transaction],
-        maxfeerate: Option<f64>,
-        maxburnamount: Option<f64>,
+        maxfeerate: Option<FeeRate>,
+        maxburnamount: Option<Amount>,
     ) -> Result<SubmitPackageResult, Error> {
         let serialized_txs = transactions
             .iter()
             .map(|tx| serialize_hex(&tx))
             .collect::<Vec<_>>();
 
-        let mut queryparams = HashSet::<(&str, String)>::new();
+        let mut params = HashSet::<(&str, String)>::new();
+
+        // Esplora expects `maxfeerate` in sats/vB.
         if let Some(maxfeerate) = maxfeerate {
-            queryparams.insert(("maxfeerate", maxfeerate.to_string()));
+            params.insert(("maxfeerate", maxfeerate.to_sat_per_vb_ceil().to_string()));
         }
+        // Esplora expects `maxburnamount` in BTC.
         if let Some(maxburnamount) = maxburnamount {
-            queryparams.insert(("maxburnamount", maxburnamount.to_string()));
+            params.insert(("maxburnamount", maxburnamount.to_btc().to_string()));
         }
 
         let response = self.post_request(
             "/txs/package",
             serde_json::to_string(&serialized_txs).map_err(Error::SerdeJson)?,
-            Some(queryparams),
+            Some(params),
         )?;
 
-        Ok(response.json::<SubmitPackageResult>()?)
+        let result = response.json::<SubmitPackageResult>()?;
+
+        Ok(result)
     }
 
     /// Get the height of the current blockchain tip.
@@ -436,10 +441,15 @@ impl BlockingClient {
         self.get_response_json("/mempool/txids")
     }
 
-    /// Get a map where the key is the confirmation target (in number of
-    /// blocks) and the value is the estimated feerate (in sat/vB).
-    pub fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
-        self.get_response_json("/fee-estimates")
+    /// Get fee estimates for a range of confirmation targets.
+    ///
+    /// Returns a [`HashMap`] where the key is the confirmation target in blocks
+    /// and the value is the estimated [`FeeRate`].
+    pub fn get_fee_estimates(&self) -> Result<HashMap<u16, FeeRate>, Error> {
+        let estimates_raw: HashMap<u16, f64> = self.get_response_json("/fee-estimates")?;
+        let estimates = sat_per_vbyte_to_feerate(estimates_raw);
+
+        Ok(estimates)
     }
 
     /// Get information about a specific address, includes confirmed balance and transactions in

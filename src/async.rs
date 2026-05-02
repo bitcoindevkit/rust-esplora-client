@@ -13,14 +13,14 @@ use bitcoin::consensus::encode::serialize_hex;
 use bitcoin::consensus::{deserialize, serialize, Decodable};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
-use bitcoin::{Address, Block, BlockHash, MerkleBlock, Script, Transaction, Txid};
+use bitcoin::{Address, Amount, Block, BlockHash, FeeRate, MerkleBlock, Script, Transaction, Txid};
 
 use bitreq::{Client, Method, Proxy, Request, RequestExt, Response};
 
 use crate::{
-    is_retryable, is_success, AddressStats, BlockInfo, BlockStatus, Builder, Error, EsploraTx,
-    MempoolRecentTx, MempoolStats, MerkleProof, OutputStatus, ScriptHashStats, SubmitPackageResult,
-    TxStatus, Utxo, BASE_BACKOFF_MILLIS,
+    is_retryable, is_success, sat_per_vbyte_to_feerate, AddressStats, BlockInfo, BlockStatus,
+    Builder, Error, EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof, OutputStatus,
+    ScriptHashStats, SubmitPackageResult, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
 };
 
 #[allow(deprecated)]
@@ -399,31 +399,36 @@ impl<S: Sleeper> AsyncClient<S> {
     pub async fn submit_package(
         &self,
         transactions: &[Transaction],
-        maxfeerate: Option<f64>,
-        maxburnamount: Option<f64>,
+        maxfeerate: Option<FeeRate>,
+        maxburnamount: Option<Amount>,
     ) -> Result<SubmitPackageResult, Error> {
         let serialized_txs = transactions
             .iter()
             .map(|tx| serialize_hex(&tx))
             .collect::<Vec<_>>();
 
-        let mut queryparams = HashSet::<(&str, String)>::new();
+        let mut params = HashSet::<(&str, String)>::new();
+
+        // Esplora expects `maxfeerate` in sats/vB.
         if let Some(maxfeerate) = maxfeerate {
-            queryparams.insert(("maxfeerate", maxfeerate.to_string()));
+            params.insert(("maxfeerate", maxfeerate.to_sat_per_vb_ceil().to_string()));
         }
+        // Esplora expects `maxburnamount` in BTC.
         if let Some(maxburnamount) = maxburnamount {
-            queryparams.insert(("maxburnamount", maxburnamount.to_string()));
+            params.insert(("maxburnamount", maxburnamount.to_btc().to_string()));
         }
 
         let response = self
             .post_request_bytes(
                 "/txs/package",
                 serde_json::to_string(&serialized_txs).map_err(Error::SerdeJson)?,
-                Some(queryparams),
+                Some(params),
             )
             .await?;
 
-        Ok(response.json::<SubmitPackageResult>()?)
+        let result = response.json::<SubmitPackageResult>()?;
+
+        Ok(result)
     }
 
     /// Get the current height of the blockchain tip
@@ -535,10 +540,15 @@ impl<S: Sleeper> AsyncClient<S> {
         self.get_response_json("/mempool/txids").await
     }
 
-    /// Get a map where the key is the confirmation target (in number of
-    /// blocks) and the value is the estimated feerate (in sat/vB).
-    pub async fn get_fee_estimates(&self) -> Result<HashMap<u16, f64>, Error> {
-        self.get_response_json("/fee-estimates").await
+    /// Get fee estimates for a range of confirmation targets.
+    ///
+    /// Returns a [`HashMap`] where the key is the confirmation target in blocks
+    /// and the value is the estimated [`FeeRate`].
+    pub async fn get_fee_estimates(&self) -> Result<HashMap<u16, FeeRate>, Error> {
+        let estimates_raw: HashMap<u16, f64> = self.get_response_json("/fee-estimates").await?;
+        let estimates = sat_per_vbyte_to_feerate(estimates_raw);
+
+        Ok(estimates)
     }
 
     /// Get a summary about a [`Block`], given its [`BlockHash`].

@@ -143,17 +143,25 @@ fn is_retryable(response: &Response) -> bool {
     RETRYABLE_ERROR_CODES.contains(&(response.status_code as u16))
 }
 
-/// Get a fee value in sats/vbytes from the estimates
-/// that matches the confirmation target set as parameter.
+/// Returns the [`FeeRate`] for the given confirmation target in blocks.
 ///
-/// Returns `None` if no feerate estimate is found at or below `target`
-/// confirmations.
-pub fn convert_fee_rate(target: usize, estimates: HashMap<u16, f64>) -> Option<f32> {
+/// Selects the highest confirmation target from `estimates` that is at or
+/// below `target_blocks`, and returns its [`FeeRate`]. Returns `None` if no
+/// matching estimate is found.
+pub fn convert_fee_rate(target_blocks: usize, estimates: HashMap<u16, FeeRate>) -> Option<FeeRate> {
     estimates
         .into_iter()
-        .filter(|(k, _)| *k as usize <= target)
+        .filter(|(k, _)| *k as usize <= target_blocks)
         .max_by_key(|(k, _)| *k)
-        .map(|(_, v)| v as f32)
+        .map(|(_, feerate)| feerate)
+}
+
+/// Converts a [`HashMap`] of fee estimates expressed as sat/vB ([`f64`]) into a [`FeeRate`].
+pub(crate) fn sat_per_vbyte_to_feerate(estimates: HashMap<u16, f64>) -> HashMap<u16, FeeRate> {
+    estimates
+        .into_iter()
+        .map(|(k, v)| (k, FeeRate::from_sat_per_kwu((v * 250.0).round() as u64)))
+        .collect()
 }
 
 /// A builder for an [`AsyncClient`] or [`BlockingClient`].
@@ -521,51 +529,59 @@ mod test {
     }
 
     #[test]
-    fn feerate_parsing() {
-        let esplora_fees = serde_json::from_str::<HashMap<u16, f64>>(
+    fn test_feerate_parsing() {
+        let esplora_fees_raw = serde_json::from_str::<HashMap<u16, f64>>(
             r#"{
-  "25": 1.015,
-  "5": 2.3280000000000003,
-  "12": 2.0109999999999997,
-  "15": 1.018,
-  "17": 1.018,
-  "11": 2.0109999999999997,
-  "3": 3.01,
-  "2": 4.9830000000000005,
-  "6": 2.2359999999999998,
-  "21": 1.018,
-  "13": 1.081,
-  "7": 2.2359999999999998,
-  "8": 2.2359999999999998,
-  "16": 1.018,
-  "20": 1.018,
-  "22": 1.017,
-  "23": 1.017,
-  "504": 1,
-  "9": 2.2359999999999998,
-  "14": 1.018,
-  "10": 2.0109999999999997,
-  "24": 1.017,
-  "1008": 1,
-  "1": 4.9830000000000005,
-  "4": 2.3280000000000003,
-  "19": 1.018,
-  "144": 1,
-  "18": 1.018
-}
-"#,
+        "1": 1.952,
+        "2": 1.952,
+        "3": 1.199,
+        "4": 1.013,
+        "5": 1.013,
+        "6": 1.013,
+        "7": 1.013,
+        "8": 1.013,
+        "9": 1.013,
+        "10": 1.013,
+        "11": 1.013,
+        "12": 1.013,
+        "13": 0.748,
+        "14": 0.748,
+        "15": 0.748,
+        "16": 0.748,
+        "17": 0.748,
+        "18": 0.748,
+        "19": 0.748,
+        "20": 0.748,
+        "21": 0.748,
+        "22": 0.748,
+        "23": 0.748,
+        "24": 0.748,
+        "25": 0.748,
+        "144": 0.693,
+        "504": 0.693,
+        "1008": 0.693
+    }"#,
         )
         .unwrap();
+
+        // Convert fees from sat/vB (`f64`) to `FeeRate`.
+        // Note that `get_fee_estimates` already returns `HashMap<u16, FeeRate>`.
+        let esplora_fees = sat_per_vbyte_to_feerate(esplora_fees_raw);
+
         assert!(convert_fee_rate(1, HashMap::new()).is_none());
-        assert_eq!(convert_fee_rate(6, esplora_fees.clone()).unwrap(), 2.236);
         assert_eq!(
-            convert_fee_rate(26, esplora_fees.clone()).unwrap(),
-            1.015,
-            "should inherit from value for 25"
+            convert_fee_rate(6, esplora_fees.clone()),
+            Some(FeeRate::from_sat_per_kwu((1.013_f64 * 250.0).round() as u64)),
+            "should inherit from value for target=6"
+        );
+        assert_eq!(
+            convert_fee_rate(26, esplora_fees.clone()),
+            Some(FeeRate::from_sat_per_kwu((0.748_f64 * 250.0).round() as u64)),
+            "should inherit from value for target=25"
         );
         assert!(
             convert_fee_rate(0, esplora_fees).is_none(),
-            "should not return feerate for 0 target"
+            "should not return feerate for target=0"
         );
     }
 
