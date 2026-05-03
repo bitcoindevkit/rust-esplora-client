@@ -70,10 +70,12 @@
 #![cfg_attr(not(feature = "bitreq"), doc = "[`bitreq`]: https://docs.rs/bitreq")]
 #![allow(clippy::result_large_err)]
 #![warn(missing_docs)]
+#![allow(deprecated)]
 
 use std::collections::HashMap;
 use std::fmt;
 use std::num::TryFromIntError;
+#[cfg(any(feature = "blocking", feature = "async"))]
 use std::time::Duration;
 
 #[cfg(feature = "async")]
@@ -86,6 +88,7 @@ pub mod r#async;
 pub mod blocking;
 
 pub use api::*;
+#[cfg(any(feature = "blocking", feature = "async"))]
 use bitreq::Response;
 #[cfg(feature = "blocking")]
 pub use blocking::BlockingClient;
@@ -100,6 +103,7 @@ pub const RETRYABLE_ERROR_CODES: [u16; 3] = [
 ];
 
 /// Base backoff in milliseconds.
+#[cfg(any(feature = "blocking", feature = "async"))]
 const BASE_BACKOFF_MILLIS: Duration = Duration::from_millis(256);
 
 /// Default max retries.
@@ -111,34 +115,40 @@ const DEFAULT_MAX_CONNECTIONS: usize = 10;
 
 /// Check if [`Response`] status is within 100-199.
 #[allow(unused)]
+#[cfg(any(feature = "blocking", feature = "async"))]
 fn is_informational(response: &Response) -> bool {
     (100..200).contains(&response.status_code)
 }
 
 /// Check if [`Response`] status is within 200-299.
+#[cfg(any(feature = "blocking", feature = "async"))]
 fn is_success(response: &Response) -> bool {
     (200..300).contains(&response.status_code)
 }
 
 /// Check if [`Response`] status is within 300-399.
 #[allow(unused)]
+#[cfg(any(feature = "blocking", feature = "async"))]
 fn is_redirection(response: &Response) -> bool {
     (300..400).contains(&response.status_code)
 }
 
 /// Check if [`Response`] status is within 400-499.
 #[allow(unused)]
+#[cfg(any(feature = "blocking", feature = "async"))]
 fn is_client_error(response: &Response) -> bool {
     (400..500).contains(&response.status_code)
 }
 
 /// Check if [`Response`] status is within 500-599.
 #[allow(unused)]
+#[cfg(any(feature = "blocking", feature = "async"))]
 fn is_server_error(response: &Response) -> bool {
     (500..600).contains(&response.status_code)
 }
 
 /// Check if [`Response`] status is within the retryable ones.
+#[cfg(any(feature = "blocking", feature = "async"))]
 fn is_retryable(response: &Response) -> bool {
     RETRYABLE_ERROR_CODES.contains(&(response.status_code as u16))
 }
@@ -157,6 +167,7 @@ pub fn convert_fee_rate(target_blocks: usize, estimates: HashMap<u16, FeeRate>) 
 }
 
 /// Converts a [`HashMap`] of fee estimates expressed as sat/vB ([`f64`]) into a [`FeeRate`].
+#[cfg(any(feature = "blocking", feature = "async"))]
 pub(crate) fn sat_per_vbyte_to_feerate(estimates: HashMap<u16, f64>) -> HashMap<u16, FeeRate> {
     estimates
         .into_iter()
@@ -326,11 +337,11 @@ impl_error!(bitcoin::consensus::encode::Error, BitcoinEncoding, Error);
 impl_error!(bitcoin::hex::HexToArrayError, HexToArray, Error);
 impl_error!(bitcoin::hex::HexToBytesError, HexToBytes, Error);
 
+#[cfg(all(test, feature = "blocking", feature = "async", feature = "tokio"))]
 #[cfg(test)]
 mod test {
     use super::*;
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     use {
         bitcoin::{hashes::Hash, Address, Amount},
         core::str::FromStr,
@@ -340,14 +351,12 @@ mod test {
     };
 
     /// Struct that holds regtest `bitcoind` and `electrsd` instances.
-    #[cfg(all(feature = "blocking", feature = "async"))]
     struct TestEnv {
         bitcoind: BitcoinD,
         electrsd: ElectrsD,
     }
 
     /// Configuration parameters for the [`TestEnv`].
-    #[cfg(all(feature = "blocking", feature = "async"))]
     pub struct Config<'a> {
         /// Configuration params for the [`corepc_node::Node`].
         pub bitcoind: bitcoind::Conf<'a>,
@@ -355,7 +364,6 @@ mod test {
         pub electrsd: electrsd::Conf<'a>,
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     impl Default for Config<'_> {
         /// Use the default configuration for [`corepc_node::Node`], and enable
         /// HTTP for [`electrsd::ElectrsD`], exposing an Esplora API endpoint.
@@ -371,7 +379,6 @@ mod test {
         }
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     impl TestEnv {
         /// Instantiate a [`TestEnv`] with default [`Config`].
         pub fn new() -> Self {
@@ -585,7 +592,6 @@ mod test {
         );
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tx() {
         let env = TestEnv::new();
@@ -605,7 +611,6 @@ mod test {
         assert_eq!(tx, tx_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tx_no_opt() {
         let env = TestEnv::new();
@@ -625,7 +630,6 @@ mod test {
         assert_eq!(tx_no_opt, tx_no_opt_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tx_status() {
         let env = TestEnv::new();
@@ -656,7 +660,6 @@ mod test {
         assert!(tx_status.block_time.is_none());
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tx_info() {
         let env = TestEnv::new();
@@ -714,7 +717,6 @@ mod test {
         assert_eq!(async_client.get_tx_info(&txid).await.unwrap(), None);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_header_by_hash() {
         let env = TestEnv::new();
@@ -732,7 +734,6 @@ mod test {
         assert_eq!(block_header, block_header_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_status() {
         let env = TestEnv::new();
@@ -763,7 +764,6 @@ mod test {
         assert_eq!(expected, block_status_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_non_existing_block_status() {
         // Esplora returns the same status for orphaned blocks as for non-existing
@@ -789,7 +789,6 @@ mod test {
         assert_eq!(expected, block_status_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_by_hash() {
         let env = TestEnv::new();
@@ -810,7 +809,6 @@ mod test {
         assert_eq!(expected, block_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_that_errors_are_propagated() {
         let env = TestEnv::new();
@@ -841,7 +839,6 @@ mod test {
         ));
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_by_hash_not_existing() {
         let env = TestEnv::new();
@@ -858,7 +855,6 @@ mod test {
         assert!(block_async.is_none());
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_merkle_proof() {
         let env = TestEnv::new();
@@ -879,7 +875,6 @@ mod test {
         assert!(merkle_proof.pos > 0);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_merkle_block() {
         let env = TestEnv::new();
@@ -909,7 +904,6 @@ mod test {
         assert!(indexes[0] > 0);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_output_status() {
         let env = TestEnv::new();
@@ -937,7 +931,6 @@ mod test {
         assert_eq!(output_status, output_status_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_height() {
         let env = TestEnv::new();
@@ -949,7 +942,6 @@ mod test {
         assert_eq!(block_height, block_height_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tip_hash() {
         let env = TestEnv::new();
@@ -960,7 +952,6 @@ mod test {
         assert_eq!(tip_hash, tip_hash_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_hash() {
         let env = TestEnv::new();
@@ -979,7 +970,6 @@ mod test {
         assert_eq!(block_hash, block_hash_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_txid_at_block_index() {
         let env = TestEnv::new();
@@ -1004,7 +994,6 @@ mod test {
         assert_eq!(txid_at_block_index, txid_at_block_index_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_fee_estimates() {
         let env = TestEnv::new();
@@ -1015,7 +1004,6 @@ mod test {
         assert_eq!(fee_estimates.len(), fee_estimates_async.len());
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_scripthash_txs() {
         let env = TestEnv::new();
@@ -1054,7 +1042,6 @@ mod test {
         assert_eq!(scripthash_txs_txids, scripthash_txs_txids_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_info() {
         let env = TestEnv::new();
@@ -1077,7 +1064,6 @@ mod test {
         assert_eq!(block_info_async.previousblockhash, None);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_txids() {
         let env = TestEnv::new();
@@ -1111,7 +1097,6 @@ mod test {
         }
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_block_txs() {
         let env = TestEnv::new();
@@ -1127,7 +1112,6 @@ mod test {
     }
 
     #[allow(deprecated)]
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_blocks() {
         let env = TestEnv::new();
@@ -1161,7 +1145,6 @@ mod test {
         assert_eq!(blocks_genesis, blocks_genesis_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tx_with_http_headers() {
         use bitcoind::get_available_port;
@@ -1248,7 +1231,6 @@ mod test {
         let _ = async_task.await.expect("async task should not panic");
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_address_stats() {
         let env = TestEnv::new();
@@ -1279,7 +1261,6 @@ mod test {
         );
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_scripthash_stats() {
         let env = TestEnv::new();
@@ -1401,7 +1382,6 @@ mod test {
         assert_eq!(scripthash_stats_blocking_bech32m.chain_stats.tx_count, 1);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_address_txs() {
         let env = TestEnv::new();
@@ -1423,7 +1403,6 @@ mod test {
         assert_eq!(address_txs_async[0].txid, txid);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_address_utxos() {
         let env = TestEnv::new();
@@ -1447,7 +1426,6 @@ mod test {
         assert_eq!(address_utxos_blocking, address_utxos_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_scripthash_utxos() {
         let env = TestEnv::new();
@@ -1471,7 +1449,6 @@ mod test {
         assert_eq!(scripthash_utxos_blocking, scripthash_utxos_async);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_get_tx_outspends() {
         let env = TestEnv::new();
@@ -1498,7 +1475,6 @@ mod test {
         assert!(outspends_blocking.iter().all(|output| !output.spent));
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_mempool_methods() {
         let env = TestEnv::new();
@@ -1557,7 +1533,6 @@ mod test {
         assert_eq!(mempool_address_txs_blocking.len(), 5);
     }
 
-    #[cfg(all(feature = "blocking", feature = "async"))]
     #[tokio::test]
     async fn test_broadcast() {
         let env = TestEnv::new();
