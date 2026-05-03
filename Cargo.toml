@@ -37,7 +37,7 @@ log = { version = "0.4.29" } # blame: electrsd v0.38.0 -> bitcoind -> corepc_cli
 openssl-sys = { version = "0.9.114" } # blame: bitreq v0.3.5 -> native-tls -> openssl
 openssl = { version = "0.10.78" } # blame: match `openssl-sys`
 native-tls = { version = "0.2.11" } # blame: bitreq v0.3.5 -> native-tls
-tempfile = { version = "=3.15.0" }  # blame: tempfile >=v3.16 requires getrandom >=v0.3
+tempfile = { version = "=3.27.0" }  # blame: tempfile >=v3.16 requires getrandom >=v0.3
 security-framework = { version = "=2.11.1" } # blame: rustls-native-certs 0.8.3 → security-framework 3.x (edition2024)
 
 [features]
