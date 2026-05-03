@@ -25,13 +25,20 @@ serde_json = { version = "1.0.117", features = ["std"], default-features = false
 bitcoin = { version = "0.32", features = ["serde", "std"], default-features = false }
 hex = { version = "0.2.2", package = "hex-conservative" }
 bitreq = { version = "0.3.5", optional = true }
-
-# Default async runtime for tests
+# Default runtime when running async tests
 tokio = { version = "1", features = ["time"], optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 electrsd = { version = "0.38.0", features = ["legacy", "esplora_a33e97e1", "bitcoind_download", "bitcoind_29_0"] }
+# These pins are needed for `Cargo-minimal.lock`:
+tar = { version = "0.4.45" } # blame: electrsd v0.38.0 -> bitcoind -> tar
+log = { version = "0.4.29" } # blame: electrsd v0.38.0 -> bitcoind -> corepc_client
+openssl-sys = { version = "0.9.114" } # blame: bitreq v0.3.5 -> native-tls -> openssl
+openssl = { version = "0.10.78" } # blame: match `openssl-sys`
+native-tls = { version = "0.2.11" } # blame: bitreq v0.3.5 -> native-tls
+tempfile = { version = "=3.15.0" }  # blame: tempfile >=v3.16 requires getrandom >=v0.3
+security-framework = { version = "=2.11.1" } # blame: rustls-native-certs 0.8.3 → security-framework 3.x (edition2024)
 
 [features]
 default = ["blocking", "blocking-https", "async", "async-https", "tokio"]
