@@ -9,8 +9,6 @@ use std::thread;
 
 use bitcoin::consensus::encode::serialize_hex;
 use bitreq::{Method, Proxy, Request, Response};
-#[allow(unused_imports)]
-use log::{debug, error, info, trace};
 
 use bitcoin::block::Header as BlockHeader;
 use bitcoin::consensus::{deserialize, serialize, Decodable};

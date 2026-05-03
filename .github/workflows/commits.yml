@@ -1,0 +1,25 @@
+name: Commits
+
+on:
+    push:
+      branches: [ master ]
+    pull_request:
+
+permissions: {}
+env:
+    CARGO_TERM_COLOR: always
+
+jobs:
+    commit-signatures:
+        name: Check Commit Signatures
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              with:
+                  persist-credentials: false
+                  fetch-depth: 0
+
+            - name: Check commit signatures
+              run: bash contrib/check-signatures.sh

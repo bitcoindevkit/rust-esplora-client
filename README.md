@@ -7,18 +7,48 @@ Bitcoin Esplora API client library. Supports plaintext, TLS and Onion servers. B
     <a href="https://docs.rs/esplora-client"><img src="https://img.shields.io/badge/docs.rs-esplora--client-blue"/></a>
     <a href="https://blog.rust-lang.org/2023/12/28/Rust-1.75.0.html"><img src="https://img.shields.io/badge/MSRV-1.75.0%2B-orange.svg"/></a>
     <a href="https://github.com/bitcoindevkit/rust-esplora-client/blob/master/LICENSE.md"><img src="https://img.shields.io/badge/License-MIT%2FApache--2.0-red.svg"/></a>
-    <a href="https://github.com/bitcoindevkit/rust-esplora-client/actions/workflows/cont_integration.yml"><img src="https://github.com/bitcoindevkit/rust-esplora-client/actions/workflows/cont_integration.yml/badge.svg"></a>
+    <a href="https://github.com/bitcoindevkit/rust-esplora-client/actions/workflows/rust.yml"><img src="https://github.com/bitcoindevkit/rust-esplora-client/actions/workflows/rust.yml/badge.svg"></a>
 </p>
 
-## Minimum Supported Rust Version (MSRV)
+## Developing
 
-This library should compile with any combination of features with Rust 1.75.0.
+This project uses [`just`](https://github.com/casey/just) for command running, and
+[`cargo-rbmt`](https://github.com/rust-bitcoin/rust-bitcoin-maintainer-tools/tree/master/cargo-rbmt)
+to manage everything related to `cargo`, such as formatting, linting, testing and CI. To install them, run:
 
-To build with the MSRV you will need to pin dependencies:
+```console
+~$ cargo install just
 
-```shell
-bash ci/pin-msrv.sh
+~$ cargo install cargo-rbmt
 ```
+
+A `justfile` is provided for convenience. Run `just` to see available commands:
+
+```console
+~$ just
+> rust-esplora-client
+> Bitcoin Esplora API client library
+
+Available recipes:
+    audit       # Run `cargo audit` [alias: a]
+    build       # Build `rust-esplora-client` [alias: b]
+    check       # Check code formatting, compilation, and linting [alias: c]
+    check-sigs  # Checks whether all commits in this branch are signed [alias: cs]
+    doc         # Generate documentation [alias: d]
+    doc-open    # Generate and open documentation [alias: do]
+    fmt         # Format code [alias: f]
+    lock        # Regenerate Cargo-recent.lock and Cargo-minimal.lock [alias: l]
+    pre-push    # Run pre-push checks [alias: p]
+    test        # Run tests [alias: t]
+    test-matrix # Run tests with the toolchain + lockfile matrix
+    zizmor      # Run Zizmor Static Analysis [alias: z]
+```
+
+## Minimum Supported Rust Version
+
+This library should compile with any combination of features on Rust 1.75.0.
+
+To build with the MSRV toolchain, copy `Cargo-minimal.lock` to `Cargo.lock`.
 
 ## License
 
