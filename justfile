@@ -1,47 +1,75 @@
+alias a := audit
 alias b := build
 alias c := check
+alias cs := check-sigs
+alias d := doc
+alias do := doc-open
 alias f := fmt
-alias m := msrv
-alias p := pre-push
+alias l := lock
 alias t := test
+alias z := zizmor
+alias p := pre-push
 
 _default:
     @echo "> rust-esplora-client"
     @echo "> Bitcoin Esplora API client library\n"
     @just --list
 
+[doc: "Run `cargo audit`"]
+audit:
+    cargo audit
+
+[doc: "Build `rust-esplora-client`"]
+build:
+    RBMT_LOG_LEVEL=progress cargo rbmt run build
+
+[doc: "Check code formatting, compilation, and linting"]
+check:
+    RBMT_LOG_LEVEL=progress cargo rbmt fmt --check
+    RBMT_LOG_LEVEL=progress cargo rbmt lint
+    RBMT_LOG_LEVEL=progress cargo rbmt docs
+
 [doc: "Checks whether all commits in this branch are signed"]
 check-sigs:
     bash contrib/check-signatures.sh
 
-# Build the project
-build:
-   cargo build
+[doc: "Generate documentation"]
+doc:
+    RBMT_LOG_LEVEL=progress cargo rbmt docs
+    RBMT_LOG_LEVEL=progress cargo rbmt run doc --no-deps
 
-# Check code formatting, compilation, linting, documentation and commit signature
-check:
-   cargo +nightly fmt --all -- --check
-   cargo check --all-features --all-targets
-   cargo clippy --all-features --all-targets -- -D warnings
-   RUSTDOCFLAGS="-D warnings" cargo doc --all-features --no-deps
-   @[ "$(git log --pretty='format:%G?' -1 HEAD)" = "N" ] && \
-       echo "\n⚠️  Unsigned commit: BDK requires that commits be signed." || \
-       true
+[doc: "Generate and open documentation"]
+doc-open:
+    RBMT_LOG_LEVEL=progress cargo rbmt docs
+    RBMT_LOG_LEVEL=progress cargo rbmt run doc --no-deps --open
 
-# Format all code
+[doc: "Format code"]
 fmt:
-   cargo +nightly fmt
+    RBMT_LOG_LEVEL=progress cargo rbmt fmt
 
-# Build and test using the MSRV toolchain (1.75.0)
-msrv:
-   rm -rf Cargo.lock
-   bash ci/pin-msrv.sh
-   cargo +1.75.0 build --all-features
-   cargo +1.75.0 test --all-features -- --test-threads=16
+[doc: "Regenerate Cargo-recent.lock and Cargo-minimal.lock"]
+lock:
+    RBMT_LOG_LEVEL=verbose cargo rbmt lock
 
-# Run pre-push suite: format, check, and test
-pre-push: check-sigs check test msrv
-
-# Run all tests on the workspace with all features
+[doc: "Run tests"]
 test:
-   cargo test --all-features -- --test-threads=16
+    RBMT_LOG_LEVEL=verbose cargo rbmt test
+
+[doc: "Run tests with the toolchain + lockfile matrix"]
+test-matrix:
+    RBMT_LOG_LEVEL=verbose cargo rbmt test --toolchain stable --lock-file recent
+    RBMT_LOG_LEVEL=verbose cargo rbmt test --toolchain msrv --lock-file minimal
+
+[doc: "Run Zizmor Static Analysis"]
+zizmor:
+    uvx zizmor .
+
+[doc: "Run pre-push checks"]
+pre-push:
+    @just lock
+    @just check
+    @just doc
+    @just test
+    @just audit
+    @just zizmor
+    @just check-sigs
