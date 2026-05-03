@@ -311,7 +311,35 @@ pub enum Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{self:?}")
+        match self {
+            #[cfg(any(feature = "blocking", feature = "async"))]
+            Error::BitReq(e) => write!(f, "Bitreq HTTP error: {e}"),
+            Error::SerdeJson(e) => write!(f, "JSON (de)serialization error: {e}"),
+            Error::HttpResponse { status, message } => {
+                write!(f, "HTTP error {status}: {message}")
+            }
+            Error::Parsing(e) => write!(f, "Failed to parse invalid number: {e}"),
+            Error::StatusCode(e) => write!(f, "Invalid status code: {e}"),
+            Error::BitcoinEncoding(e) => write!(f, "Invalid Bitcoin data: {e}"),
+            Error::HexToArray(e) => write!(f, "Invalid hex to array conversion: {e}"),
+            Error::HexToBytes(e) => write!(f, "Invalid hex to bytes conversion: {e}"),
+            Error::TransactionNotFound(txid) => {
+                write!(f, "Transaction not found: {txid}")
+            }
+            Error::HeaderHeightNotFound(height) => {
+                write!(f, "Block header at height {height} not found")
+            }
+            Error::HeaderHashNotFound(hash) => {
+                write!(f, "Block header with hash {hash} not found")
+            }
+            Error::InvalidHttpHeaderName(name) => {
+                write!(f, "Invalid HTTP header name: {name}")
+            }
+            Error::InvalidHttpHeaderValue(value) => {
+                write!(f, "Invalid HTTP header value: {value}")
+            }
+            Error::InvalidResponse => write!(f, "The server sent an invalid response"),
+        }
     }
 }
 
