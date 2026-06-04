@@ -444,7 +444,14 @@ impl BlockingClient {
     /// Returns a [`HashMap`] where the key is the confirmation target in blocks
     /// and the value is the estimated [`FeeRate`].
     pub fn get_fee_estimates(&self) -> Result<HashMap<u16, FeeRate>, Error> {
-        let estimates_raw: HashMap<u16, f64> = self.get_response_json("/fee-estimates")?;
+        // Tolerate non-numeric entries in the response (see the async client and
+        // mempool.space's deprecated `/fee-estimates` `"warning"` key). Keep only
+        // entries whose key is a numeric confirmation target and value a number.
+        let raw: HashMap<String, serde_json::Value> = self.get_response_json("/fee-estimates")?;
+        let estimates_raw: HashMap<u16, f64> = raw
+            .into_iter()
+            .filter_map(|(target, feerate)| Some((target.parse::<u16>().ok()?, feerate.as_f64()?)))
+            .collect();
         let estimates = sat_per_vbyte_to_feerate(estimates_raw);
 
         Ok(estimates)

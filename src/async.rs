@@ -545,7 +545,18 @@ impl<S: Sleeper> AsyncClient<S> {
     /// Returns a [`HashMap`] where the key is the confirmation target in blocks
     /// and the value is the estimated [`FeeRate`].
     pub async fn get_fee_estimates(&self) -> Result<HashMap<u16, FeeRate>, Error> {
-        let estimates_raw: HashMap<u16, f64> = self.get_response_json("/fee-estimates").await?;
+        // Tolerate non-numeric entries in the response. mempool.space added a
+        // non-numeric `"warning"` key to its (deprecated) `/fee-estimates`
+        // endpoint, which makes a strict `HashMap<u16, f64>` deserialization
+        // fail and breaks every downstream caller (e.g. ldk-node refuses to
+        // start). Keep only entries whose key is a numeric confirmation target
+        // and whose value is a number.
+        let raw: HashMap<String, serde_json::Value> =
+            self.get_response_json("/fee-estimates").await?;
+        let estimates_raw: HashMap<u16, f64> = raw
+            .into_iter()
+            .filter_map(|(target, feerate)| Some((target.parse::<u16>().ok()?, feerate.as_f64()?)))
+            .collect();
         let estimates = sat_per_vbyte_to_feerate(estimates_raw);
 
         Ok(estimates)
