@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! # Tests for ScriptHash Methods
+//! # Tests for `ScriptHash` Methods
 
 #![allow(unused_imports)]
 #![cfg(all(feature = "blocking", feature = "async", feature = "tokio"))]
@@ -17,7 +17,7 @@ async fn test_get_scripthash_utxos() {
     let env = TestEnv::new();
     let (blocking_client, async_client) = env.setup_clients();
 
-    let address = env.get_legacy_address();
+    let address = TestEnv::get_legacy_address();
     let _txid = env
         .bitcoind_client()
         .send_to_address(&address, Amount::from_sat(21000))
@@ -40,7 +40,7 @@ async fn test_get_scripthash_txs() {
     let env = TestEnv::new();
     let (blocking_client, async_client) = env.setup_clients();
 
-    let address = env.get_legacy_address();
+    let address = TestEnv::get_legacy_address();
     let txid = env
         .bitcoind_client()
         .send_to_address(&address, Amount::from_sat(1000))
@@ -74,14 +74,15 @@ async fn test_get_scripthash_txs() {
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn test_get_scripthash_stats() {
     let env = TestEnv::new();
     let (blocking_client, async_client) = env.setup_clients();
 
-    let address_legacy = env.get_legacy_address();
-    let address_nested_segwit = env.get_nested_segwit_address();
-    let address_bech32 = env.get_bech32_address();
-    let address_bech32m = env.get_bech32m_address();
+    let address_legacy = TestEnv::get_legacy_address();
+    let address_nested_segwit = TestEnv::get_nested_segwit_address();
+    let address_bech32 = TestEnv::get_bech32_address();
+    let address_bech32m = TestEnv::get_bech32m_address();
 
     // Send a transaction to each address.
     let _txid = env
