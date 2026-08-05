@@ -43,6 +43,10 @@ Available recipes:
     zizmor     # Run Zizmor Static Analysis [alias: z]
 ```
 
+## Security Policy
+
+To report a security issue, please refer to the [security policy](SECURITY.md).
+
 ## Minimum Supported Rust Version
 
 This library should compile with any combination of features on Rust 1.75.0.
