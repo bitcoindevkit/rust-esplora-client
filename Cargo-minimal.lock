@@ -393,6 +393,7 @@ dependencies = [
  "bitcoin",
  "bitreq",
  "electrsd",
+ "esplora-types",
  "hex-conservative 0.2.2",
  "log",
  "native-tls",
@@ -404,6 +405,14 @@ dependencies = [
  "tar",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "esplora-types"
+version = "0.1.0"
+dependencies = [
+ "bitcoin",
+ "serde",
 ]
 
 [[package]]
@@ -972,9 +981,9 @@ dependencies = [
 
 [[package]]
 name = "spin"
-version = "0.9.2"
+version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "511254be0c5bcf062b019a6c89c01a664aa359ded62f78aa72c6fc137c0590e5"
+checksum = "3763264f6b73151db08c50ff20d7d8a0b8796e021cdea7ceedad07b80155fa0e"
 
 [[package]]
 name = "subtle"

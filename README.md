@@ -1,14 +1,23 @@
 # rust-esplora-client
 
 <p>
-    <a href="https://crates.io/crates/esplora-client"><img src="https://img.shields.io/crates/v/esplora-client.svg"/></a>
-    <a href="https://docs.rs/esplora-client"><img src="https://img.shields.io/badge/docs.rs-esplora--client-blue"/></a>
     <a href="https://blog.rust-lang.org/2023/12/28/Rust-1.75.0.html"><img src="https://img.shields.io/badge/MSRV-1.75.0%2B-orange.svg"/></a>
     <a href="https://github.com/bitcoindevkit/rust-esplora-client/blob/master/LICENSE.md"><img src="https://img.shields.io/badge/License-MIT%2FApache--2.0-red.svg"/></a>
     <a href="https://github.com/bitcoindevkit/rust-esplora-client/actions/workflows/rust.yml"><img src="https://github.com/bitcoindevkit/rust-esplora-client/actions/workflows/rust.yml/badge.svg"></a>
 </p>
 
 Asynchronous and blocking clients and types for interacting with Esplora servers over HTTP.
+
+## Crates in this repository
+
+This is a Cargo workspace containing two crates:
+
+| Crate | Description | Badges |
+|---|---|---|
+| [`esplora-client`](./esplora-client) | Blocking and async HTTP clients for the Esplora API. | [![Crate Info](https://img.shields.io/crates/v/esplora-client.svg)](https://crates.io/crates/esplora-client) [![API Docs](https://img.shields.io/badge/docs.rs-esplora--client-blue)](https://docs.rs/esplora-client) |
+| [`esplora-types`](./esplora-types) | The Esplora request/response types, with no HTTP client dependency. | [![Crate Info](https://img.shields.io/crates/v/esplora-types.svg)](https://crates.io/crates/esplora-types) [![API Docs](https://img.shields.io/badge/docs.rs-esplora--types-blue)](https://docs.rs/esplora-types) |
+
+`esplora-client` re-exports every `esplora-types` item under its own top level and under `esplora_client::api`, so existing code that imports from `esplora-client` alone continues to work unchanged.
 
 ## Developing
 
@@ -49,7 +58,7 @@ To report a security issue, please refer to the [security policy](SECURITY.md).
 
 ## Minimum Supported Rust Version
 
-This library should compile with any combination of features on Rust 1.75.0.
+Both crates in this workspace should compile with any combination of features on Rust 1.75.0.
 
 To build with the MSRV toolchain, copy `Cargo-minimal.lock` to `Cargo.lock`.
 

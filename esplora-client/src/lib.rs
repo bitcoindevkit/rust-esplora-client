@@ -98,7 +98,7 @@ use std::time::Duration;
 #[cfg(feature = "async")]
 pub use r#async::Sleeper;
 
-pub mod api;
+pub use esplora_types as api;
 #[cfg(feature = "async")]
 pub mod r#async;
 #[cfg(feature = "blocking")]

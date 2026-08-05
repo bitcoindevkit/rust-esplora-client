@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! # Esplora API
+//! # Esplora Types
 //!
-//! This module implements the types and deserializers
-//! needed to interact with an Esplora-compliant server.
+//! Shared, transport-agnostic types and deserializers for interacting with
+//! an Esplora-compliant server. This crate has no HTTP client dependency;
+//! see [`esplora-client`](https://docs.rs/esplora-client) for a blocking and
+//! async HTTP client built on these types.
 //!
 //! Refer to the [Esplora API] specification for the complete API reference.
 //!
