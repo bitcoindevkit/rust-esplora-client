@@ -143,6 +143,11 @@ impl TestEnv {
         &self.bitcoind.client
     }
 
+    /// Get the `host:port` of the [`ElectrsD`]'s Esplora HTTP API.
+    pub(crate) fn esplora_url(&self) -> &str {
+        self.electrsd.esplora_url.as_ref().unwrap()
+    }
+
     #[cfg(all(feature = "blocking", feature = "async", feature = "tokio"))]
     /// Setup both [`BlockingClient`] and [`AsyncClient`].
     pub(crate) fn setup_clients(&self) -> (BlockingClient, AsyncClient) {
