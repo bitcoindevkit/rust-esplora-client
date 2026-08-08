@@ -6,6 +6,7 @@
 
 ### Changed
 
+* chore(deps): bump `electrsd` to v0.41.0 [#237]
 * chore!: remove deprecated `BlockSummary` and `get_block` [#225]
 
 ### Fixed
