@@ -494,6 +494,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "mempool-client"
+version = "0.1.0"
+dependencies = [
+ "esplora-client",
+ "mempool-types",
+]
+
+[[package]]
+name = "mempool-types"
+version = "0.1.0"
+dependencies = [
+ "bitcoin",
+ "esplora-types",
+ "serde",
+]
+
+[[package]]
 name = "miniz_oxide"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"

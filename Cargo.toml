@@ -1,5 +1,5 @@
 [workspace]
-members = ["esplora-client", "esplora-types"]
+members = ["esplora-client", "esplora-types", "mempool-client", "mempool-types"]
 resolver = "2"
 
 [workspace.metadata.rbmt.toolchains]

@@ -1,0 +1,28 @@
+[package]
+name = "mempool-types"
+version = "0.1.0"
+edition = "2021"
+authors = [
+  "Alekos Filini <alekos.filini@gmail.com>",
+  "Bitcoin Dev Kit Developers"
+]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/bitcoindevkit/rust-esplora-client"
+repository = "https://github.com/bitcoindevkit/rust-esplora-client"
+documentation = "https://docs.rs/mempool-types/"
+description = "mempool.space specific types, layered on top of esplora-types"
+keywords = ["bitcoin", "mempool", "mempool.space", "esplora"]
+readme = "README.md"
+rust-version = "1.75.0" # MSRV
+
+[lib]
+name = "mempool_types"
+
+[dependencies]
+esplora-types = { path = "../esplora-types", version = "0.1.0" }
+serde = { version = "1.0.194", features = ["derive"] }
+bitcoin = { version = "0.32", features = ["serde"], default-features = false }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

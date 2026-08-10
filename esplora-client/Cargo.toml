@@ -64,6 +64,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [package.metadata.rbmt.lint]
 allowed_duplicates = [
     "getrandom",
+    "syn",
     "windows-sys",
     "wit-bindgen",
 ]

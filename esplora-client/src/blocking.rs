@@ -247,7 +247,7 @@ impl BlockingClient {
     /// # Errors
     ///
     /// Returns an [`Error`] if the request fails or JSON deserialization fails.
-    fn get_response_json<'a, T: serde::de::DeserializeOwned>(
+    pub fn get_response_json<'a, T: serde::de::DeserializeOwned>(
         &'a self,
         path: &'a str,
     ) -> Result<T, Error> {

@@ -210,7 +210,7 @@ impl<S: Sleeper> AsyncClient<S> {
     /// # Errors
     ///
     /// Returns an [`Error`] if the request fails or JSON deserialization fails.
-    async fn get_response_json<T: serde::de::DeserializeOwned>(
+    pub async fn get_response_json<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
     ) -> Result<T, Error> {
