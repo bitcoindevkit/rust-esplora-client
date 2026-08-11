@@ -1,0 +1,28 @@
+[package]
+name = "esplora-types"
+version = "0.1.0"
+edition = "2021"
+authors = [
+  "Alekos Filini <alekos.filini@gmail.com>",
+  "Bitcoin Dev Kit Developers"
+]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/bitcoindevkit/rust-esplora-client"
+repository = "https://github.com/bitcoindevkit/rust-esplora-client"
+documentation = "https://docs.rs/esplora-types/"
+description = "Shared types for interacting with Esplora-compliant servers"
+keywords = ["bitcoin", "esplora"]
+readme = "README.md"
+rust-version = "1.75.0" # MSRV
+
+[lib]
+name = "esplora_types"
+
+[dependencies]
+serde = { version = "1.0.194", features = ["derive"] }
+bitcoin = { version = "0.32", features = ["serde"], default-features = false }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+

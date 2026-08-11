@@ -6,6 +6,7 @@
 
 ### Changed
 
+* feat: split types into a new `esplora-types` crate, re-exported as `esplora_client::api` [#XXX]
 * chore!: remove deprecated `BlockSummary` and `get_block` [#225]
 
 ### Fixed

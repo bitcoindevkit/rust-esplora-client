@@ -393,6 +393,7 @@ dependencies = [
  "bitcoin",
  "bitreq",
  "electrsd",
+ "esplora-types",
  "hex-conservative 0.2.2",
  "log",
  "native-tls",
@@ -404,6 +405,14 @@ dependencies = [
  "tar",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "esplora-types"
+version = "0.1.0"
+dependencies = [
+ "bitcoin",
+ "serde",
 ]
 
 [[package]]
@@ -547,6 +556,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f83fb6581e8ed1f85fd45c116db8405483899489e38406156c25eb743554361d"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "mempool-client"
+version = "0.1.0"
+dependencies = [
+ "esplora-client",
+ "mempool-types",
+]
+
+[[package]]
+name = "mempool-types"
+version = "0.1.0"
+dependencies = [
+ "bitcoin",
+ "esplora-types",
+ "serde",
 ]
 
 [[package]]
@@ -972,9 +998,9 @@ dependencies = [
 
 [[package]]
 name = "spin"
-version = "0.9.2"
+version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "511254be0c5bcf062b019a6c89c01a664aa359ded62f78aa72c6fc137c0590e5"
+checksum = "3763264f6b73151db08c50ff20d7d8a0b8796e021cdea7ceedad07b80155fa0e"
 
 [[package]]
 name = "subtle"
