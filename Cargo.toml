@@ -59,6 +59,9 @@ blocking-https-native = ["blocking", "bitreq/https-native-tls"]
 blocking-https-rustls = ["blocking", "bitreq/https-rustls"]
 blocking-https-rustls-probe = ["blocking", "bitreq/https-rustls-probe"]
 
+[package.metadata.rbmt]
+version = "0.5.3"
+
 [package.metadata.rbmt.toolchains]
 stable = "1.96.1"
 nightly = "nightly-2026-07-03"

@@ -17,12 +17,12 @@ jobs:
             fail-fast: false
             matrix:
                 include:
-                    - name: Check Formatting
+                    - name: Documentation
+                      task: docs
+                    - name: Formatting
                       task: fmt --check
-                    - name: Lint Code
+                    - name: Linting
                       task: lint
-                    - name: Build Documentation
-                      task: docsrs
 
         steps:
             - name: Checkout Repository
@@ -66,4 +66,4 @@ jobs:
               uses: ./.github/actions/setup-rbmt
 
             - name: ${{ matrix.name }}
-              run: cargo rbmt test --toolchain ${{ matrix.toolchain }} --lock-file ${{ matrix.lockfile }}
+              run: cargo rbmt test --toolchain ${{ matrix.toolchain }} --lockfile ${{ matrix.lockfile }}
