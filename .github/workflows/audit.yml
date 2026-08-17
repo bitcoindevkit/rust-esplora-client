@@ -13,11 +13,23 @@ env:
 
 jobs:
     cargo-audit:
-        name: Cargo Audit
+        name: Cargo Audit - ${{ matrix.name }}
         runs-on: ubuntu-latest
         permissions:
             contents: read
+            checks: write
             issues: write
+        strategy:
+            max-parallel: 1
+            fail-fast: false
+            matrix:
+                include:
+                    - name: Fresh Lockfile
+                      lockfile: Cargo.lock
+                    - name: Recent Lockfile
+                      lockfile: Cargo-recent.lock
+                    - name: Minimal Lockfile
+                      lockfile: Cargo-minimal.lock
 
         steps:
             - name: Checkout Repository
@@ -25,8 +37,25 @@ jobs:
               with:
                   persist-credentials: false
 
-            - uses: actions-rust-lang/audit@72c09e02f132669d52284a3323acdb503cfc1a24 # v1.2.7
-              name: Audit Rust Dependencies
+            - name: Setup Rust Cache
+              uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+
+            - name: Setup cargo-rbmt
+              uses: ./.github/actions/setup-rbmt
+
+            - name: Generate Fresh Lockfile
+              if: ${{ matrix.lockfile == 'Cargo.lock' }}
+              shell: bash
+              run: cargo generate-lockfile
+
+            - name: Select Lockfile
+              if: ${{ matrix.lockfile != 'Cargo.lock' }}
+              shell: bash
+              run: cp ${{ matrix.lockfile }} Cargo.lock
+
+            - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
+              with:
+                  token: ${{ secrets.GITHUB_TOKEN }}
 
     zizmor:
         name: Zizmor
@@ -38,8 +67,8 @@ jobs:
               with:
                   persist-credentials: false
 
-            - name: Install uv
-              uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+            - name: Setup cargo-rbmt
+              uses: ./.github/actions/setup-rbmt
 
             - name: Run Zizmor
-              run: uvx zizmor .
+              run: zizmor .

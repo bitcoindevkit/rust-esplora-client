@@ -15,9 +15,15 @@ _default:
     @echo "> Bitcoin Esplora API client library\n"
     @just --list
 
-[doc: "Run `cargo audit`"]
+[doc: "Run `cargo audit` across all lockfiles"]
 audit:
-    cargo audit
+    @echo "Updating and auditing fresh Cargo.lock"
+    cargo update
+    cargo audit --file Cargo.lock
+    @echo "\nAuditing Cargo-recent.lock"
+    cargo audit --file Cargo-recent.lock
+    @echo "\nAuditing Cargo-minimal.lock"
+    cargo audit --file Cargo-minimal.lock
 
 [doc: "Build `rust-esplora-client`"]
 build:
