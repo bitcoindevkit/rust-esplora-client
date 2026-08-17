@@ -15,9 +15,15 @@ _default:
     @echo "> Bitcoin Esplora API client library\n"
     @just --list
 
-[doc: "Run `cargo audit`"]
+[doc: "Run `cargo audit` across all lockfiles"]
 audit:
-    cargo audit
+    @echo "Updating and auditing fresh Cargo.lock"
+    cargo update
+    cargo audit --file Cargo.lock
+    @echo "\nAuditing Cargo-recent.lock"
+    cargo audit --file Cargo-recent.lock
+    @echo "\nAuditing Cargo-minimal.lock"
+    cargo audit --file Cargo-minimal.lock
 
 [doc: "Build `rust-esplora-client`"]
 build:
@@ -27,7 +33,7 @@ build:
 check:
     RBMT_LOG_LEVEL=progress cargo rbmt fmt --check
     RBMT_LOG_LEVEL=progress cargo rbmt lint
-    RBMT_LOG_LEVEL=progress cargo rbmt docsrs
+    RBMT_LOG_LEVEL=progress cargo rbmt docs
 
 [doc: "Checks whether all commits in this branch are signed"]
 check-sigs:
@@ -35,11 +41,11 @@ check-sigs:
 
 [doc: "Generate documentation"]
 doc:
-    RBMT_LOG_LEVEL=progress cargo rbmt docsrs
+    RBMT_LOG_LEVEL=progress cargo rbmt docs
 
 [doc: "Generate and open documentation"]
 doc-open:
-    RBMT_LOG_LEVEL=progress cargo rbmt docsrs --open
+    RBMT_LOG_LEVEL=progress cargo rbmt docs --open
 
 [doc: "Format code"]
 fmt:
@@ -51,8 +57,8 @@ lock:
 
 [doc: "Run tests"]
 test:
-    RBMT_LOG_LEVEL=verbose cargo rbmt test --toolchain stable --lock-file recent
-    RBMT_LOG_LEVEL=verbose cargo rbmt test --toolchain msrv --lock-file minimal
+    RBMT_LOG_LEVEL=verbose cargo rbmt test --toolchain stable --lockfile recent
+    RBMT_LOG_LEVEL=verbose cargo rbmt test --toolchain msrv --lockfile minimal
 
 [doc: "Run Zizmor Static Analysis"]
 zizmor:

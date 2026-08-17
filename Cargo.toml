@@ -20,25 +20,28 @@ name = "esplora_client"
 path = "src/lib.rs"
 
 [dependencies]
+bitcoin = { version = "0.32", features = ["serde", "std"], default-features = false }
+bitreq = { version = "0.3.7", optional = true }
+hex = { version = "0.2.2", package = "hex-conservative" }
 serde = { version = "1.0.194", features = ["derive"] }
 serde_json = { version = "1.0.117", features = ["std"], default-features = false }
-bitcoin = { version = "0.32", features = ["serde", "std"], default-features = false }
-hex = { version = "0.2.2", package = "hex-conservative" }
-bitreq = { version = "0.3.7", optional = true }
-# Default runtime when running async tests
-tokio = { version = "1", features = ["time"], optional = true }
+tokio = { version = "1.44.2", features = ["time"], optional = true } # Async Client Transport
 
 [dev-dependencies]
-tokio = { version = "1", features = ["full"] }
-electrsd = { version = "0.40.0", default-features = false, features = ["legacy", "esplora_a33e97e1", "bitcoind_download", "bitcoind_29_0"] }
-# These pins are needed for `Cargo-minimal.lock`:
-tar = { version = "0.4.45" } # blame: electrsd v0.38.0 -> bitcoind -> tar
-log = { version = "0.4.29" } # blame: electrsd v0.38.0 -> bitcoind -> corepc_client
-openssl-sys = { version = "0.9.114" } # blame: bitreq v0.3.5 -> native-tls -> openssl
-openssl = { version = "0.10.78" } # blame: match `openssl-sys`
-native-tls = { version = "0.2.11" } # blame: bitreq v0.3.5 -> native-tls
-tempfile = { version = "=3.15.0" }  # blame: tempfile >=v3.16 requires getrandom >=v0.3
-security-framework = { version = "=2.11.1" } # blame: rustls-native-certs 0.8.3 → security-framework 3.x (edition2024)
+electrsd = { version = "0.41.0", default-features = false, features = ["legacy", "esplora_a33e97e1", "bitcoind_download", "bitcoind_29_0"] }
+tokio = { version = "1.44.2", features = ["full"] }
+# Transitive dependency pins:
+anyhow = { version = "1.0.103" } # blame: electrsd@0.41.0 -> anyhow@1.0.102 (RUSTSEC-2026-0190)
+backtrace = { version = "0.3.74" } # blame: bitreq@0.3.7 -> tokio-rustls@0.26.4 -> tokio@1.44.2 -> backtrace@0.3.58 -> miniz_oxide@0.4.0 -> adler@0.2.1 (RUSTSEC-2025-0056)
+bzip2 = { version = "0.4.4" } # blame: electrsd@0.41.0 -> bitcoind@0.41 -> zip@0.6.6 -> bzip2@0.4.3 (RUSTSEC-2023-0004)
+bytes = { version = "1.11.1" } # blame: bitreq@0.3.7 -> tokio-rustls@0.26.4 -> tokio@1.44.2 -> bytes@1.2.1 (RUSTSEC-2026-0007)
+flate2 = { version = "1.0.32" } # blame: electrsd@0.41.0/bitcoind@0.41.0 -> zip@0.6.6 -> flate2@1.0.23 -> miniz_oxide@0.5.0 -> adler@1.0.0 (RUSTSEC-2025-0056)
+mio = { version = "0.8.11" } # blame: bitreq@0.3.7 -> tokio-rustls@0.26.4 -> tokio@1.30.0 -> mio@0.8.7 (RUSTSEC-2024-0019)
+openssl = { version = "0.10.78" } # blame: match `openssl-sys` (multiple RUSTSECs)
+openssl-sys = { version = "0.9.114" } # blame: bitreq@0.3.7 -> native-tls@0.3.0 -> openssl@0.10.15 (multiple RUSTSECs)
+ring = { version = "0.17.12" } # blame: bitreq@0.3.7 -> tokio-rustls@0.26.4 -> rustls@0.23.38-> rustls-webpki@0.103.13 -> ring@0.17.0 (RUSTSEC-2025-0009)
+tar = { version = "0.4.45" } # blame: electrsd@0.41.0 -> bitcoind@0.41.0 -> tar@0.4.0 (RUSTSEC-2018-0002)
+tempfile = { version = ">=3.4.0, <=3.15.0" } # blame: remove_dir_all@0.5.0 -> tempfile@3.0.2 -> native-tls@0.2.3 -> bitreq@0.3.7 (RUSTSEC-2023-0018)
 
 [features]
 default = ["blocking", "blocking-https", "async", "async-https", "tokio"]
@@ -56,19 +59,24 @@ blocking-https-native = ["blocking", "bitreq/https-native-tls"]
 blocking-https-rustls = ["blocking", "bitreq/https-rustls"]
 blocking-https-rustls-probe = ["blocking", "bitreq/https-rustls-probe"]
 
-[package.metadata.rbmt.toolchains]
-stable = "1.96.1"
-nightly = "nightly-2026-07-03"
-
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[package.metadata.rbmt]
+version = "0.5.3"
+
+[package.metadata.rbmt.toolchains]
+stable = "1.97.1"
+nightly = "nightly-2026-08-17"
+
+[package.metadata.rbmt.tools]
+cargo-audit = "0.22.2"
+zizmor = "1.29.0"
+
 [package.metadata.rbmt.lint]
 allowed_duplicates = [
-    "getrandom",
     "windows-sys",
-    "wit-bindgen",
 ]
 
 [package.metadata.rbmt.test]
