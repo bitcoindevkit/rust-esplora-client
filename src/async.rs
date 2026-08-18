@@ -156,7 +156,7 @@ impl<S: Sleeper> AsyncClient<S> {
         let mut delay = BASE_BACKOFF_MILLIS;
         let mut attempts = 0;
 
-        let request = self.build_request(Method::Get, path)?;
+        let request = self.build_request(Method::Get, path)?.with_pipelining();
 
         loop {
             match request.clone().send_async_with_client(&self.client).await? {
