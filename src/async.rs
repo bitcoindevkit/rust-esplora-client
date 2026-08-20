@@ -43,11 +43,11 @@ use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::{Address, Amount, Block, BlockHash, FeeRate, MerkleBlock, Script, Transaction, Txid};
 
-use bitreq::{Client, Method, Proxy, Request, RequestExt, Response};
+use bitreq::{Client, Method, Proxy, Request, RequestExt};
 
 use crate::{
-    duration_to_timeout_secs, is_retryable, is_success, sat_per_vbyte_to_feerate, AddressStats,
-    BlockInfo, BlockStatus, Builder, Error, EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof,
+    duration_to_timeout_secs, sat_per_vbyte_to_feerate, AddressStats, BlockInfo, BlockStatus,
+    Builder, Error, EsploraTx, HttpResponse, MempoolRecentTx, MempoolStats, MerkleProof,
     OutputStatus, ScriptHashStats, SubmitPackageResult, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
 };
 
@@ -150,22 +150,47 @@ impl<S: Sleeper> AsyncClient<S> {
         Ok(request)
     }
 
-    /// Sends a GET request to `url`, retrying on retryable status codes
+    /// Sends a single GET request to `path`.
+    async fn send_get(&self, path: &str) -> Result<HttpResponse, Error> {
+        let request = self.build_request(Method::Get, path)?.with_pipelining();
+        let response = request.send_async_with_client(&self.client).await?;
+        HttpResponse::from_bitreq(response)
+    }
+
+    /// Sends a single POST request to `path` with `body` and query parameters.
+    async fn send_post(
+        &self,
+        path: &str,
+        body: Vec<u8>,
+        query_params: Option<HashSet<(&str, String)>>,
+    ) -> Result<HttpResponse, Error> {
+        let mut request = self.build_request(Method::Post, path)?.with_body(body);
+
+        for (key, value) in query_params.unwrap_or_default() {
+            request = request.with_param(key, value);
+        }
+
+        let response = request.send_async_with_client(&self.client).await?;
+        HttpResponse::from_bitreq(response)
+    }
+
+    /// Sends a GET request to `path`, retrying on retryable status codes
     /// with exponential backoff until [`AsyncClient::max_retries`] is reached.
-    async fn get_with_retry(&self, path: &str) -> Result<Response, Error> {
+    ///
+    /// Returns an [`Error::HttpResponse`] on a non-success status code.
+    async fn get_with_retry(&self, path: &str) -> Result<HttpResponse, Error> {
         let mut delay = BASE_BACKOFF_MILLIS;
         let mut attempts = 0;
 
-        let request = self.build_request(Method::Get, path)?.with_pipelining();
-
         loop {
-            match request.clone().send_async_with_client(&self.client).await? {
-                response if attempts < self.max_retries && is_retryable(&response) => {
-                    S::sleep(delay).await;
-                    attempts += 1;
-                    delay *= 2;
-                }
-                response => return Ok(response),
+            let response = self.send_get(path).await?;
+
+            if attempts < self.max_retries && response.is_retryable() {
+                S::sleep(delay).await;
+                attempts += 1;
+                delay *= 2;
+            } else {
+                return response.error_for_status();
             }
         }
     }
@@ -180,14 +205,7 @@ impl<S: Sleeper> AsyncClient<S> {
     /// Returns an [`Error`] if the request fails or deserialization fails.
     async fn get_response<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         let response = self.get_with_retry(path).await?;
-
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
-            let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
-        }
-
-        Ok(deserialize::<T>(response.as_bytes())?)
+        Ok(deserialize::<T>(&response.body)?)
     }
 
     /// Makes a GET request to `path`, returning `None` on a 404 response.
@@ -215,14 +233,7 @@ impl<S: Sleeper> AsyncClient<S> {
         path: &str,
     ) -> Result<T, Error> {
         let response = self.get_with_retry(path).await?;
-
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
-            let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
-        }
-
-        response.json::<T>().map_err(Error::BitReq)
+        response.json::<T>()
     }
 
     /// Makes a GET request to `path`, returning `None` on a 404 response.
@@ -250,13 +261,6 @@ impl<S: Sleeper> AsyncClient<S> {
     /// or consensus deserialization fails.
     async fn get_response_hex<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         let response = self.get_with_retry(path).await?;
-
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
-            let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
-        }
-
         let hex_str = response.as_str()?;
         Ok(deserialize(&Vec::from_hex(hex_str)?)?)
     }
@@ -282,13 +286,6 @@ impl<S: Sleeper> AsyncClient<S> {
     /// Returns an [`Error`] if the request fails.
     async fn get_response_text(&self, path: &str) -> Result<String, Error> {
         let response = self.get_with_retry(path).await?;
-
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
-            let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
-        }
-
         Ok(response.as_str()?.to_string())
     }
 
@@ -317,22 +314,9 @@ impl<S: Sleeper> AsyncClient<S> {
         path: &str,
         body: T,
         query_params: Option<HashSet<(&str, String)>>,
-    ) -> Result<Response, Error> {
-        let mut request: bitreq::Request = self.build_request(Method::Post, path)?.with_body(body);
-
-        for (key, value) in query_params.unwrap_or_default() {
-            request = request.with_param(key, value);
-        }
-
-        let response = request.send_async_with_client(&self.client).await?;
-
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
-            let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
-        }
-
-        Ok(response)
+    ) -> Result<HttpResponse, Error> {
+        let response = self.send_post(path, body.into(), query_params).await?;
+        response.error_for_status()
     }
 
     /// Get a raw [`Transaction`] given its [`Txid`].

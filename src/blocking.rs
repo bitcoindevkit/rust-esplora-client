@@ -28,13 +28,12 @@
 //! [Esplora]: https://github.com/Blockstream/esplora/blob/master/API.md
 
 use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
 use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
 
 use bitcoin::consensus::encode::serialize_hex;
-use bitreq::{Method, Proxy, Request, Response};
+use bitreq::{Method, Proxy, Request};
 
 use bitcoin::block::Header as BlockHeader;
 use bitcoin::consensus::{deserialize, serialize, Decodable};
@@ -43,8 +42,8 @@ use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::{Address, Amount, Block, BlockHash, FeeRate, MerkleBlock, Script, Transaction, Txid};
 
 use crate::{
-    duration_to_timeout_secs, is_retryable, is_success, sat_per_vbyte_to_feerate, AddressStats,
-    BlockInfo, BlockStatus, Builder, Error, EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof,
+    duration_to_timeout_secs, sat_per_vbyte_to_feerate, AddressStats, BlockInfo, BlockStatus,
+    Builder, Error, EsploraTx, HttpResponse, MempoolRecentTx, MempoolStats, MerkleProof,
     OutputStatus, ScriptHashStats, SubmitPackageResult, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
 };
 
@@ -133,43 +132,38 @@ impl BlockingClient {
     ///
     /// This function will return an error either from the HTTP client, or the
     /// response's [`serde_json`] deserialization.
-    pub fn post_request<T: Into<Vec<u8>>>(
+    fn post_request<T: Into<Vec<u8>>>(
         &self,
         path: &str,
         body: T,
         query_params: Option<HashSet<(&str, String)>>,
-    ) -> Result<Response, Error> {
+    ) -> Result<HttpResponse, Error> {
         let mut request = self.build_request(Method::Post, path)?.with_body(body);
 
         for (key, value) in query_params.unwrap_or_default() {
             request = request.with_param(key, value);
         }
 
-        let response = request.send()?;
-
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
-            let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
-        }
-
-        Ok(response)
+        let response = HttpResponse::from_bitreq(request.send()?)?;
+        response.error_for_status()
     }
 
     /// Sends a GET request to `url`, retrying on retryable status codes
     /// with exponential backoff until [`BlockingClient::max_retries`] is reached.
-    fn get_with_retry(&self, url: &str) -> Result<Response, Error> {
+    fn get_with_retry(&self, url: &str) -> Result<HttpResponse, Error> {
         let mut delay = BASE_BACKOFF_MILLIS;
         let mut attempts = 0;
 
         loop {
-            match self.build_request(Method::Get, url)?.send()? {
-                resp if attempts < self.max_retries && is_retryable(&resp) => {
-                    thread::sleep(delay);
-                    attempts += 1;
-                    delay *= 2;
-                }
-                resp => return Ok(resp),
+            let response =
+                HttpResponse::from_bitreq(self.build_request(Method::Get, url)?.send()?)?;
+
+            if attempts < self.max_retries && response.is_retryable() {
+                thread::sleep(delay);
+                attempts += 1;
+                delay *= 2;
+            } else {
+                return response.error_for_status();
             }
         }
     }
@@ -184,14 +178,7 @@ impl BlockingClient {
     /// Returns an [`Error`] if the request fails or deserialization fails.
     fn get_response<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         let response = self.get_with_retry(path)?;
-
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
-            let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
-        }
-
-        Ok(deserialize::<T>(response.as_bytes())?)
+        Ok(deserialize::<T>(&response.body)?)
     }
 
     /// Makes a GET request to `path`, returning `None` on a 404 response.
@@ -216,15 +203,8 @@ impl BlockingClient {
     /// or consensus deserialization fails.
     fn get_response_hex<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         let response = self.get_with_retry(path)?;
-
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
-            let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
-        }
-
         let hex_str = response.as_str()?;
-        deserialize(&Vec::from_hex(hex_str)?).map_err(Error::BitcoinEncoding)
+        Ok(deserialize(&Vec::from_hex(hex_str)?)?)
     }
 
     /// Makes a GET request to `path`, returning `None` on a 404 response.
@@ -252,14 +232,7 @@ impl BlockingClient {
         path: &'a str,
     ) -> Result<T, Error> {
         let response = self.get_with_retry(path)?;
-
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
-            let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
-        }
-
-        response.json::<T>().map_err(Error::BitReq)
+        response.json::<T>()
     }
 
     /// Makes a GET request to `path`, returning `None` on a 404 response.
@@ -286,13 +259,6 @@ impl BlockingClient {
     /// Returns an [`Error`] if the request fails.
     fn get_response_text(&self, path: &str) -> Result<String, Error> {
         let response = self.get_with_retry(path)?;
-
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
-            let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
-        }
-
         Ok(response.as_str()?.to_string())
     }
 
