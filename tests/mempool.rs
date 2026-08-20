@@ -88,7 +88,7 @@ async fn test_mempool_methods() {
     let env = TestEnv::new();
     let (blocking_client, async_client) = env.setup_clients();
 
-    let address = env.get_legacy_address();
+    let address = TestEnv::get_legacy_address();
     for _ in 0..5 {
         let _txid = env
             .bitcoind_client()
