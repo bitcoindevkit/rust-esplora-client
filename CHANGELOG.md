@@ -6,6 +6,7 @@
 
 ### Changed
 
+* feat(client): enable request pipelining for `AsyncClient` [#245]
 * chore!: remove deprecated `BlockSummary` and `get_block` [#225]
 
 ### Fixed
