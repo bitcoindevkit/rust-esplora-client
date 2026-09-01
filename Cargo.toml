@@ -36,7 +36,7 @@ backtrace = { version = "0.3.74" } # blame: bitreq@0.3.7 -> tokio-rustls@0.26.4 
 bzip2 = { version = "0.4.4" } # blame: electrsd@0.41.0 -> bitcoind@0.41 -> zip@0.6.6 -> bzip2@0.4.3 (RUSTSEC-2023-0004)
 bytes = { version = "1.11.1" } # blame: bitreq@0.3.7 -> tokio-rustls@0.26.4 -> tokio@1.44.2 -> bytes@1.2.1 (RUSTSEC-2026-0007)
 flate2 = { version = "1.0.32" } # blame: electrsd@0.41.0/bitcoind@0.41.0 -> zip@0.6.6 -> flate2@1.0.23 -> miniz_oxide@0.5.0 -> adler@1.0.0 (RUSTSEC-2025-0056)
-mio = { version = "0.8.11" } # blame: bitreq@0.3.7 -> tokio-rustls@0.26.4 -> tokio@1.30.0 -> mio@0.8.7 (RUSTSEC-2024-0019)
+mio = { version = "1.2.2" } # blame: bitreq@0.3.7 -> tokio-rustls@0.26.4 -> tokio@1.30.0 -> mio@0.8.7 (RUSTSEC-2024-0019)
 openssl = { version = "0.10.78" } # blame: match `openssl-sys` (multiple RUSTSECs)
 openssl-sys = { version = "0.9.114" } # blame: bitreq@0.3.7 -> native-tls@0.3.0 -> openssl@0.10.15 (multiple RUSTSECs)
 ring = { version = "0.17.12" } # blame: bitreq@0.3.7 -> tokio-rustls@0.26.4 -> rustls@0.23.38-> rustls-webpki@0.103.13 -> ring@0.17.0 (RUSTSEC-2025-0009)
