@@ -4,6 +4,8 @@
 
 ### Added
 
+* feat(log): add opt-in structured logging for client construction and HTTP requests [#253]
+
 ### Changed
 
 * feat(client): enable request pipelining for `AsyncClient` [#245]
