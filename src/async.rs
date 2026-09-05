@@ -100,6 +100,16 @@ impl<S: Sleeper> AsyncClient<S> {
     /// Returns an [`Error`] if the HTTP client fails to build,
     /// or if any of the provided header names or values are invalid.
     pub fn from_builder(builder: Builder) -> Result<Self, Error> {
+        log_debug!(
+            event = "client_build",
+            client = "async",
+            timeout = ?builder.timeout,
+            max_retries = builder.max_retries,
+            max_connections = builder.max_connections,
+            proxy_configured = builder.proxy.is_some(),
+            header_count = builder.headers.len(),
+            "building Esplora client"
+        );
         Ok(AsyncClient {
             url: builder.base_url,
             proxy: builder.proxy,
@@ -150,7 +160,7 @@ impl<S: Sleeper> AsyncClient<S> {
         Ok(request)
     }
 
-    /// Sends a GET request to `url`, retrying on retryable status codes
+    /// Sends a GET request to `path`, retrying on retryable status codes
     /// with exponential backoff until [`AsyncClient::max_retries`] is reached.
     async fn get_with_retry(&self, path: &str) -> Result<Response, Error> {
         let mut delay = BASE_BACKOFF_MILLIS;
@@ -159,8 +169,36 @@ impl<S: Sleeper> AsyncClient<S> {
         let request = self.build_request(Method::Get, path)?.with_pipelining();
 
         loop {
-            match request.clone().send_async_with_client(&self.client).await? {
+            log_trace!(
+                event = "request",
+                client = "async",
+                method = "GET",
+                path,
+                attempt = attempts + 1,
+                "sending Esplora request"
+            );
+            let response = request.clone().send_async_with_client(&self.client).await?;
+            log_trace!(
+                event = "response",
+                client = "async",
+                method = "GET",
+                path,
+                attempt = attempts + 1,
+                status = response.status_code,
+                "received Esplora response"
+            );
+            match response {
                 response if attempts < self.max_retries && is_retryable(&response) => {
+                    log_debug!(
+                        event = "retry",
+                        client = "async",
+                        method = "GET",
+                        path,
+                        attempt = attempts + 1,
+                        status = response.status_code,
+                        delay_ms = delay.as_millis(),
+                        "retrying Esplora request"
+                    );
                     S::sleep(delay).await;
                     attempts += 1;
                     delay *= 2;
@@ -324,7 +362,24 @@ impl<S: Sleeper> AsyncClient<S> {
             request = request.with_param(key, value);
         }
 
+        log_trace!(
+            event = "request",
+            client = "async",
+            method = "POST",
+            path,
+            attempt = 1,
+            "sending Esplora request"
+        );
         let response = request.send_async_with_client(&self.client).await?;
+        log_trace!(
+            event = "response",
+            client = "async",
+            method = "POST",
+            path,
+            attempt = 1,
+            status = response.status_code,
+            "received Esplora response"
+        );
 
         if !is_success(&response) {
             let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
