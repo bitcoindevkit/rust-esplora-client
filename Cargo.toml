@@ -40,6 +40,7 @@ mio = { version = "0.8.11" } # blame: bitreq@0.3.7 -> tokio-rustls@0.26.4 -> tok
 openssl = { version = "0.10.78" } # blame: match `openssl-sys` (multiple RUSTSECs)
 openssl-sys = { version = "0.9.114" } # blame: bitreq@0.3.7 -> native-tls@0.3.0 -> openssl@0.10.15 (multiple RUSTSECs)
 ring = { version = "0.17.12" } # blame: bitreq@0.3.7 -> tokio-rustls@0.26.4 -> rustls@0.23.38-> rustls-webpki@0.103.13 -> ring@0.17.0 (RUSTSEC-2025-0009)
+rustls = { version = "0.23.45" } # blame: bitreq@0.3.7 -> rustls@0.23.43 (RUSTSEC-2026-0285)
 tar = { version = "0.4.45" } # blame: electrsd@0.41.0 -> bitcoind@0.41.0 -> tar@0.4.0 (RUSTSEC-2018-0002)
 tempfile = { version = ">=3.4.0, <=3.15.0" } # blame: remove_dir_all@0.5.0 -> tempfile@3.0.2 -> native-tls@0.2.3 -> bitreq@0.3.7 (RUSTSEC-2023-0018)
 
