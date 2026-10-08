@@ -130,46 +130,6 @@ const DEFAULT_MAX_RETRIES: usize = 6;
 #[cfg(feature = "async")]
 const DEFAULT_MAX_CONNECTIONS: usize = 10;
 
-/// Check if the [`Response`] status code is informational (100-199).
-#[allow(unused)]
-#[cfg(any(feature = "blocking", feature = "async"))]
-fn is_informational(response: &Response) -> bool {
-    (100..200).contains(&response.status_code)
-}
-
-/// Check if the [`Response`] status code is successful (200-299).
-#[cfg(any(feature = "blocking", feature = "async"))]
-fn is_success(response: &Response) -> bool {
-    (200..300).contains(&response.status_code)
-}
-
-/// Check if the [`Response`] status code is a redirection (300-399).
-#[allow(unused)]
-#[cfg(any(feature = "blocking", feature = "async"))]
-fn is_redirection(response: &Response) -> bool {
-    (300..400).contains(&response.status_code)
-}
-
-/// Check if the [`Response`] status code is a client error (400-499).
-#[allow(unused)]
-#[cfg(any(feature = "blocking", feature = "async"))]
-fn is_client_error(response: &Response) -> bool {
-    (400..500).contains(&response.status_code)
-}
-
-/// Check if the [`Response`] status code is a server error (500-599).
-#[allow(unused)]
-#[cfg(any(feature = "blocking", feature = "async"))]
-fn is_server_error(response: &Response) -> bool {
-    (500..600).contains(&response.status_code)
-}
-
-/// Check if the [`Response`] status code is retryable (429, 500, 503).
-#[cfg(any(feature = "blocking", feature = "async"))]
-fn is_retryable(response: &Response) -> bool {
-    RETRYABLE_ERROR_CODES.contains(&(response.status_code as u16))
-}
-
 /// Convert a [`Duration`] to whole timeout seconds for `bitreq`.
 #[cfg(any(feature = "blocking", feature = "async"))]
 fn duration_to_timeout_secs(duration: Duration) -> u64 {
@@ -352,6 +312,9 @@ pub enum Error {
     },
     /// Invalid integer returned by the server.
     Parsing(std::num::ParseIntError),
+    /// Invalid UTF-8 in a response body expected to be text.
+    #[cfg(any(feature = "blocking", feature = "async"))]
+    InvalidUtf8(std::str::Utf8Error),
     /// Invalid status code, unable to convert to `u16`.
     StatusCode(TryFromIntError),
     /// Invalid Bitcoin consensus data returned by the server.
@@ -384,6 +347,8 @@ impl fmt::Display for Error {
                 write!(f, "HTTP error {status}: {message}")
             }
             Error::Parsing(e) => write!(f, "Failed to parse invalid number: {e}"),
+            #[cfg(any(feature = "blocking", feature = "async"))]
+            Error::InvalidUtf8(e) => write!(f, "Invalid UTF-8 in response body: {e}"),
             Error::StatusCode(e) => write!(f, "Invalid status code: {e}"),
             Error::BitcoinEncoding(e) => write!(f, "Invalid Bitcoin data: {e}"),
             Error::HexToArray(e) => write!(f, "Invalid hex to array conversion: {e}"),
@@ -430,3 +395,54 @@ impl_error!(std::num::ParseIntError, Parsing, Error);
 impl_error!(bitcoin::consensus::encode::Error, BitcoinEncoding, Error);
 impl_error!(bitcoin::hex::HexToArrayError, HexToArray, Error);
 impl_error!(bitcoin::hex::HexToBytesError, HexToBytes, Error);
+
+/// A client-agnostic HTTP response: the status code plus the fully-read body.
+///
+/// Both clients' endpoint methods operate on this type, so that only the code
+/// that produces this is specific to the underlying HTTP client.
+#[cfg(any(feature = "blocking", feature = "async"))]
+struct HttpResponse {
+    status: u16,
+    body: Vec<u8>,
+}
+
+#[cfg(any(feature = "blocking", feature = "async"))]
+impl HttpResponse {
+    /// Converts a [`bitreq::Response`], whose body is already fully read.
+    fn from_bitreq(response: Response) -> Result<Self, Error> {
+        let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+        let body = response.into_bytes();
+        Ok(Self { status, body })
+    }
+
+    /// Whether the status code is successful (200-299).
+    fn is_success(&self) -> bool {
+        (200..300).contains(&self.status)
+    }
+
+    /// Whether the status code is retryable (see [`RETRYABLE_ERROR_CODES`]).
+    fn is_retryable(&self) -> bool {
+        RETRYABLE_ERROR_CODES.contains(&self.status)
+    }
+
+    /// Returns an [`Error::HttpResponse`] on a non-success status code.
+    fn error_for_status(self) -> Result<Self, Error> {
+        if self.is_success() {
+            Ok(self)
+        } else {
+            let status = self.status;
+            let message = self.as_str().unwrap_or_default().to_string();
+            Err(Error::HttpResponse { status, message })
+        }
+    }
+
+    /// The body interpreted as UTF-8 text.
+    fn as_str(&self) -> Result<&str, Error> {
+        std::str::from_utf8(&self.body).map_err(Error::InvalidUtf8)
+    }
+
+    /// Deserializes the body as JSON.
+    fn json<T: serde::de::DeserializeOwned>(&self) -> Result<T, Error> {
+        serde_json::from_slice(&self.body).map_err(Error::SerdeJson)
+    }
+}
