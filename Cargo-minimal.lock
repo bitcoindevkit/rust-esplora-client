@@ -172,14 +172,14 @@ dependencies = [
 
 [[package]]
 name = "bitcoind"
-version = "0.41.0"
+version = "0.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23bf8ad1dbb61cfc69dd02f5377a8a7bae5c7a299f8644ffedd0f3ea38e2e925"
+checksum = "c8394ef6e508951bf8beac737b9042a7825b93665c1ecb54a46ecd2eb7b75bb5"
 dependencies = [
  "anyhow",
  "bitcoin_hashes 0.13.0",
  "bitreq",
- "corepc-client",
+ "corepc-regtest-client",
  "flate2",
  "log",
  "serde_json",
@@ -203,9 +203,9 @@ checksum = "b048fb63fd8b5923fc5aa7b340d8e156aec7ec02f0c78fa8a6ddc2613f6f71de"
 
 [[package]]
 name = "bitreq"
-version = "0.3.7"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b65c2e1ab98050c93cc9ada070d5070e014329c65196d03f6f8f1f75c2666f37"
+checksum = "a95e202ed3a38fd87f384e6ca46ecbcba9779d3b0fae69006431f7c9e25b3f11"
 dependencies = [
  "base64 0.22.1",
  "native-tls",
@@ -264,9 +264,9 @@ dependencies = [
 
 [[package]]
 name = "cfg-if"
-version = "0.1.2"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4c819a1287eb618df47cc647173c5c4c66ba19d888a6e50d605672aed3140de"
+checksum = "082bb9b28e00d3c9d39cc03e64ce4cea0f1bb9b3fde493f0cbc008472d22bdf4"
 
 [[package]]
 name = "cfg-if"
@@ -307,10 +307,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
-name = "corepc-client"
-version = "0.16.0"
+name = "corepc-regtest-client"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "349238a237f42ae84050dc449406a734a752c418b9dd531ecb4e93e7b97d094e"
+checksum = "ace925cc8c38db5d2e3d7cd483e9f15814728b8ea4116b297c44247d1cadc770"
 dependencies = [
  "bitcoin",
  "corepc-types",
@@ -322,9 +322,9 @@ dependencies = [
 
 [[package]]
 name = "corepc-types"
-version = "0.15.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86c274042a89391a324ab313b5210680969d02a9fa977733c3354aea4d7a4883"
+checksum = "6fa32f494e25aa816dc5adfed14374676765deb0914b8fe8dfb63058866cce86"
 dependencies = [
  "bitcoin",
  "serde",
@@ -352,15 +352,15 @@ dependencies = [
 
 [[package]]
 name = "electrsd"
-version = "0.41.0"
+version = "0.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7741fbb9d8e3e65f30e4d9cd60c9a9e09a3aa530330b88dfc13468de1a8ec316"
+checksum = "fbf19f10c94890a6551197f328882c6b75420c6810ccc144ea9b9b4bd207563d"
 dependencies = [
  "anyhow",
  "bitcoin_hashes 0.14.0",
  "bitcoind",
  "bitreq",
- "corepc-client",
+ "corepc-regtest-client",
  "electrum-client",
  "log",
  "nix",
@@ -393,7 +393,6 @@ dependencies = [
 name = "esplora-client"
 version = "0.13.0"
 dependencies = [
- "anyhow",
  "backtrace",
  "bitcoin",
  "bitreq",
@@ -402,9 +401,8 @@ dependencies = [
  "electrsd",
  "flate2",
  "hex-conservative 0.2.2",
- "mio 0.8.11",
+ "log",
  "openssl",
- "openssl-sys",
  "ring",
  "serde",
  "serde_json",
@@ -421,11 +419,11 @@ checksum = "6999dc1837253364c2ebb0704ba97994bd874e8f195d665c50b7548f6ea92764"
 
 [[package]]
 name = "filetime"
-version = "0.2.13"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c122a393ea57648015bf06fbd3d372378992e86b9ff5a7a497b076a28c79efe"
+checksum = "1ff6d4dab0aa0c8e6346d46052e93b13a16cf847b54ed357087c35011048cc7d"
 dependencies = [
- "cfg-if 1.0.0",
+ "cfg-if 0.1.6",
  "libc",
  "redox_syscall 0.1.0",
  "winapi",
@@ -508,9 +506,9 @@ checksum = "d2f3e61cf687687b30c9e6ddf0fc36cf15f035e66d491e6da968fa49ffa9a378"
 
 [[package]]
 name = "jsonrpc"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12f6b9ae59887c395c907855e24b48cf61593a44a2d6757b1ada83d5a2d6b85a"
+checksum = "6802a88c69545937a980fcc973543364aa948d7a7c0f258eb8713a7781248f1c"
 dependencies = [
  "base64 0.22.1",
  "bitreq",
@@ -547,11 +545,11 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.8"
+version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14b6052be84e6b71ab17edffc2eeabf5c2c3ae1fdb464aae35ac50c67a44e1f7"
+checksum = "c84ec4b527950aa83a329754b01dbe3f58361d1c5efacd1f6d68c494d08a17c6"
 dependencies = [
- "cfg-if 0.1.2",
+ "cfg-if 0.1.6",
 ]
 
 [[package]]
@@ -576,18 +574,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2d80299ef12ff69b16a84bb182e3b9df68b5a91574d3d4fa6e41b65deec4df1"
 dependencies = [
  "adler2",
-]
-
-[[package]]
-name = "mio"
-version = "0.8.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4a650543ca06a924e8b371db273b2756685faae30f8487da1b56505a8f78b0c"
-dependencies = [
- "libc",
- "log",
- "wasi",
- "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -817,9 +803,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.38"
+version = "0.23.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69f9466fb2c14ea04357e91413efb882e2a6d4a406e625449bc0a5d360d53a21"
+checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
 dependencies = [
  "once_cell",
  "ring",
@@ -852,9 +838,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.13"
+version = "0.103.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61c429a8649f110dddef65e2a5ad240f747e85f7758a6bccc7e5777bd33f756e"
+checksum = "0527518605e68109d875e248ea259b6758801cf165e4b2c2733ae3b51f12535a"
 dependencies = [
  "ring",
  "rustls-pki-types",
@@ -1060,7 +1046,7 @@ dependencies = [
  "backtrace",
  "bytes",
  "libc",
- "mio 1.0.1",
+ "mio",
  "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",

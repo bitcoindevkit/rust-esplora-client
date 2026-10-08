@@ -8,6 +8,7 @@
 
 * feat(client): enable request pipelining for `AsyncClient` [#245]
 * chore!: remove deprecated `BlockSummary` and `get_block` [#225]
+* chore(deps): bump `bitreq` to v0.4.0 and `electrsd` to v0.42.0 [#257]
 
 ### Fixed
 
