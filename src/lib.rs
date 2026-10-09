@@ -82,6 +82,9 @@
 //!   (SSL) using the `rustls` TLS backend.
 //! * `async-https-rustls-probe` enables [`bitreq`], the async client with support for proxying and
 //!   TLS (SSL) using `rustls` and probed system roots.
+//! * `async-ohttp` enables optional Oblivious HTTP tunneling for the async client. Note that this
+//!   feature does not itself pull in a TLS backend: reaching an `https` relay or gateway also
+//!   requires one of the `async-https*` features.
 //! * `tokio` enables the default async sleeper used by [`Builder::build_async`].
 //!
 //! [Esplora]: https://github.com/Blockstream/esplora/blob/master/API.md
@@ -118,6 +121,34 @@ pub const RETRYABLE_ERROR_CODES: [u16; 3] = [
     500, // INTERNAL_SERVER_ERROR
     503, // SERVICE_UNAVAILABLE
 ];
+
+/// Bucket size that OHTTP-encapsulated request plaintexts are padded to.
+///
+/// Without padding the ciphertext length tracks the request, and Esplora GETs
+/// are distinctive enough to classify by size alone (`/blocks/tip/height`
+/// against `/tx/<64 hex>/raw` against `/address/<addr>/txs`). Padding denies
+/// the relay that signal.
+#[cfg(feature = "async-ohttp")]
+const OHTTP_PADDED_LENGTH: usize = 1024;
+
+/// Plaintext size to pad an OHTTP request carrying `body_len` bytes of body to.
+///
+/// Bodyless GETs pad to a single [`OHTTP_PADDED_LENGTH`] bucket. POST bodies
+/// span several orders of magnitude (a minimal transaction against a package of
+/// large ones), so a single fixed size cannot fit them all -- overshooting it
+/// makes `broadcast` fail outright. Those round up to the next bucket instead,
+/// which coarsens the length into 1 KiB steps at a bounded cost.
+///
+/// Always leaves at least half a bucket of headroom above the body for the
+/// BHTTP framing, authority, path and headers -- comfortably more than the ~300
+/// bytes those need, so only unusually large [`Builder::header`] values can
+/// overflow it (surfacing as [`Error::Ohttp`], never as a silently unpadded
+/// request).
+#[cfg(feature = "async-ohttp")]
+fn ohttp_padded_length(body_len: usize) -> usize {
+    (body_len.saturating_add(OHTTP_PADDED_LENGTH / 2) / OHTTP_PADDED_LENGTH + 1)
+        * OHTTP_PADDED_LENGTH
+}
 
 /// Base delay used by the exponential retry backoff.
 #[cfg(any(feature = "blocking", feature = "async"))]
@@ -248,6 +279,10 @@ pub struct Builder {
     /// Maximum number of cached connections for the async client.
     #[cfg(feature = "async")]
     pub max_connections: usize,
+    /// Endpoint whose HTTP `CONNECT` tunnel carries the OHTTP key-config
+    /// bootstrap. Defaults to the relay itself.
+    #[cfg(feature = "async-ohttp")]
+    pub ohttp_bootstrap_proxy: Option<String>,
 }
 
 impl Builder {
@@ -264,6 +299,8 @@ impl Builder {
             max_retries: DEFAULT_MAX_RETRIES,
             #[cfg(feature = "async")]
             max_connections: DEFAULT_MAX_CONNECTIONS,
+            #[cfg(feature = "async-ohttp")]
+            ohttp_bootstrap_proxy: None,
         }
     }
 
@@ -303,6 +340,18 @@ impl Builder {
         self
     }
 
+    /// Override the endpoint whose HTTP `CONNECT` tunnel carries the OHTTP
+    /// key-config bootstrap in [`Builder::build_async_with_ohttp`].
+    ///
+    /// Defaults to the relay, which is where a deployed relay offers its
+    /// bootstrap tunnel. Set this only when the `CONNECT` endpoint is a
+    /// separate host, as it is in `ohttp_client::harness`.
+    #[cfg(feature = "async-ohttp")]
+    pub fn ohttp_bootstrap_proxy(mut self, url: &str) -> Self {
+        self.ohttp_bootstrap_proxy = Some(url.to_string());
+        self
+    }
+
     /// Build a [`BlockingClient`] from this configuration.
     #[cfg(feature = "blocking")]
     pub fn build_blocking(self) -> BlockingClient {
@@ -332,6 +381,51 @@ impl Builder {
     #[cfg(feature = "async")]
     pub fn build_async_with_sleeper<S: Sleeper>(self) -> Result<AsyncClient<S>, Error> {
         AsyncClient::from_builder(self)
+    }
+
+    /// Build an [`AsyncClient`] that tunnels requests through an OHTTP relay
+    /// and gateway.
+    ///
+    /// Fetches the gateway key config before returning, through an HTTP
+    /// `CONNECT` tunnel so the gateway only ever sees the relay's address --
+    /// see [`Builder::ohttp_bootstrap_proxy`] for pointing that tunnel
+    /// somewhere other than the relay.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if either URL is invalid, or if the key config
+    /// cannot be fetched or decoded.
+    #[cfg(feature = "async-ohttp")]
+    pub async fn build_async_with_ohttp(
+        self,
+        ohttp_relay_url: &str,
+        ohttp_gateway_url: &str,
+    ) -> Result<AsyncClient, Error> {
+        let relay = ohttp_client::Url::parse(ohttp_relay_url).map_err(ohttp_client::Error::from)?;
+        let target = ohttp_client::Url::parse(&self.base_url).map_err(ohttp_client::Error::from)?;
+
+        // The bootstrap is tunneled rather than fetched directly
+        //
+        // TODO: this still ignores the builder's timeout -- upstream's
+        // `fetch_key_config_via_relay` takes no timeout, so a stalled gateway
+        // hangs the build.
+        let bootstrap = match &self.ohttp_bootstrap_proxy {
+            Some(url) => ohttp_client::Url::parse(url).map_err(ohttp_client::Error::from)?,
+            None => relay.clone(),
+        };
+        let key_config =
+            ohttp_client::fetch_key_config_via_relay(ohttp_gateway_url, &bootstrap).await?;
+
+        // FIXME: the key config is cached for the life of the client, with no
+        // refresh path. Gateways rotate keys (RFC 9540), and once this config is
+        // stale every request fails permanently -- the caller has to know to
+        // rebuild the client.
+        // Upstream issue: https://github.com/arminsabouri/ohttp-client/issues/2
+        let ohttp_client = ohttp_client::OhttpClient::new(relay, target, key_config);
+
+        Ok(self
+            .build_async_with_sleeper()?
+            .set_ohttp_client(ohttp_client))
     }
 }
 
@@ -372,6 +466,9 @@ pub enum Error {
     InvalidHttpHeaderValue(String),
     /// The server sent an invalid response.
     InvalidResponse,
+    /// Error from the OHTTP client (key config, encapsulate/decapsulate, URL).
+    #[cfg(feature = "async-ohttp")]
+    Ohttp(ohttp_client::Error),
 }
 
 impl fmt::Display for Error {
@@ -404,6 +501,8 @@ impl fmt::Display for Error {
                 write!(f, "Invalid HTTP header value: {value}")
             }
             Error::InvalidResponse => write!(f, "The server sent an invalid response"),
+            #[cfg(feature = "async-ohttp")]
+            Error::Ohttp(e) => write!(f, "OHTTP error: {e}"),
         }
     }
 }
@@ -425,6 +524,8 @@ macro_rules! impl_error {
 
 #[cfg(any(feature = "blocking", feature = "async"))]
 impl_error!(::bitreq::Error, BitReq, Error);
+#[cfg(feature = "async-ohttp")]
+impl_error!(ohttp_client::Error, Ohttp, Error);
 impl_error!(serde_json::Error, SerdeJson, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
 impl_error!(bitcoin::consensus::encode::Error, BitcoinEncoding, Error);

@@ -23,19 +23,25 @@ path = "src/lib.rs"
 bitcoin = { version = "0.32", features = ["serde", "std"], default-features = false }
 bitreq = { version = "0.3.7", optional = true }
 hex = { version = "0.2.2", package = "hex-conservative" }
+# `bitreq` provides the key-config bootstrap fetch tunneled through the relay.
+ohttp-client = { version = "0.0.0-alpha", features = ["bitreq"], optional = true }
 serde = { version = "1.0.194", features = ["derive"] }
 serde_json = { version = "1.0.117", features = ["std"], default-features = false }
-tokio = { version = "1.44.2", features = ["time"], optional = true } # Async Client Transport
+# 1.47.1 floor blame: ohttp-client -> ohttp-relay@0.0.11 -> tokio@1.47.1
+tokio = { version = "1.47.1", features = ["time"], optional = true } # Async Client Transport
 
 [dev-dependencies]
 electrsd = { version = "0.41.0", default-features = false, features = ["legacy", "esplora_a33e97e1", "bitcoind_download", "bitcoind_29_0"] }
-tokio = { version = "1.44.2", features = ["full"] }
+ohttp-client = { version = "0.0.0-alpha", features = ["harness"] } # async-ohttp integration test harness
+tokio = { version = "1.47.1", features = ["full"] } # blame: match the `tokio` floor above
 # Transitive dependency pins:
 anyhow = { version = "1.0.103" } # blame: electrsd@0.41.0 -> anyhow@1.0.102 (RUSTSEC-2026-0190)
 backtrace = { version = "0.3.74" } # blame: bitreq@0.3.7 -> tokio-rustls@0.26.4 -> tokio@1.44.2 -> backtrace@0.3.58 -> miniz_oxide@0.4.0 -> adler@0.2.1 (RUSTSEC-2025-0056)
 bzip2 = { version = "0.4.4" } # blame: electrsd@0.41.0 -> bitcoind@0.41 -> zip@0.6.6 -> bzip2@0.4.3 (RUSTSEC-2023-0004)
 bytes = { version = "1.11.1" } # blame: bitreq@0.3.7 -> tokio-rustls@0.26.4 -> tokio@1.44.2 -> bytes@1.2.1 (RUSTSEC-2026-0007)
+curve25519-dalek = { version = "4.1.3" } # blame: ohttp-client -> ohttp -> hpke -> x25519-dalek; <4.1.3 uses the removed `stdsimd` feature
 flate2 = { version = "1.0.32" } # blame: electrsd@0.41.0/bitcoind@0.41.0 -> zip@0.6.6 -> flate2@1.0.23 -> miniz_oxide@0.5.0 -> adler@1.0.0 (RUSTSEC-2025-0056)
+hkdf = { version = "0.12.4" } # blame: ohttp-client -> ohttp -> hpke; <0.12.1 lacks the `SimpleHmac` generic
 mio = { version = "0.8.11" } # blame: bitreq@0.3.7 -> tokio-rustls@0.26.4 -> tokio@1.30.0 -> mio@0.8.7 (RUSTSEC-2024-0019)
 openssl = { version = "0.10.78" } # blame: match `openssl-sys` (multiple RUSTSECs)
 openssl-sys = { version = "0.9.114" } # blame: bitreq@0.3.7 -> native-tls@0.3.0 -> openssl@0.10.15 (multiple RUSTSECs)
@@ -52,6 +58,7 @@ async-https = ["async", "bitreq/async-https"]
 async-https-native = ["async", "bitreq/async-https-native-tls"]
 async-https-rustls = ["async", "bitreq/async-https-rustls"]
 async-https-rustls-probe = ["async", "bitreq/async-https-rustls-probe"]
+async-ohttp = ["async", "dep:ohttp-client", "tokio"]
 
 blocking = ["bitreq/proxy", "bitreq/json-using-serde"]
 blocking-https = ["blocking", "bitreq/https"]
@@ -77,6 +84,12 @@ zizmor = "1.29.0"
 [package.metadata.rbmt.lint]
 allowed_duplicates = [
     "windows-sys",
+    # blame: ohttp-client -> ohttp -> hpke -> aes-gcm -> rand_core v0.6 -> getrandom v0.2
+    "getrandom",
+    # blame: ohttp-client -> ohttp -> hpke -> aes-gcm -> rand_core v0.6
+    "rand_core",
+    # blame: ohttp-client -> bhttp -> thiserror v2 -> syn v3
+    "syn",
 ]
 
 [package.metadata.rbmt.test]
@@ -87,6 +100,7 @@ exclude_features = [
     "async-https-native",
     "async-https-rustls",
     "async-https-rustls-probe",
+    "async-ohttp",
     "blocking-https",
     "blocking-https-native",
     "blocking-https-rustls",
@@ -99,4 +113,5 @@ exact_features = [
     ["async-https-native", "blocking-https-native", "tokio"],
     ["async-https-rustls", "blocking-https-rustls", "tokio"],
     ["async-https-rustls-probe", "blocking-https-rustls-probe", "tokio"],
+    ["async-ohttp", "blocking", "tokio"],
 ]

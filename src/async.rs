@@ -45,11 +45,68 @@ use bitcoin::{Address, Amount, Block, BlockHash, FeeRate, MerkleBlock, Script, T
 
 use bitreq::{Client, Method, Proxy, Request, RequestExt, Response};
 
+#[cfg(feature = "async-ohttp")]
+use ohttp_client::OhttpClient;
+
 use crate::{
-    duration_to_timeout_secs, is_retryable, is_success, sat_per_vbyte_to_feerate, AddressStats,
-    BlockInfo, BlockStatus, Builder, Error, EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof,
-    OutputStatus, ScriptHashStats, SubmitPackageResult, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
+    duration_to_timeout_secs, sat_per_vbyte_to_feerate, AddressStats, BlockInfo, BlockStatus,
+    Builder, Error, EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof, OutputStatus,
+    ScriptHashStats, SubmitPackageResult, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
 };
+
+/// A GET response body paired with its status code.
+///
+/// Regular requests produce this from a [`bitreq::Response`]. OHTTP-tunneled
+/// requests produce it from the decapsulated inner response, since
+/// [`bitreq::Response`] cannot be constructed outside the `bitreq` crate.
+pub(crate) struct RawResponse {
+    pub(crate) status_code: u16,
+    pub(crate) body: Vec<u8>,
+}
+
+impl RawResponse {
+    fn is_success(&self) -> bool {
+        (200..300).contains(&self.status_code)
+    }
+
+    fn is_retryable(&self) -> bool {
+        crate::RETRYABLE_ERROR_CODES.contains(&self.status_code)
+    }
+
+    fn as_str(&self) -> Result<&str, Error> {
+        std::str::from_utf8(&self.body).map_err(|_| Error::InvalidResponse)
+    }
+
+    fn json<T: serde::de::DeserializeOwned>(&self) -> Result<T, Error> {
+        serde_json::from_slice(&self.body).map_err(Error::SerdeJson)
+    }
+
+    /// Passes through a successful response, turning any other status into an
+    /// [`Error::HttpResponse`] carrying the body as its message.
+    fn error_for_status(self) -> Result<Self, Error> {
+        if self.is_success() {
+            return Ok(self);
+        }
+        let message = self.as_str().unwrap_or_default().to_string();
+        Err(Error::HttpResponse {
+            status: self.status_code,
+            message,
+        })
+    }
+}
+
+impl TryFrom<Response> for RawResponse {
+    type Error = Error;
+
+    /// Fails with [`Error::StatusCode`] if the status does not fit in a `u16`,
+    /// rather than wrapping it into a plausible-looking one.
+    fn try_from(response: Response) -> Result<Self, Error> {
+        Ok(RawResponse {
+            status_code: u16::try_from(response.status_code).map_err(Error::StatusCode)?,
+            body: response.into_bytes(),
+        })
+    }
+}
 
 // FIXME: (@oleonardolima) there's no `Debug` implementation for `bitreq::Client`.
 /// An async client for interacting with an Esplora API server.
@@ -86,6 +143,9 @@ pub struct AsyncClient<S = DefaultSleeper> {
     client: Client,
     /// Marker for the sleeper implementation.
     marker: PhantomData<S>,
+    /// Optional OHTTP client used to tunnel requests through a relay.
+    #[cfg(feature = "async-ohttp")]
+    ohttp_client: Option<OhttpClient>,
 }
 
 impl<S: Sleeper> AsyncClient<S> {
@@ -108,6 +168,8 @@ impl<S: Sleeper> AsyncClient<S> {
             max_retries: builder.max_retries,
             client: Client::new(builder.max_connections),
             marker: PhantomData,
+            #[cfg(feature = "async-ohttp")]
+            ohttp_client: None,
         })
     }
 
@@ -150,17 +212,18 @@ impl<S: Sleeper> AsyncClient<S> {
         Ok(request)
     }
 
-    /// Sends a GET request to `url`, retrying on retryable status codes
+    /// Sends a GET request to `path`, retrying on retryable status codes
     /// with exponential backoff until [`AsyncClient::max_retries`] is reached.
-    async fn get_with_retry(&self, path: &str) -> Result<Response, Error> {
+    ///
+    /// When OHTTP is configured, the request is encapsulated and tunneled
+    /// through the relay instead of being sent directly.
+    async fn get_with_retry(&self, path: &str) -> Result<RawResponse, Error> {
         let mut delay = BASE_BACKOFF_MILLIS;
         let mut attempts = 0;
 
-        let request = self.build_request(Method::Get, path)?.with_pipelining();
-
         loop {
-            match request.clone().send_async_with_client(&self.client).await? {
-                response if attempts < self.max_retries && is_retryable(&response) => {
+            match self.send_get(path).await? {
+                response if attempts < self.max_retries && response.is_retryable() => {
                     S::sleep(delay).await;
                     attempts += 1;
                     delay *= 2;
@@ -168,6 +231,81 @@ impl<S: Sleeper> AsyncClient<S> {
                 response => return Ok(response),
             }
         }
+    }
+
+    /// Encapsulates a request, POSTs it to the OHTTP relay, and decapsulates
+    /// the gateway's response into the inner response from the Esplora server.
+    #[cfg(feature = "async-ohttp")]
+    async fn send_via_ohttp(
+        &self,
+        ohttp_client: &OhttpClient,
+        method: &str,
+        path: &str,
+        query: &[(&str, &str)],
+        body: Option<&[u8]>,
+    ) -> Result<RawResponse, Error> {
+        let headers: Vec<(&str, &str)> = self
+            .headers
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let (req, ctx) = ohttp_client
+            .clone()
+            .known_length(crate::ohttp_padded_length(body.map_or(0, <[u8]>::len)))
+            .encapsulate(method, path, &headers, query, body)?;
+        // TODO: bypasses `build_request`, so `self.proxy` and `self.timeout`
+        // are dropped. A client configured with a proxy reaches the relay
+        // from its real IP, and a stalled relay hangs with no timeout.
+        let relay_request = Request::new(Method::Post, req.url.as_str())
+            .with_header("content-type", req.content_type)
+            .with_body(req.body);
+        let relay_response: RawResponse = relay_request
+            .send_async_with_client(&self.client)
+            .await?
+            .try_into()?;
+        // Only a 2xx carries an encapsulated response to decapsulate; RFC
+        // 9458 does not require exactly 200.
+        if !relay_response.is_success() {
+            // Hand retryable relay failures back to `get_with_retry` so the
+            // relay gets the same backoff the target does. Other statuses
+            // are the relay's own error and are reported as-is -- notably
+            // they must not reach `get_opt_response`, where a relay 404
+            // would masquerade as "resource not found".
+            if relay_response.is_retryable() {
+                return Ok(relay_response);
+            }
+            return relay_response.error_for_status();
+        }
+        let inner = ctx.decapsulate(&relay_response.body)?;
+        Ok(RawResponse {
+            status_code: inner.status(),
+            body: inner.into_body(),
+        })
+    }
+
+    /// Sends a single (non-retried) GET request to `path`.
+    ///
+    /// When OHTTP is configured, the request is encapsulated and tunneled
+    /// through the relay instead of being sent directly.
+    async fn send_get(&self, path: &str) -> Result<RawResponse, Error> {
+        #[cfg(feature = "async-ohttp")]
+        if let Some(ohttp_client) = &self.ohttp_client {
+            return self
+                .send_via_ohttp(ohttp_client, "GET", path, &[], None)
+                .await;
+        }
+
+        let request = self.build_request(Method::Get, path)?.with_pipelining();
+        request
+            .send_async_with_client(&self.client)
+            .await?
+            .try_into()
+    }
+
+    #[cfg(feature = "async-ohttp")]
+    pub(crate) fn set_ohttp_client(mut self, ohttp_client: OhttpClient) -> Self {
+        self.ohttp_client = Some(ohttp_client);
+        self
     }
 
     /// Makes a GET request to `path`, deserializing the response body as raw
@@ -181,13 +319,15 @@ impl<S: Sleeper> AsyncClient<S> {
     async fn get_response<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         let response = self.get_with_retry(path).await?;
 
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+        if !response.is_success() {
             let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
+            return Err(Error::HttpResponse {
+                status: response.status_code,
+                message,
+            });
         }
 
-        Ok(deserialize::<T>(response.as_bytes())?)
+        Ok(deserialize::<T>(&response.body)?)
     }
 
     /// Makes a GET request to `path`, returning `None` on a 404 response.
@@ -216,13 +356,15 @@ impl<S: Sleeper> AsyncClient<S> {
     ) -> Result<T, Error> {
         let response = self.get_with_retry(path).await?;
 
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+        if !response.is_success() {
             let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
+            return Err(Error::HttpResponse {
+                status: response.status_code,
+                message,
+            });
         }
 
-        response.json::<T>().map_err(Error::BitReq)
+        response.json::<T>()
     }
 
     /// Makes a GET request to `path`, returning `None` on a 404 response.
@@ -251,10 +393,12 @@ impl<S: Sleeper> AsyncClient<S> {
     async fn get_response_hex<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         let response = self.get_with_retry(path).await?;
 
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+        if !response.is_success() {
             let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
+            return Err(Error::HttpResponse {
+                status: response.status_code,
+                message,
+            });
         }
 
         let hex_str = response.as_str()?;
@@ -283,10 +427,12 @@ impl<S: Sleeper> AsyncClient<S> {
     async fn get_response_text(&self, path: &str) -> Result<String, Error> {
         let response = self.get_with_retry(path).await?;
 
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+        if !response.is_success() {
             let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
+            return Err(Error::HttpResponse {
+                status: response.status_code,
+                message,
+            });
         }
 
         Ok(response.as_str()?.to_string())
@@ -317,22 +463,34 @@ impl<S: Sleeper> AsyncClient<S> {
         path: &str,
         body: T,
         query_params: Option<HashSet<(&str, String)>>,
-    ) -> Result<Response, Error> {
+    ) -> Result<RawResponse, Error> {
+        let body = body.into();
+        let query_params = query_params.unwrap_or_default();
+
+        #[cfg(feature = "async-ohttp")]
+        if let Some(ohttp_client) = &self.ohttp_client {
+            let query: Vec<(&str, &str)> = query_params
+                .iter()
+                .map(|(key, value)| (*key, value.as_str()))
+                .collect();
+            return self
+                .send_via_ohttp(ohttp_client, "POST", path, &query, Some(&body))
+                .await?
+                .error_for_status();
+        }
+
         let mut request: bitreq::Request = self.build_request(Method::Post, path)?.with_body(body);
 
-        for (key, value) in query_params.unwrap_or_default() {
+        for (key, value) in query_params {
             request = request.with_param(key, value);
         }
 
-        let response = request.send_async_with_client(&self.client).await?;
+        let response: RawResponse = request
+            .send_async_with_client(&self.client)
+            .await?
+            .try_into()?;
 
-        if !is_success(&response) {
-            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
-            let message = response.as_str().unwrap_or_default().to_string();
-            return Err(Error::HttpResponse { status, message });
-        }
-
-        Ok(response)
+        response.error_for_status()
     }
 
     /// Get a raw [`Transaction`] given its [`Txid`].
