@@ -13,7 +13,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 pub use bitcoin::consensus::{deserialize, serialize};
-use bitcoin::hash_types;
+use bitcoin::hash_types::TxMerkleNode;
 pub use bitcoin::hex::FromHex;
 pub use bitcoin::{
     absolute, block, transaction, Address, Amount, Block, BlockHash, CompactTarget, FeeRate,
@@ -159,7 +159,7 @@ pub struct BlockInfo {
     /// The [`Weight`] of this [`Block`].
     pub weight: Weight,
     /// The Merkle root of this [`Block`].
-    pub merkle_root: hash_types::TxMerkleNode,
+    pub merkle_root: TxMerkleNode,
     /// The [`BlockHash`] of the previous [`Block`].
     ///
     /// `None` for the genesis block.
@@ -481,9 +481,8 @@ where
 {
     use serde::de::Error;
 
-    let btc_per_kvb = match Option::<f64>::deserialize(d)? {
-        Some(v) => v,
-        None => return Ok(None),
+    let Some(btc_per_kvb) = Option::<f64>::deserialize(d)? else {
+        return Ok(None);
     };
     let sat_per_kwu = btc_per_kvb * 25_000_000.0;
     if sat_per_kwu.is_infinite() {

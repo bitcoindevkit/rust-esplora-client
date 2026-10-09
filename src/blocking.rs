@@ -310,6 +310,11 @@ impl BlockingClient {
     /// Get a raw [`Transaction`] given its [`Txid`].
     ///
     /// Returns `None` if the transaction is not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_tx(&self, txid: &Txid) -> Result<Option<Transaction>, Error> {
         self.get_opt_response(&format!("/tx/{txid}/raw"))
     }
@@ -318,6 +323,11 @@ impl BlockingClient {
     ///
     /// Returns an [`Error::TransactionNotFound`] if the transaction is not found.
     /// Prefer [`Self::get_tx`] if you want to handle the not-found case explicitly.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_tx_no_opt(&self, txid: &Txid) -> Result<Transaction, Error> {
         match self.get_tx(txid) {
             Ok(Some(tx)) => Ok(tx),
@@ -330,6 +340,11 @@ impl BlockingClient {
     /// block identified by `block_hash`.
     ///
     /// Returns `None` if the block or index is not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_txid_at_block_index(
         &self,
         block_hash: &BlockHash,
@@ -345,6 +360,11 @@ impl BlockingClient {
     ///
     /// Returns a [`TxStatus`] containing whether the transaction is confirmed,
     /// and if so, the block height, hash, and timestamp it was confirmed in.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_tx_status(&self, txid: &Txid) -> Result<TxStatus, Error> {
         self.get_response_json(&format!("/tx/{txid}/status"))
     }
@@ -354,6 +374,11 @@ impl BlockingClient {
     /// Unlike [`Self::get_tx`], returns the Esplora-specific [`EsploraTx`]
     /// type, which includes additional metadata such as confirmation status,
     /// fee, and weight. Returns `None` if the transaction is not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_tx_info(&self, txid: &Txid) -> Result<Option<EsploraTx>, Error> {
         self.get_opt_response_json(&format!("/tx/{txid}"))
     }
@@ -362,11 +387,21 @@ impl BlockingClient {
     ///
     /// Returns a [`Vec`] of [`OutputStatus`], one per output, ordered as they
     /// appear in the [`Transaction`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_tx_outspends(&self, txid: &Txid) -> Result<Vec<OutputStatus>, Error> {
         self.get_response_json(&format!("/tx/{txid}/outspends"))
     }
 
     /// Get the [`BlockHeader`] of a [`Block`] given its [`BlockHash`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_header_by_hash(&self, block_hash: &BlockHash) -> Result<BlockHeader, Error> {
         self.get_response_hex(&format!("/block/{block_hash}/header"))
     }
@@ -376,6 +411,11 @@ impl BlockingClient {
     /// Returns a [`BlockStatus`] indicating whether this [`Block`] is part of
     /// the best chain, its height, and the [`BlockHash`] of the next [`Block`],
     /// if any.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_block_status(&self, block_hash: &BlockHash) -> Result<BlockStatus, Error> {
         self.get_response_json(&format!("/block/{block_hash}/status"))
     }
@@ -383,6 +423,11 @@ impl BlockingClient {
     /// Get the full [`Block`] with the given [`BlockHash`].
     ///
     /// Returns `None` if the [`Block`] is not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_block_by_hash(&self, block_hash: &BlockHash) -> Result<Option<Block>, Error> {
         self.get_opt_response(&format!("/block/{block_hash}/raw"))
     }
@@ -392,6 +437,11 @@ impl BlockingClient {
     /// Returns a [`MerkleProof`] that can be used to verify the transaction's
     /// inclusion in a block. Returns `None` if the transaction is not found or
     /// is unconfirmed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_merkle_proof(&self, txid: &Txid) -> Result<Option<MerkleProof>, Error> {
         self.get_opt_response_json(&format!("/tx/{txid}/merkle-proof"))
     }
@@ -399,6 +449,11 @@ impl BlockingClient {
     /// Get a [`MerkleBlock`] inclusion proof for a [`Transaction`] given its [`Txid`].
     ///
     /// Returns `None` if the transaction is not found or is unconfirmed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_merkle_block(&self, txid: &Txid) -> Result<Option<MerkleBlock>, Error> {
         self.get_opt_response_hex(&format!("/tx/{txid}/merkleblock-proof"))
     }
@@ -408,6 +463,11 @@ impl BlockingClient {
     ///
     /// Returns an [`OutputStatus`] indicating whether the output has been
     /// spent, and if so, by which transaction. Returns `None` if not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_output_status(
         &self,
         txid: &Txid,
@@ -478,18 +538,33 @@ impl BlockingClient {
     }
 
     /// Get the block height of the current blockchain tip.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_height(&self) -> Result<u32, Error> {
         self.get_response_text("/blocks/tip/height")
             .map(|s| u32::from_str(s.as_str()).map_err(Error::Parsing))?
     }
 
     /// Get the [`BlockHash`] of the current blockchain tip.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_tip_hash(&self) -> Result<BlockHash, Error> {
         self.get_response_text("/blocks/tip/hash")
             .map(|s| BlockHash::from_str(s.as_str()).map_err(Error::HexToArray))?
     }
 
     /// Get the [`BlockHash`] of a [`Block`] given its height.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_block_hash(&self, block_height: u32) -> Result<BlockHash, Error> {
         self.get_response_text(&format!("/block-height/{block_height}"))
             .map(|s| BlockHash::from_str(s.as_str()).map_err(Error::HexToArray))?
@@ -499,11 +574,21 @@ impl BlockingClient {
     ///
     /// Returns a [`MempoolStats`] containing the transaction count, total
     /// virtual size, total fees, and fee rate histogram.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_mempool_stats(&self) -> Result<MempoolStats, Error> {
         self.get_response_json("/mempool")
     }
 
     /// Get the last 10 [`MempoolRecentTx`]s to enter the mempool.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_mempool_recent_txs(&self) -> Result<Vec<MempoolRecentTx>, Error> {
         self.get_response_json("/mempool/recent")
     }
@@ -511,6 +596,11 @@ impl BlockingClient {
     /// Get the full list of [`Txid`]s currently in the mempool.
     ///
     /// The order of the returned [`Txid`]s is arbitrary.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_mempool_txids(&self) -> Result<Vec<Txid>, Error> {
         self.get_response_json("/mempool/txids")
     }
@@ -519,6 +609,11 @@ impl BlockingClient {
     ///
     /// Returns a [`HashMap`] where the key is the confirmation target in blocks
     /// and the value is the estimated [`FeeRate`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_fee_estimates(&self) -> Result<HashMap<u16, FeeRate>, Error> {
         let estimates_raw: HashMap<u16, f64> = self.get_response_json("/fee-estimates")?;
         let estimates = sat_per_vbyte_to_feerate(estimates_raw);
@@ -531,6 +626,11 @@ impl BlockingClient {
     /// Returns an [`AddressStats`] containing confirmed and mempool transaction
     /// summaries for the given address, including funded and spent output
     /// counts and their total values.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_address_stats(&self, address: &Address) -> Result<AddressStats, Error> {
         let path = format!("/address/{address}");
         self.get_response_json(&path)
@@ -540,6 +640,11 @@ impl BlockingClient {
     ///
     /// Returns a [`ScriptHashStats`] containing transaction summaries for the
     /// SHA256 hash of the given [`Script`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_scripthash_stats(&self, script: &Script) -> Result<ScriptHashStats, Error> {
         let script_hash = sha256::Hash::hash(script.as_bytes());
         let path = format!("/scripthash/{script_hash}");
@@ -551,6 +656,11 @@ impl BlockingClient {
     /// Returns up to 50 mempool transactions plus the first 25 confirmed transactions.
     /// To paginate, pass the [`Txid`] of the last transaction seen in the
     /// previous response as `last_seen`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_address_txs(
         &self,
         address: &Address,
@@ -565,6 +675,11 @@ impl BlockingClient {
     }
 
     /// Get unconfirmed mempool [`EsploraTx`]s for an [`Address`], sorted newest first.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_mempool_address_txs(&self, address: &Address) -> Result<Vec<EsploraTx>, Error> {
         let path = format!("/address/{address}/txs/mempool");
 
@@ -575,6 +690,11 @@ impl BlockingClient {
     ///
     /// Returns 25 transactions per page. To paginate, pass the [`Txid`] of the
     /// last transaction seen in the previous response as `last_seen`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_scripthash_txs(
         &self,
         script: &Script,
@@ -589,6 +709,11 @@ impl BlockingClient {
     }
 
     /// Get unconfirmed mempool [`EsploraTx`]s for a [`Script`] hash, sorted newest first.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_mempool_scripthash_txs(&self, script: &Script) -> Result<Vec<EsploraTx>, Error> {
         let script_hash = sha256::Hash::hash(script.as_bytes());
         let path = format!("/scripthash/{script_hash:x}/txs/mempool");
@@ -602,6 +727,11 @@ impl BlockingClient {
     /// [`Transaction`] count, size, and [`Weight`](bitcoin::Weight).
     ///
     /// This method does not return the full [`Block`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_block_info(&self, blockhash: &BlockHash) -> Result<BlockInfo, Error> {
         let path = format!("/block/{blockhash}");
 
@@ -610,6 +740,11 @@ impl BlockingClient {
 
     /// Get all [`Txid`]s of [`Transaction`]s included in the [`Block`] with the
     /// given [`BlockHash`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_block_txids(&self, blockhash: &BlockHash) -> Result<Vec<Txid>, Error> {
         let path = format!("/block/{blockhash}/txids");
 
@@ -623,6 +758,11 @@ impl BlockingClient {
     ///
     /// Note that `start_index` must be a multiple of 25, otherwise the server
     /// will return an error.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_block_txs(
         &self,
         blockhash: &BlockHash,
@@ -662,6 +802,11 @@ impl BlockingClient {
     }
 
     /// Get all confirmed [`Utxo`]s locked to the given [`Address`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_address_utxos(&self, address: &Address) -> Result<Vec<Utxo>, Error> {
         let path = format!("/address/{address}/utxo");
 
@@ -669,6 +814,11 @@ impl BlockingClient {
     }
 
     /// Get all confirmed [`Utxo`]s locked to the given [`Script`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails, the server returns an error status,
+    /// or the response cannot be decoded.
     pub fn get_scripthash_utxos(&self, script: &Script) -> Result<Vec<Utxo>, Error> {
         let script_hash = sha256::Hash::hash(script.as_bytes());
         let path = format!("/scripthash/{script_hash}/utxo");

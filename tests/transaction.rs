@@ -23,7 +23,7 @@ async fn test_get_tx() {
     let env = TestEnv::new();
     let (blocking_client, async_client) = env.setup_clients();
 
-    let address = env.get_legacy_address();
+    let address = TestEnv::get_legacy_address();
     let txid = env
         .bitcoind_client()
         .send_to_address(&address, Amount::from_sat(1000))
@@ -42,7 +42,7 @@ async fn test_get_tx_no_opt() {
     let env = TestEnv::new();
     let (blocking_client, async_client) = env.setup_clients();
 
-    let address = env.get_legacy_address();
+    let address = TestEnv::get_legacy_address();
     let txid = env
         .bitcoind_client()
         .send_to_address(&address, Amount::from_sat(1000))
@@ -61,7 +61,7 @@ async fn test_get_tx_status() {
     let env = TestEnv::new();
     let (blocking_client, async_client) = env.setup_clients();
 
-    let address = env.get_legacy_address();
+    let address = TestEnv::get_legacy_address();
     let txid = env
         .bitcoind_client()
         .send_to_address(&address, Amount::from_sat(1000))
@@ -91,7 +91,7 @@ async fn test_get_tx_info() {
     let env = TestEnv::new();
     let (blocking_client, async_client) = env.setup_clients();
 
-    let address = env.get_legacy_address();
+    let address = TestEnv::get_legacy_address();
     let txid = env
         .bitcoind_client()
         .send_to_address(&address, Amount::from_sat(1000))
@@ -133,10 +133,7 @@ async fn test_get_tx_info() {
     assert!(tx_info.status.confirmed);
     assert_eq!(tx_info.status.block_height, Some(tx_block_height));
     assert_eq!(tx_info.status.block_hash, tx_res.block_hash);
-    assert_eq!(
-        tx_info.status.block_time,
-        tx_res.block_time.map(|bt| bt as u64)
-    );
+    assert_eq!(tx_info.status.block_time, tx_res.block_time.map(u64::from));
 
     let txid = Txid::hash(b"not exist");
     assert_eq!(blocking_client.get_tx_info(&txid).unwrap(), None);
@@ -148,7 +145,7 @@ async fn test_get_tx_merkle_proof() {
     let env = TestEnv::new();
     let (blocking_client, async_client) = env.setup_clients();
 
-    let address = env.get_legacy_address();
+    let address = TestEnv::get_legacy_address();
     let txid = env
         .bitcoind_client()
         .send_to_address(&address, Amount::from_sat(1000))
@@ -168,7 +165,7 @@ async fn test_get_tx_output_status() {
     let env = TestEnv::new();
     let (blocking_client, async_client) = env.setup_clients();
 
-    let address = env.get_legacy_address();
+    let address = TestEnv::get_legacy_address();
     let txid = env
         .bitcoind_client()
         .send_to_address(&address, Amount::from_sat(1000))
@@ -234,7 +231,7 @@ async fn test_broadcast() {
     let env = TestEnv::new();
     let (blocking_client, async_client) = env.setup_clients();
 
-    let address = env.get_legacy_address();
+    let address = TestEnv::get_legacy_address();
     let txid = env
         .bitcoind_client()
         .send_to_address(&address, Amount::from_sat(1000))
@@ -267,7 +264,7 @@ async fn test_get_tx_outspends() {
     let env = TestEnv::new();
     let (blocking_client, async_client) = env.setup_clients();
 
-    let address = env.get_legacy_address();
+    let address = TestEnv::get_legacy_address();
     let txid = env
         .bitcoind_client()
         .send_to_address(&address, Amount::from_sat(21000))
@@ -319,9 +316,9 @@ async fn test_get_tx_with_http_headers() {
     let exp_header_value = "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==";
     let headers = HashMap::from([(exp_header_key.to_string(), exp_header_value.to_string())]);
 
-    let (blocking_client, async_client) = env.setup_clients_with_headers(&base_url, headers);
+    let (blocking_client, async_client) = TestEnv::setup_clients_with_headers(&base_url, headers);
 
-    let address = env.get_legacy_address();
+    let address = TestEnv::get_legacy_address();
     let txid = env
         .bitcoind_client()
         .send_to_address(&address, Amount::from_sat(1000))

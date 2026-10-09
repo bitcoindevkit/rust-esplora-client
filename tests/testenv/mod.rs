@@ -84,12 +84,14 @@ impl Default for EnvConfig<'_> {
 
 impl TestEnv {
     /// Instantiate a [`TestEnv`] with the default [`EnvConfig`].
-    pub fn new() -> Self {
-        Self::new_with_config(EnvConfig::default())
+    pub(crate) fn new() -> Self {
+        let config = EnvConfig::default();
+
+        Self::new_with_config(&config)
     }
 
     /// Instantiate a [`TestEnv`] with a custom [`EnvConfig`].
-    pub(crate) fn new_with_config(config: EnvConfig) -> Self {
+    pub(crate) fn new_with_config(config: &EnvConfig<'_>) -> Self {
         const SETUP_BLOCK_COUNT: usize = 101;
 
         let bitcoind_exe = std::env::var("BITCOIND_EXE")
@@ -124,14 +126,14 @@ impl TestEnv {
         let env = Self {
             bitcoind,
             electrsd,
-            #[cfg(feature = "blocking")]
-            blocking_client,
             #[cfg(feature = "async")]
             async_client,
+            #[cfg(feature = "blocking")]
+            blocking_client,
         };
 
         env.bitcoind_client()
-            .generate_to_address(SETUP_BLOCK_COUNT, &env.get_mining_address())
+            .generate_to_address(SETUP_BLOCK_COUNT, &Self::get_mining_address())
             .unwrap();
         env.wait_until_electrum_sees_block(SETUP_BLOCK_COUNT);
 
@@ -146,19 +148,21 @@ impl TestEnv {
     #[cfg(all(feature = "blocking", feature = "async", feature = "tokio"))]
     /// Setup both [`BlockingClient`] and [`AsyncClient`].
     pub(crate) fn setup_clients(&self) -> (BlockingClient, AsyncClient) {
-        self.setup_clients_with_headers(self.electrsd.esplora_url.as_ref().unwrap(), HashMap::new())
+        Self::setup_clients_with_headers(
+            self.electrsd.esplora_url.as_ref().unwrap(),
+            HashMap::new(),
+        )
     }
 
     #[cfg(all(feature = "blocking", feature = "async", feature = "tokio"))]
     /// Setup both [`BlockingClient`] and [`AsyncClient`] with custom HTTP headers.
     pub(crate) fn setup_clients_with_headers(
-        &self,
         url: &str,
-        headers: HashMap<String, String>,
+        headers: impl IntoIterator<Item = (String, String)>,
     ) -> (BlockingClient, AsyncClient) {
         let mut builder = Builder::new(&format!("http://{url}"));
-        for (k, v) in &headers {
-            builder = builder.header(k, v);
+        for (key, value) in headers {
+            builder = builder.header(&key, &value);
         }
         let blocking_client = builder
             .clone()
@@ -173,7 +177,7 @@ impl TestEnv {
     pub(crate) fn mine_blocks(&self, count: usize) {
         self.bitcoind
             .client
-            .generate_to_address(count, &self.get_mining_address())
+            .generate_to_address(count, &Self::get_mining_address())
             .unwrap();
     }
 
@@ -185,7 +189,7 @@ impl TestEnv {
             if header.height >= min_height {
                 break;
             }
-            header = self.poll_exp_backoff(|| {
+            header = Self::poll_exp_backoff(|| {
                 electrsd.trigger().unwrap();
                 electrsd.client.ping().unwrap();
                 electrsd.client.block_headers_pop().unwrap()
@@ -207,7 +211,7 @@ impl TestEnv {
     }
 
     /// Poll the [electrum server](electrsd::ElectrsD) in exponentially increasing intervals.
-    fn poll_exp_backoff<T, F>(&self, mut poll: F) -> T
+    fn poll_exp_backoff<T, F>(mut poll: F) -> T
     where
         F: FnMut() -> Option<T>,
     {
@@ -223,35 +227,35 @@ impl TestEnv {
     }
 
     /// Get a `Legacy` regtest address.
-    pub(crate) fn get_legacy_address(&self) -> Address {
+    pub(crate) fn get_legacy_address() -> Address {
         Address::from_str("mvUsRD2pNeQQ8nZq8CDEx6fjVQsyzqyhVC")
             .unwrap()
             .assume_checked()
     }
 
     /// Get a `Nested SegWit` (P2SH-P2WSH) regtest address.
-    pub(crate) fn get_nested_segwit_address(&self) -> Address {
+    pub(crate) fn get_nested_segwit_address() -> Address {
         Address::from_str("2N2bJevrSwzv5C6dGm9kQAivDYnvDBPbUxM")
             .unwrap()
             .assume_checked()
     }
 
     /// Get a `bech32` regtest address.
-    pub(crate) fn get_bech32_address(&self) -> Address {
+    pub(crate) fn get_bech32_address() -> Address {
         Address::from_str("bcrt1qedegah48k0uft3ez7u8ywg2hf0ygexgvhps0wp")
             .unwrap()
             .assume_checked()
     }
 
     /// Get a `bech32m` regtest address.
-    pub(crate) fn get_bech32m_address(&self) -> Address {
+    pub(crate) fn get_bech32m_address() -> Address {
         Address::from_str("bcrt1p970nsjmz8ls34ty229n6zu534mumc2j74skuxe2lzcqdqxuwwhxsftk7al")
             .unwrap()
             .assume_checked()
     }
 
     /// Get an address which coinbase outputs should be sent to.
-    pub(crate) fn get_mining_address(&self) -> Address {
+    pub(crate) fn get_mining_address() -> Address {
         Address::from_str("bcrt1qj5gx4t0n8lrl0clddmpn0pee4r4fds7stwyj0j")
             .unwrap()
             .assume_checked()
@@ -271,7 +275,7 @@ mod test {
         let env = TestEnv::new();
         let (blocking_client, async_client) = env.setup_clients();
 
-        let address = env.get_legacy_address();
+        let address = TestEnv::get_legacy_address();
         let txid = env
             .bitcoind_client()
             .send_to_address(&address, Amount::from_sat(1000))

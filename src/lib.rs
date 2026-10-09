@@ -87,11 +87,10 @@
 //! [Esplora]: https://github.com/Blockstream/esplora/blob/master/API.md
 //! [`bitreq`]: https://docs.rs/bitreq
 #![allow(clippy::result_large_err)]
-#![warn(missing_docs)]
-#![allow(deprecated)]
 
 use std::collections::HashMap;
 use std::fmt;
+use std::hash::BuildHasher;
 use std::num::TryFromIntError;
 use std::time::Duration;
 
@@ -185,7 +184,10 @@ fn duration_to_timeout_secs(duration: Duration) -> u64 {
 /// Selects the highest confirmation target from `estimates` that is at or
 /// below `target_blocks`, and returns its [`FeeRate`]. Returns `None` if no
 /// matching estimate is found.
-pub fn convert_fee_rate(target_blocks: usize, estimates: HashMap<u16, FeeRate>) -> Option<FeeRate> {
+pub fn convert_fee_rate<S: BuildHasher>(
+    target_blocks: usize,
+    estimates: HashMap<u16, FeeRate, S>,
+) -> Option<FeeRate> {
     estimates
         .into_iter()
         .filter(|(k, _)| *k as usize <= target_blocks)
@@ -194,7 +196,9 @@ pub fn convert_fee_rate(target_blocks: usize, estimates: HashMap<u16, FeeRate>) 
 }
 
 /// Convert a [`HashMap`] of fee estimates expressed as sat/vB ([`f64`]) into [`FeeRate`]s.
-pub fn sat_per_vbyte_to_feerate(estimates: HashMap<u16, f64>) -> HashMap<u16, FeeRate> {
+pub fn sat_per_vbyte_to_feerate<S: BuildHasher>(
+    estimates: HashMap<u16, f64, S>,
+) -> HashMap<u16, FeeRate> {
     estimates
         .into_iter()
         .map(|(k, v)| (k, FeeRate::from_sat_per_kwu((v * 250.0).round() as u64)))
@@ -256,7 +260,7 @@ impl Builder {
     /// The URL is stored exactly as provided and request paths are appended to
     /// it. Do not include a trailing slash unless your server expects one.
     pub fn new(base_url: &str) -> Self {
-        Builder {
+        Self {
             base_url: base_url.to_string(),
             proxy: None,
             timeout: None,
@@ -270,18 +274,21 @@ impl Builder {
     /// Set the proxy URL used for requests.
     ///
     /// The proxy is ignored when targeting `wasm32`.
+    #[must_use]
     pub fn proxy(mut self, proxy: &str) -> Self {
         self.proxy = Some(proxy.to_string());
         self
     }
 
     /// Set the per-request socket timeout.
+    #[must_use]
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
         self
     }
 
     /// Add or replace an HTTP header sent with every request.
+    #[must_use]
     pub fn header(mut self, key: &str, value: &str) -> Self {
         self.headers.insert(key.to_string(), value.to_string());
         self
@@ -291,6 +298,7 @@ impl Builder {
     ///
     /// Only responses whose status code is listed in
     /// [`RETRYABLE_ERROR_CODES`] are retried.
+    #[must_use]
     pub fn max_retries(mut self, count: usize) -> Self {
         self.max_retries = count;
         self
@@ -298,6 +306,7 @@ impl Builder {
 
     /// Set the maximum number of cached connections in the async client.
     #[cfg(feature = "async")]
+    #[must_use]
     pub fn max_connections(mut self, count: usize) -> Self {
         self.max_connections = count;
         self
@@ -357,9 +366,9 @@ pub enum Error {
     /// Invalid Bitcoin consensus data returned by the server.
     BitcoinEncoding(bitcoin::consensus::encode::Error),
     /// Invalid fixed-size hex data returned by the server.
-    HexToArray(bitcoin::hex::HexToArrayError),
+    HexToArray(hex::HexToArrayError),
     /// Invalid variable-length hex data returned by the server.
-    HexToBytes(bitcoin::hex::HexToBytesError),
+    HexToBytes(hex::HexToBytesError),
     /// Transaction not found.
     TransactionNotFound(Txid),
     /// Block header height not found.
@@ -378,44 +387,45 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             #[cfg(any(feature = "blocking", feature = "async"))]
-            Error::BitReq(e) => write!(f, "Bitreq HTTP error: {e}"),
-            Error::SerdeJson(e) => write!(f, "JSON (de)serialization error: {e}"),
-            Error::HttpResponse { status, message } => {
+            Self::BitReq(e) => write!(f, "Bitreq HTTP error: {e}"),
+            Self::SerdeJson(e) => write!(f, "JSON (de)serialization error: {e}"),
+            Self::HttpResponse { status, message } => {
                 write!(f, "HTTP error {status}: {message}")
             }
-            Error::Parsing(e) => write!(f, "Failed to parse invalid number: {e}"),
-            Error::StatusCode(e) => write!(f, "Invalid status code: {e}"),
-            Error::BitcoinEncoding(e) => write!(f, "Invalid Bitcoin data: {e}"),
-            Error::HexToArray(e) => write!(f, "Invalid hex to array conversion: {e}"),
-            Error::HexToBytes(e) => write!(f, "Invalid hex to bytes conversion: {e}"),
-            Error::TransactionNotFound(txid) => {
+            Self::Parsing(e) => write!(f, "Failed to parse invalid number: {e}"),
+            Self::StatusCode(e) => write!(f, "Invalid status code: {e}"),
+            Self::BitcoinEncoding(e) => write!(f, "Invalid Bitcoin data: {e}"),
+            Self::HexToArray(e) => write!(f, "Invalid hex to array conversion: {e}"),
+            Self::HexToBytes(e) => write!(f, "Invalid hex to bytes conversion: {e}"),
+            Self::TransactionNotFound(txid) => {
                 write!(f, "Transaction not found: {txid}")
             }
-            Error::HeaderHeightNotFound(height) => {
+            Self::HeaderHeightNotFound(height) => {
                 write!(f, "Block header at height {height} not found")
             }
-            Error::HeaderHashNotFound(hash) => {
+            Self::HeaderHashNotFound(hash) => {
                 write!(f, "Block header with hash {hash} not found")
             }
-            Error::InvalidHttpHeaderName(name) => {
+            Self::InvalidHttpHeaderName(name) => {
                 write!(f, "Invalid HTTP header name: {name}")
             }
-            Error::InvalidHttpHeaderValue(value) => {
+            Self::InvalidHttpHeaderValue(value) => {
                 write!(f, "Invalid HTTP header value: {value}")
             }
-            Error::InvalidResponse => write!(f, "The server sent an invalid response"),
+            Self::InvalidResponse => write!(f, "The server sent an invalid response"),
         }
     }
 }
 
 impl std::error::Error for Error {}
 
+/// Implements [`From`] by wrapping an inner error in an [`Error`] variant.
 macro_rules! impl_error {
     ( $from:ty, $to:ident ) => {
         impl_error!($from, $to, Error);
     };
     ( $from:ty, $to:ident, $impl_for:ty ) => {
-        impl std::convert::From<$from> for $impl_for {
+        impl From<$from> for $impl_for {
             fn from(err: $from) -> Self {
                 <$impl_for>::$to(err)
             }
@@ -428,5 +438,5 @@ impl_error!(::bitreq::Error, BitReq, Error);
 impl_error!(serde_json::Error, SerdeJson, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
 impl_error!(bitcoin::consensus::encode::Error, BitcoinEncoding, Error);
-impl_error!(bitcoin::hex::HexToArrayError, HexToArray, Error);
-impl_error!(bitcoin::hex::HexToBytesError, HexToBytes, Error);
+impl_error!(hex::HexToArrayError, HexToArray, Error);
+impl_error!(hex::HexToBytesError, HexToBytes, Error);
