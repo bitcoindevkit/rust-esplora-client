@@ -86,6 +86,15 @@ impl BlockingClient {
     /// This consumes the builder configuration and stores it on the client.
     /// No network request is made until a client method is called.
     pub fn from_builder(builder: Builder) -> Self {
+        log_debug!(
+            event = "client_build",
+            client = "blocking",
+            timeout = ?builder.timeout,
+            max_retries = builder.max_retries,
+            proxy_configured = builder.proxy.is_some(),
+            header_count = builder.headers.len(),
+            "building Esplora client"
+        );
         Self {
             url: builder.base_url,
             proxy: builder.proxy,
@@ -145,7 +154,24 @@ impl BlockingClient {
             request = request.with_param(key, value);
         }
 
+        log_trace!(
+            event = "request",
+            client = "blocking",
+            method = "POST",
+            path,
+            attempt = 1,
+            "sending Esplora request"
+        );
         let response = request.send()?;
+        log_trace!(
+            event = "response",
+            client = "blocking",
+            method = "POST",
+            path,
+            attempt = 1,
+            status = response.status_code,
+            "received Esplora response"
+        );
 
         if !is_success(&response) {
             let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
@@ -156,15 +182,44 @@ impl BlockingClient {
         Ok(response)
     }
 
-    /// Sends a GET request to `url`, retrying on retryable status codes
+    /// Sends a GET request to `path`, retrying on retryable status codes
     /// with exponential backoff until [`BlockingClient::max_retries`] is reached.
-    fn get_with_retry(&self, url: &str) -> Result<Response, Error> {
+    fn get_with_retry(&self, path: &str) -> Result<Response, Error> {
         let mut delay = BASE_BACKOFF_MILLIS;
         let mut attempts = 0;
 
         loop {
-            match self.build_request(Method::Get, url)?.send()? {
+            let request = self.build_request(Method::Get, path)?;
+            log_trace!(
+                event = "request",
+                client = "blocking",
+                method = "GET",
+                path,
+                attempt = attempts + 1,
+                "sending Esplora request"
+            );
+            let response = request.send()?;
+            log_trace!(
+                event = "response",
+                client = "blocking",
+                method = "GET",
+                path,
+                attempt = attempts + 1,
+                status = response.status_code,
+                "received Esplora response"
+            );
+            match response {
                 resp if attempts < self.max_retries && is_retryable(&resp) => {
+                    log_debug!(
+                        event = "retry",
+                        client = "blocking",
+                        method = "GET",
+                        path,
+                        attempt = attempts + 1,
+                        status = resp.status_code,
+                        delay_ms = delay.as_millis(),
+                        "retrying Esplora request"
+                    );
                     thread::sleep(delay);
                     attempts += 1;
                     delay *= 2;

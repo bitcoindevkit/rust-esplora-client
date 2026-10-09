@@ -26,8 +26,10 @@ hex = { version = "0.2.2", package = "hex-conservative" }
 serde = { version = "1.0.194", features = ["derive"] }
 serde_json = { version = "1.0.117", features = ["std"], default-features = false }
 tokio = { version = "1.44.2", features = ["time"], optional = true } # Async Client Transport
+tracing = { version = "0.1.44", default-features = false, features = ["std", "log"], optional = true }
 
 [dev-dependencies]
+log = "0.4.17"
 electrsd = { version = "0.41.0", default-features = false, features = ["legacy", "esplora_a33e97e1", "bitcoind_download", "bitcoind_29_0"] }
 tokio = { version = "1.44.2", features = ["full"] }
 # Transitive dependency pins:
@@ -45,6 +47,7 @@ tempfile = { version = ">=3.4.0, <=3.15.0" } # blame: remove_dir_all@0.5.0 -> te
 
 [features]
 default = ["blocking", "blocking-https", "async", "async-https", "tokio"]
+log = ["dep:tracing"]
 
 tokio = ["dep:tokio"]
 async = ["bitreq/async", "bitreq/proxy", "bitreq/json-using-serde", "tokio?/time"]
@@ -95,6 +98,9 @@ exclude_features = [
 # Run tests using these exact feature sets
 exact_features = [
     ["async", "blocking"],
+    ["async", "log"],
+    ["blocking", "log"],
+    ["async", "blocking", "log"],
     ["async-https", "blocking-https", "tokio"],
     ["async-https-native", "blocking-https-native", "tokio"],
     ["async-https-rustls", "blocking-https-rustls", "tokio"],

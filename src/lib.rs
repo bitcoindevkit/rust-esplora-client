@@ -56,7 +56,8 @@
 //!
 //! # Features
 //!
-//! By default the crate enables all features. To select only the pieces you
+//! By default the crate enables both clients, their default TLS backends, and Tokio.
+//! Logging is opt-in. To select only the pieces you
 //! need, set `default-features = false` in `Cargo.toml` and list the desired
 //! features explicitly:
 //!
@@ -83,8 +84,19 @@
 //! * `async-https-rustls-probe` enables [`bitreq`], the async client with support for proxying and
 //!   TLS (SSL) using `rustls` and probed system roots.
 //! * `tokio` enables the default async sleeper used by [`Builder::build_async`].
+//! * `log` enables structured [`tracing`] events. Disabled by default.
+//!
+//! # Logging
+//!
+//! The `log` feature emits `DEBUG` events for client construction and retries,
+//! and `TRACE` events for HTTP requests and responses.
+//!
+//! The application must configure either a tracing subscriber or a `log` logger.
+//! Headers, bodies, base URLs, and proxy values are omitted. Request paths are
+//! included and may contain addresses or transaction IDs.
 //!
 //! [Esplora]: https://github.com/Blockstream/esplora/blob/master/API.md
+//! [tracing]: https://docs.rs/tracing
 //! [`bitreq`]: https://docs.rs/bitreq
 #![allow(clippy::result_large_err)]
 #![warn(missing_docs)]
@@ -97,6 +109,22 @@ use std::time::Duration;
 
 #[cfg(feature = "async")]
 pub use r#async::Sleeper;
+
+#[cfg(any(feature = "blocking", feature = "async"))]
+macro_rules! log_debug {
+    ($($arg:tt)*) => {{
+        #[cfg(feature = "log")]
+        tracing::debug!($($arg)*);
+    }};
+}
+
+#[cfg(any(feature = "blocking", feature = "async"))]
+macro_rules! log_trace {
+    ($($arg:tt)*) => {{
+        #[cfg(feature = "log")]
+        tracing::trace!($($arg)*);
+    }};
+}
 
 pub mod api;
 #[cfg(feature = "async")]
