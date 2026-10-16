@@ -43,9 +43,9 @@ use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::{Address, Amount, Block, BlockHash, FeeRate, MerkleBlock, Script, Transaction, Txid};
 
 use crate::{
-    duration_to_timeout_secs, is_retryable, is_success, sat_per_vbyte_to_feerate, AddressStats,
-    BlockInfo, BlockStatus, Builder, Error, EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof,
-    OutputStatus, ScriptHashStats, SubmitPackageResult, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
+    is_retryable, is_success, sat_per_vbyte_to_feerate, AddressStats, BlockInfo, BlockStatus,
+    Builder, Error, EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof, OutputStatus,
+    ScriptHashStats, SubmitPackageResult, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
 };
 
 /// A synchronous client for interacting with an Esplora API server.
@@ -114,7 +114,7 @@ impl BlockingClient {
         }
 
         if let Some(timeout) = self.timeout {
-            request = request.with_timeout(duration_to_timeout_secs(timeout));
+            request = request.with_timeout(timeout);
         }
 
         if !self.headers.is_empty() {

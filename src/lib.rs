@@ -170,16 +170,6 @@ fn is_retryable(response: &Response) -> bool {
     RETRYABLE_ERROR_CODES.contains(&(response.status_code as u16))
 }
 
-/// Convert a [`Duration`] to whole timeout seconds for `bitreq`.
-#[cfg(any(feature = "blocking", feature = "async"))]
-fn duration_to_timeout_secs(duration: Duration) -> u64 {
-    if duration.subsec_nanos() == 0 {
-        duration.as_secs()
-    } else {
-        duration.as_secs().saturating_add(1)
-    }
-}
-
 /// Return the [`FeeRate`] for the given confirmation target in blocks.
 ///
 /// Selects the highest confirmation target from `estimates` that is at or

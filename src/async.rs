@@ -46,9 +46,9 @@ use bitcoin::{Address, Amount, Block, BlockHash, FeeRate, MerkleBlock, Script, T
 use bitreq::{Client, Method, Proxy, Request, RequestExt, Response};
 
 use crate::{
-    duration_to_timeout_secs, is_retryable, is_success, sat_per_vbyte_to_feerate, AddressStats,
-    BlockInfo, BlockStatus, Builder, Error, EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof,
-    OutputStatus, ScriptHashStats, SubmitPackageResult, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
+    is_retryable, is_success, sat_per_vbyte_to_feerate, AddressStats, BlockInfo, BlockStatus,
+    Builder, Error, EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof, OutputStatus,
+    ScriptHashStats, SubmitPackageResult, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
 };
 
 // FIXME: (@oleonardolima) there's no `Debug` implementation for `bitreq::Client`.
@@ -140,7 +140,7 @@ impl<S: Sleeper> AsyncClient<S> {
 
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(timeout) = self.timeout {
-            request = request.with_timeout(duration_to_timeout_secs(timeout));
+            request = request.with_timeout(timeout);
         }
 
         if !self.headers.is_empty() {
