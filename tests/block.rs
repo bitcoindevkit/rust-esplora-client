@@ -130,7 +130,7 @@ async fn test_get_merkle_block() {
     let env = TestEnv::new();
     let (blocking_client, async_client) = env.setup_clients();
 
-    let address = env.get_legacy_address();
+    let address = TestEnv::get_legacy_address();
     let txid = env
         .bitcoind_client()
         .send_to_address(&address, Amount::from_sat(1000))
@@ -159,7 +159,7 @@ async fn test_get_block_txids() {
     let env = TestEnv::new();
     let (blocking_client, async_client) = env.setup_clients();
 
-    let address = env.get_legacy_address();
+    let address = TestEnv::get_legacy_address();
 
     // Create 5 transactions and mine a block.
     let txids: Vec<_> = (0..5)
@@ -182,7 +182,7 @@ async fn test_get_block_txids() {
     assert_eq!(txids_async, txids_blocking);
 
     // Compare expected and received (skipping the coinbase TXID).
-    for expected_txid in txids.iter() {
+    for expected_txid in &txids {
         assert!(txids_async.contains(expected_txid));
     }
 }

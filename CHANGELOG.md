@@ -4,6 +4,8 @@
 
 ### Added
 
+* chore: add and apply `rust-bitcoin`'s lints [#226]
+
 ### Changed
 
 * feat(client): enable request pipelining for `AsyncClient` [#245]
