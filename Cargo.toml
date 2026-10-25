@@ -1,6 +1,6 @@
 [package]
 name = "esplora-client"
-version = "0.12.3"
+version = "0.12.4"
 edition = "2021"
 authors = [
   "Alekos Filini <alekos.filini@gmail.com>",
@@ -13,7 +13,7 @@ documentation = "https://docs.rs/esplora-client/"
 description = "Bitcoin Esplora API client library. Supports plaintext, TLS and Onion servers. Blocking or async"
 keywords = ["bitcoin", "esplora"]
 readme = "README.md"
-rust-version = "1.63.0"
+rust-version = "1.80.0"
 
 [lib]
 name = "esplora_client"
@@ -25,7 +25,7 @@ serde_json = { version = "1.0", features = ["alloc"], default-features = false }
 bitcoin = { version = "0.32", features = ["serde", "std"], default-features = false }
 hex = { version = "0.2", package = "hex-conservative" }
 log = "^0.4"
-minreq = { version = "2.11.0", features = ["json-using-serde"], optional = true }
+minreq = { version = "3", features = ["json-using-serde"], optional = true }
 reqwest = { version = "0.12",  features = ["json"], default-features = false, optional = true }
 
 # default async runtime
@@ -41,8 +41,8 @@ default = ["blocking", "async", "async-https", "tokio"]
 blocking = ["minreq", "minreq/proxy"]
 blocking-https = ["blocking", "minreq/https"]
 blocking-https-rustls = ["blocking", "minreq/https-rustls"]
-blocking-https-native = ["blocking", "minreq/https-native"]
-blocking-https-bundled = ["blocking", "minreq/https-bundled"]
+blocking-https-native = ["blocking", "minreq/https-native-tls"]
+blocking-https-bundled = ["blocking", "minreq/https-openssl"]
 
 tokio = ["dep:tokio"]
 async = ["reqwest", "reqwest/socks", "tokio?/time"]

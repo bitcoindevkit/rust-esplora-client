@@ -217,6 +217,7 @@ pub enum Error {
     },
     /// Invalid number returned
     Parsing(std::num::ParseIntError),
+    /// TODO: remove StatusCode error in the next breaking release
     /// Invalid status code, unable to convert to `u16`
     StatusCode(TryFromIntError),
     /// Invalid Bitcoin data returned

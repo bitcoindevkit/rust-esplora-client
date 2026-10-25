@@ -12,7 +12,6 @@
 //! Esplora by way of `minreq` HTTP client.
 
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::str::FromStr;
 use std::thread;
 
@@ -110,7 +109,7 @@ impl BlockingClient {
         match self.get_with_retry(path) {
             Ok(resp) if is_status_not_found(resp.status_code) => Ok(None),
             Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
+                let status = resp.status_code;
                 let message = resp.as_str().unwrap_or_default().to_string();
                 Err(Error::HttpResponse { status, message })
             }
@@ -123,7 +122,7 @@ impl BlockingClient {
         match self.get_with_retry(path) {
             Ok(resp) if is_status_not_found(resp.status_code) => Ok(None),
             Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
+                let status = resp.status_code;
                 let message = resp.as_str().unwrap_or_default().to_string();
                 Err(Error::HttpResponse { status, message })
             }
@@ -138,7 +137,7 @@ impl BlockingClient {
         match self.get_with_retry(path) {
             Ok(resp) if is_status_not_found(resp.status_code) => Ok(None),
             Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
+                let status = resp.status_code;
                 let message = resp.as_str().unwrap_or_default().to_string();
                 Err(Error::HttpResponse { status, message })
             }
@@ -156,7 +155,7 @@ impl BlockingClient {
     fn get_response_hex<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         match self.get_with_retry(path) {
             Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
+                let status = resp.status_code;
                 let message = resp.as_str().unwrap_or_default().to_string();
                 Err(Error::HttpResponse { status, message })
             }
@@ -176,7 +175,7 @@ impl BlockingClient {
         let response = self.get_with_retry(path);
         match response {
             Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
+                let status = resp.status_code;
                 let message = resp.as_str().unwrap_or_default().to_string();
                 Err(Error::HttpResponse { status, message })
             }
@@ -192,7 +191,7 @@ impl BlockingClient {
         match self.get_with_retry(path) {
             Ok(resp) if is_status_not_found(resp.status_code) => Ok(None),
             Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
+                let status = resp.status_code;
                 let message = resp.as_str().unwrap_or_default().to_string();
                 Err(Error::HttpResponse { status, message })
             }
@@ -204,7 +203,7 @@ impl BlockingClient {
     fn get_response_str(&self, path: &str) -> Result<String, Error> {
         match self.get_with_retry(path) {
             Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
+                let status = resp.status_code;
                 let message = resp.as_str().unwrap_or_default().to_string();
                 Err(Error::HttpResponse { status, message })
             }
@@ -301,7 +300,7 @@ impl BlockingClient {
 
         match request.send() {
             Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
+                let status = resp.status_code;
                 let message = resp.as_str().unwrap_or_default().to_string();
                 Err(Error::HttpResponse { status, message })
             }
@@ -346,7 +345,7 @@ impl BlockingClient {
 
         match request.send() {
             Ok(resp) if !is_status_ok(resp.status_code) => {
-                let status = u16::try_from(resp.status_code).map_err(Error::StatusCode)?;
+                let status = resp.status_code;
                 let message = resp.as_str().unwrap_or_default().to_string();
                 Err(Error::HttpResponse { status, message })
             }
@@ -563,15 +562,14 @@ impl BlockingClient {
     }
 }
 
-fn is_status_ok(status: i32) -> bool {
+fn is_status_ok(status: u16) -> bool {
     status == 200
 }
 
-fn is_status_not_found(status: i32) -> bool {
+fn is_status_not_found(status: u16) -> bool {
     status == 404
 }
 
-fn is_status_retryable(status: i32) -> bool {
-    let status = status as u16;
+fn is_status_retryable(status: u16) -> bool {
     RETRYABLE_ERROR_CODES.contains(&status)
 }

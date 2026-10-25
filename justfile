@@ -26,11 +26,12 @@ check:
 fmt:
    cargo +nightly fmt
 
-# Build and test using the MSRV toolchain (1.63.0)
+# Build and test using the MSRV toolchain (1.80.0)
 msrv:
+    rm -rf Cargo.lock
     bash ci/pin-msrv.sh
-    cargo +1.63.0 build --all-features
-    cargo +1.63.0 test --all-features -- --test-threads=1
+    cargo +1.80.0 build --all-features
+    cargo +1.80.0 test --all-features -- --test-threads=1
 
 # Run all tests on the workspace with all features
 test:
