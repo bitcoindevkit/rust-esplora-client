@@ -30,6 +30,9 @@ jobs:
               with:
                   persist-credentials: false
 
+            - name: Checkout patched bitreq
+              uses: ./.github/actions/checkout-bitreq
+
             - name: Setup Build Cache
               uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
@@ -38,6 +41,51 @@ jobs:
 
             - name: ${{ matrix.name }}
               run: cargo rbmt ${{ matrix.task }}
+
+    wasm:
+        name: WASM
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+
+            - name: Checkout patched bitreq
+              uses: ./.github/actions/checkout-bitreq
+
+            - name: Setup Build Cache
+              uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+            - name: Install WASM target
+              run: rustup target add wasm32-unknown-unknown
+
+            - name: Check WASM build
+              run: cargo check --target wasm32-unknown-unknown --no-default-features --features wasm
+
+            - name: Check WASM build with default features
+              run: cargo check --target wasm32-unknown-unknown --features wasm
+
+            - name: Check WASM test formatting
+              working-directory: tests/wasm
+              run: cargo fmt --check
+
+            - name: Install wasm-pack
+              run: cargo install --locked wasm-pack --version 0.15.0
+
+            - name: Run WASM tests
+              working-directory: tests/wasm
+              run: |
+                  url_file=$(mktemp)
+                  cargo run --locked --bin fixture -- --url-file "$url_file" &
+                  fixture_pid=$!
+                  trap 'kill "$fixture_pid"' EXIT
+                  for _ in $(seq 1 100); do
+                      test -s "$url_file" && break
+                      sleep 0.1
+                  done
+                  test -s "$url_file"
+                  ESPLORA_WASM_TEST_URL=$(cat "$url_file") wasm-pack test --node --locked
 
     test:
         name: Test - ${{ matrix.name }}
@@ -58,6 +106,9 @@ jobs:
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   persist-credentials: false
+
+            - name: Checkout patched bitreq
+              uses: ./.github/actions/checkout-bitreq
 
             - name: Setup Build Cache
               uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2

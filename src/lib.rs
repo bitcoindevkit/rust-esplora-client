@@ -17,6 +17,11 @@
 //! runtime. The default async sleeper is backed by Tokio when the `tokio`
 //! feature is enabled; custom runtimes can supply their own `Sleeper`.
 //!
+//! On `wasm32-unknown-unknown`, enable the `wasm` feature to use the browser
+//! Fetch API transport. Only [`AsyncClient`] is available: `BlockingClient`
+//! is compiled out, proxies and connection pooling are ignored, and WASM
+//! callers must supply their own [`Sleeper`] to retry with backoff.
+//!
 //! # Examples
 //!
 //! Create a blocking client:
@@ -82,7 +87,9 @@
 //!   (SSL) using the `rustls` TLS backend.
 //! * `async-https-rustls-probe` enables [`bitreq`], the async client with support for proxying and
 //!   TLS (SSL) using `rustls` and probed system roots.
-//! * `tokio` enables the default async sleeper used by [`Builder::build_async`].
+//! * `tokio` enables the default async sleeper used by `Builder::build_async`.
+//! * `wasm` enables the browser Fetch API transport and the async client on
+//!   `wasm32-unknown-unknown`.
 //!
 //! [Esplora]: https://github.com/Blockstream/esplora/blob/master/API.md
 //! [`bitreq`]: https://docs.rs/bitreq
@@ -101,13 +108,13 @@ pub use r#async::Sleeper;
 pub mod api;
 #[cfg(feature = "async")]
 pub mod r#async;
-#[cfg(feature = "blocking")]
+#[cfg(all(feature = "blocking", not(target_arch = "wasm32")))]
 pub mod blocking;
 
 pub use api::*;
 #[cfg(any(feature = "blocking", feature = "async"))]
 use bitreq::Response;
-#[cfg(feature = "blocking")]
+#[cfg(all(feature = "blocking", not(target_arch = "wasm32")))]
 pub use blocking::BlockingClient;
 #[cfg(feature = "async")]
 pub use r#async::AsyncClient;
@@ -120,6 +127,7 @@ pub const RETRYABLE_ERROR_CODES: [u16; 3] = [
 ];
 
 /// Base delay used by the exponential retry backoff.
+#[allow(unused)]
 #[cfg(any(feature = "blocking", feature = "async"))]
 const BASE_BACKOFF_MILLIS: Duration = Duration::from_millis(256);
 
@@ -138,6 +146,7 @@ fn is_informational(response: &Response) -> bool {
 }
 
 /// Check if the [`Response`] status code is successful (200-299).
+#[allow(unused)]
 #[cfg(any(feature = "blocking", feature = "async"))]
 fn is_success(response: &Response) -> bool {
     (200..300).contains(&response.status_code)
@@ -165,6 +174,7 @@ fn is_server_error(response: &Response) -> bool {
 }
 
 /// Check if the [`Response`] status code is retryable (429, 500, 503).
+#[allow(unused)]
 #[cfg(any(feature = "blocking", feature = "async"))]
 fn is_retryable(response: &Response) -> bool {
     RETRYABLE_ERROR_CODES.contains(&(response.status_code as u16))
@@ -202,7 +212,7 @@ pub fn sat_per_vbyte_to_feerate(estimates: HashMap<u16, f64>) -> HashMap<u16, Fe
 /// ```no_run
 /// use std::time::Duration;
 ///
-/// # #[cfg(feature = "blocking")]
+/// # #[cfg(all(feature = "blocking", not(target_arch = "wasm32")))]
 /// # {
 /// let client = esplora_client::Builder::new("https://mempool.space/testnet/api")
 ///     .timeout(Duration::from_secs(30))
@@ -230,12 +240,16 @@ pub struct Builder {
     /// The proxy is ignored when targeting `wasm32`.
     pub proxy: Option<String>,
     /// Per-request socket timeout.
+    ///
+    /// On `wasm32` this is enforced by the Fetch transport handler.
     pub timeout: Option<Duration>,
     /// HTTP headers to set on every request made to the Esplora server.
     pub headers: HashMap<String, String>,
     /// Maximum number of retry attempts for retryable HTTP responses.
     pub max_retries: usize,
     /// Maximum number of cached connections for the async client.
+    ///
+    /// This is ignored when targeting `wasm32`.
     #[cfg(feature = "async")]
     pub max_connections: usize,
 }
@@ -287,6 +301,8 @@ impl Builder {
     }
 
     /// Set the maximum number of cached connections in the async client.
+    ///
+    /// This is ignored when targeting `wasm32`.
     #[cfg(feature = "async")]
     pub fn max_connections(mut self, count: usize) -> Self {
         self.max_connections = count;
@@ -294,19 +310,20 @@ impl Builder {
     }
 
     /// Build a [`BlockingClient`] from this configuration.
-    #[cfg(feature = "blocking")]
+    #[cfg(all(feature = "blocking", not(target_arch = "wasm32")))]
     pub fn build_blocking(self) -> BlockingClient {
         BlockingClient::from_builder(self)
     }
 
     /// Build an [`AsyncClient`] from this configuration.
     ///
-    /// This uses `DefaultSleeper`, which is backed by Tokio.
+    /// This uses `DefaultSleeper`, which is backed by Tokio. It is not
+    /// available on `wasm32`; use [`Builder::build_async_with_sleeper`] there.
     ///
     /// # Errors
     ///
     /// Returns an [`Error`] if the async HTTP client cannot be constructed.
-    #[cfg(all(feature = "async", feature = "tokio"))]
+    #[cfg(all(feature = "async", feature = "tokio", not(target_arch = "wasm32")))]
     pub fn build_async(self) -> Result<AsyncClient, Error> {
         AsyncClient::from_builder(self)
     }
@@ -314,7 +331,8 @@ impl Builder {
     /// Build an [`AsyncClient`] with a user-defined [`Sleeper`].
     ///
     /// Use this when integrating with an async runtime other than Tokio or when
-    /// tests need a custom sleep implementation.
+    /// tests need a custom sleep implementation. This is required on `wasm32`,
+    /// where no default [`Sleeper`] implementation is provided.
     ///
     /// # Errors
     ///

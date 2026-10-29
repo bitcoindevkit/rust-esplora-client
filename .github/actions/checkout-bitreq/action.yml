@@ -1,0 +1,11 @@
+name: Checkout patched bitreq
+description: Clone the WASM-capable bitreq branch used by the path dependency
+
+runs:
+    using: "composite"
+
+    steps:
+        - name: Clone patched bitreq
+          shell: bash
+          run: |
+              git clone --depth 1 --branch corepc/wasm https://git.rust-bitcoin.org/notmandatory/corepc.git ../../rust-bitcoin/corepc

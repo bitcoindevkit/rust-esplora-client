@@ -4,8 +4,17 @@
 
 ### Added
 
+* feat(wasm): add a `wasm` feature and browser Fetch API transport support for
+  `AsyncClient` on `wasm32-unknown-unknown`
+* feat(wasm): support WASM timeouts through the `bitreq` transport handler
+* feat(test): add WASM smoke tests for `AsyncClient` against local Esplora fixtures
+
 ### Changed
 
+* chore(deps): update to `bitreq` v0.4.x with WASM transport support
+* refactor(blocking)!: compile `BlockingClient` out on `wasm32-unknown-unknown`
+* refactor(async)!: make `AsyncClient` WASM-compatible; `Builder::build_async`
+  is native-only and WASM callers use `build_async_with_sleeper`
 * feat(client): enable request pipelining for `AsyncClient` [#245]
 * chore!: remove deprecated `BlockSummary` and `get_block` [#225]
 * chore(deps): bump `bitreq` to v0.4.0 and `electrsd` to v0.42.0 [#257]

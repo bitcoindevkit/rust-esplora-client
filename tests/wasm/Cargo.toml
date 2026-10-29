@@ -1,0 +1,23 @@
+[package]
+name = "esplora-wasm-smoke"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[[bin]]
+name = "fixture"
+path = "fixture/main.rs"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+esplora-client = { path = "../..", default-features = false, features = ["wasm"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tiny_http = "0.12"
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "=0.3.67"

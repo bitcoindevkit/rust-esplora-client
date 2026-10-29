@@ -43,7 +43,9 @@ use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::{Address, Amount, Block, BlockHash, FeeRate, MerkleBlock, Script, Transaction, Txid};
 
-use bitreq::{Client, Method, Proxy, Request, RequestExt, Response};
+#[cfg(not(target_arch = "wasm32"))]
+use bitreq::{Client, Proxy, RequestExt};
+use bitreq::{Method, Request, Response};
 
 use crate::{
     is_retryable, is_success, sat_per_vbyte_to_feerate, AddressStats, BlockInfo, BlockStatus,
@@ -60,7 +62,10 @@ use crate::{
 /// mempool endpoints.
 ///
 /// The generic parameter `S` determines the asynchronous runtime used for
-/// sleeping between retries. Defaults to the Tokio-backed [`DefaultSleeper`].
+/// sleeping between retries. On native targets it defaults to the Tokio-backed
+/// [`DefaultSleeper`]. On `wasm32`, use
+/// [`Builder::build_async_with_sleeper`](crate::Builder::build_async_with_sleeper)
+/// with a custom [`Sleeper`].
 ///
 /// # Retries
 ///
@@ -75,6 +80,7 @@ pub struct AsyncClient<S = DefaultSleeper> {
     /// The URL of the proxy host.
     ///
     /// NOTE: The proxy is ignored when targeting `wasm32`.
+    #[cfg(not(target_arch = "wasm32"))]
     proxy: Option<String>,
     /// Per-request socket timeout.
     timeout: Option<Duration>,
@@ -83,6 +89,7 @@ pub struct AsyncClient<S = DefaultSleeper> {
     /// Maximum number of retry attempts for retryable responses.
     max_retries: usize,
     /// The inner [`bitreq::Client`] HTTP client to cache connections.
+    #[cfg(not(target_arch = "wasm32"))]
     client: Client,
     /// Marker for the sleeper implementation.
     marker: PhantomData<S>,
@@ -91,9 +98,11 @@ pub struct AsyncClient<S = DefaultSleeper> {
 impl<S: Sleeper> AsyncClient<S> {
     /// Build an [`AsyncClient`] from a [`Builder`].
     ///
-    /// Configures the underlying [`bitreq::Client`] with
-    /// proxy, timeout, and headers specified in the [`Builder`].
-    /// No network request is made until a client method is awaited.
+    /// Configures the request with the proxy, timeout, and headers specified
+    /// in the [`Builder`]. On native targets this also configures the
+    /// underlying `bitreq::Client` connection pool; WASM targets do not have
+    /// a connection pool. No network request is made until a client method is
+    /// awaited.
     ///
     /// # Errors
     ///
@@ -102,10 +111,12 @@ impl<S: Sleeper> AsyncClient<S> {
     pub fn from_builder(builder: Builder) -> Result<Self, Error> {
         Ok(AsyncClient {
             url: builder.base_url,
+            #[cfg(not(target_arch = "wasm32"))]
             proxy: builder.proxy,
             timeout: builder.timeout,
             headers: builder.headers,
             max_retries: builder.max_retries,
+            #[cfg(not(target_arch = "wasm32"))]
             client: Client::new(builder.max_connections),
             marker: PhantomData,
         })
@@ -122,6 +133,7 @@ impl<S: Sleeper> AsyncClient<S> {
     ///
     /// This can be useful for callers that need access to shared connection
     /// state managed by the HTTP client.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn client(&self) -> &Client {
         &self.client
     }
@@ -138,7 +150,6 @@ impl<S: Sleeper> AsyncClient<S> {
             request = request.with_proxy(Proxy::new_http(proxy)?);
         }
 
-        #[cfg(not(target_arch = "wasm32"))]
         if let Some(timeout) = self.timeout {
             request = request.with_timeout(timeout);
         }
@@ -156,10 +167,17 @@ impl<S: Sleeper> AsyncClient<S> {
         let mut delay = BASE_BACKOFF_MILLIS;
         let mut attempts = 0;
 
-        let request = self.build_request(Method::Get, path)?.with_pipelining();
+        let request = self.build_request(Method::Get, path)?;
+        #[cfg(not(target_arch = "wasm32"))]
+        let request = request.with_pipelining();
 
         loop {
-            match request.clone().send_async_with_client(&self.client).await? {
+            #[cfg(not(target_arch = "wasm32"))]
+            let response = request.clone().send_async_with_client(&self.client).await;
+            #[cfg(target_arch = "wasm32")]
+            let response = request.clone().send_async().await;
+
+            match response? {
                 response if attempts < self.max_retries && is_retryable(&response) => {
                     S::sleep(delay).await;
                     attempts += 1;
@@ -324,7 +342,10 @@ impl<S: Sleeper> AsyncClient<S> {
             request = request.with_param(key, value);
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
         let response = request.send_async_with_client(&self.client).await?;
+        #[cfg(target_arch = "wasm32")]
+        let response = request.send_async().await?;
 
         if !is_success(&response) {
             let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
@@ -730,8 +751,9 @@ impl<S: Sleeper> AsyncClient<S> {
 /// [`AsyncClient`] uses this trait to wait between retry attempts without
 /// committing the client type to a specific async runtime.
 ///
-/// The only provided implementation is [`DefaultSleeper`], which is backed by Tokio.
-/// Custom implementations can be provided to support other runtimes.
+/// The only provided implementation is [`DefaultSleeper`], which is backed by
+/// Tokio and is not available on `wasm32`. Custom implementations can be
+/// provided to support other runtimes, including WASM.
 pub trait Sleeper: 'static {
     /// The [`Future`](std::future::Future) type returned by [`Sleeper::sleep`].
     type Sleep: std::future::Future<Output = ()>;
@@ -739,14 +761,15 @@ pub trait Sleeper: 'static {
     fn sleep(dur: Duration) -> Self::Sleep;
 }
 
-/// The default [`Sleeper`] implementation, backed by [`tokio::time::sleep`].
+/// The default [`Sleeper`] implementation, backed by `tokio::time::sleep`.
 ///
 /// This type is available when the `tokio` feature is enabled or while running
-/// tests.
+/// tests on native targets. It is not implemented on `wasm32`; WASM callers
+/// must supply their own [`Sleeper`].
 #[derive(Debug, Clone, Copy)]
 pub struct DefaultSleeper;
 
-#[cfg(any(test, feature = "tokio"))]
+#[cfg(all(any(test, feature = "tokio"), not(target_arch = "wasm32")))]
 impl Sleeper for DefaultSleeper {
     type Sleep = tokio::time::Sleep;
 

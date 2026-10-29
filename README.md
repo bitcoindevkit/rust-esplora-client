@@ -10,6 +10,20 @@
 
 Asynchronous and blocking clients and types for interacting with Esplora servers over HTTP.
 
+## WebAssembly
+
+On `wasm32-unknown-unknown`, enable the `wasm` feature to use the browser Fetch
+API transport:
+
+```toml
+esplora-client = { version = "*", default-features = false, features = ["wasm"] }
+```
+
+Only `AsyncClient` is available on WASM. `BlockingClient`, proxies, and
+connection pooling are not supported. Because the Tokio-backed `DefaultSleeper`
+is not available on WASM, build the client with
+`Builder::build_async_with_sleeper` and a custom `Sleeper` implementation.
+
 ## Developing
 
 This project uses [`just`](https://github.com/casey/just) for command running, and
@@ -49,7 +63,9 @@ To report a security issue, please refer to the [security policy](SECURITY.md).
 
 ## Minimum Supported Rust Version
 
-This library should compile with any combination of features on Rust 1.75.0.
+This library should compile with any combination of features on native targets
+with Rust 1.75.0. WASM builds may require a newer toolchain due to the
+`wasm-bindgen` dependency.
 
 To build with the MSRV toolchain, copy `Cargo-minimal.lock` to `Cargo.lock`.
 

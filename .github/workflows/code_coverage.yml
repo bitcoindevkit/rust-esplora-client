@@ -24,6 +24,9 @@ jobs:
               with:
                   persist-credentials: false
 
+            - name: Checkout patched bitreq
+              uses: ./.github/actions/checkout-bitreq
+
             - name: Install lcov Tools
               run: sudo apt-get install lcov -y
 
