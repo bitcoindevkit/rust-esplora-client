@@ -5,6 +5,7 @@
 ### Added
 
 * feat(client): add `as_of` views for queries pinned at a block via the `asof` parameter
+* feat(client): add `get_tip_hash_stamped` returning the tip hash with the server's chain view
 
 ### Changed
 

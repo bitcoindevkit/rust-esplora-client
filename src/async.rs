@@ -574,6 +574,27 @@ impl<S: Sleeper> AsyncClient<S> {
             .map(|block_hash| BlockHash::from_str(&block_hash).map_err(Error::HexToArray))?
     }
 
+    /// Get the [`BlockHash`] of the current blockchain tip, together with the
+    /// chain view reported by the server.
+    ///
+    /// On a server that reports its chain view, [`Stamped::chain_tip`] also
+    /// provides the height of the tip. It is `None` on a server that does
+    /// not, which then cannot be expected to support [`Self::as_of`] queries
+    /// either.
+    pub async fn get_tip_hash_stamped(&self) -> Result<Stamped<BlockHash>, Error> {
+        let response = self.get_with_retry("/blocks/tip/hash", None).await?;
+
+        if !is_success(&response) {
+            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+            let message = response.as_str().unwrap_or_default().to_string();
+            return Err(Error::HttpResponse { status, message });
+        }
+
+        let chain_tip = chain_tip_from_headers(&response.headers);
+        let value = BlockHash::from_str(response.as_str()?).map_err(Error::HexToArray)?;
+        Ok(Stamped { value, chain_tip })
+    }
+
     /// Get the [`BlockHash`] of a [`Block`] given its height.
     pub async fn get_block_hash(&self, block_height: u32) -> Result<BlockHash, Error> {
         self.get_response_text(&format!("/block-height/{block_height}"))

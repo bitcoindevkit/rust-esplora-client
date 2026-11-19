@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! # Tests for Queries Pinned at a Block
+//! # Tests for Queries Pinned at a Block and Chain-Tip Stamps
 //!
-//! The `asof` query parameter is an extension the Esplora server of the
-//! regtest test environment does not implement, so these tests run against a
-//! mocked HTTP server.
+//! The `asof` query parameter and the chain-tip response headers are
+//! extensions the Esplora server of the regtest test environment does not
+//! implement, so these tests run against a mocked HTTP server.
 
 #![cfg(all(feature = "blocking", feature = "async", feature = "tokio"))]
 
@@ -201,4 +201,58 @@ async fn test_unpinned_request_sends_no_as_of_param() {
         server.join().unwrap(),
         vec![expected_request_line.clone(), expected_request_line]
     );
+}
+
+#[tokio::test]
+async fn test_get_tip_hash_stamped() {
+    let block_hash = BlockHash::from_str(BLOCK_HASH).unwrap();
+
+    let (base_url, server) = mock_server(2, "200 OK", chain_tip_headers(), BLOCK_HASH);
+    let blocking_client = Builder::new(&base_url).build_blocking();
+    let async_client = Builder::new(&base_url).build_async().unwrap();
+
+    let tip_blocking = tokio::task::spawn_blocking(move || blocking_client.get_tip_hash_stamped())
+        .await
+        .unwrap()
+        .unwrap();
+    let tip_async = async_client.get_tip_hash_stamped().await.unwrap();
+
+    let expected = Stamped {
+        value: block_hash,
+        chain_tip: Some(ChainTip {
+            hash: block_hash,
+            height: HEIGHT,
+        }),
+    };
+    assert_eq!(tip_blocking, expected);
+    assert_eq!(tip_async, expected);
+
+    let expected_request_line = "GET /blocks/tip/hash HTTP/1.1".to_string();
+    assert_eq!(
+        server.join().unwrap(),
+        vec![expected_request_line.clone(), expected_request_line]
+    );
+}
+
+#[tokio::test]
+async fn test_get_tip_hash_stamped_without_chain_tip_headers() {
+    let block_hash = BlockHash::from_str(BLOCK_HASH).unwrap();
+
+    let (base_url, server) = mock_server(2, "200 OK", vec![], BLOCK_HASH);
+    let blocking_client = Builder::new(&base_url).build_blocking();
+    let async_client = Builder::new(&base_url).build_async().unwrap();
+
+    let tip_blocking = tokio::task::spawn_blocking(move || blocking_client.get_tip_hash_stamped())
+        .await
+        .unwrap()
+        .unwrap();
+    let tip_async = async_client.get_tip_hash_stamped().await.unwrap();
+
+    let expected = Stamped {
+        value: block_hash,
+        chain_tip: None,
+    };
+    assert_eq!(tip_blocking, expected);
+    assert_eq!(tip_async, expected);
+    server.join().unwrap();
 }
