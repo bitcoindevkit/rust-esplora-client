@@ -43,9 +43,10 @@ use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::{Address, Amount, Block, BlockHash, FeeRate, MerkleBlock, Script, Transaction, Txid};
 
 use crate::{
-    is_retryable, is_success, sat_per_vbyte_to_feerate, AddressStats, BlockInfo, BlockStatus,
-    Builder, Error, EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof, OutputStatus,
-    ScriptHashStats, SubmitPackageResult, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
+    chain_tip_from_headers, is_retryable, is_success, sat_per_vbyte_to_feerate, AddressStats,
+    BlockInfo, BlockStatus, Builder, Error, EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof,
+    OutputStatus, ScriptHashStats, Stamped, SubmitPackageResult, TxStatus, Utxo, AS_OF_PARAM,
+    BASE_BACKOFF_MILLIS,
 };
 
 /// A synchronous client for interacting with an Esplora API server.
@@ -156,14 +157,31 @@ impl BlockingClient {
         Ok(response)
     }
 
+    /// Return a view of this client whose queries are pinned at `block_hash`.
+    ///
+    /// See [`BlockingAsOf`] for the available queries and their semantics.
+    pub fn as_of(&self, block_hash: BlockHash) -> BlockingAsOf<'_> {
+        BlockingAsOf {
+            client: self,
+            block_hash,
+        }
+    }
+
     /// Sends a GET request to `url`, retrying on retryable status codes
     /// with exponential backoff until [`BlockingClient::max_retries`] is reached.
-    fn get_with_retry(&self, url: &str) -> Result<Response, Error> {
+    ///
+    /// If `as_of` is set, the request is pinned at that block.
+    fn get_with_retry(&self, url: &str, as_of: Option<&BlockHash>) -> Result<Response, Error> {
         let mut delay = BASE_BACKOFF_MILLIS;
         let mut attempts = 0;
 
         loop {
-            match self.build_request(Method::Get, url)?.send()? {
+            let mut request = self.build_request(Method::Get, url)?;
+            if let Some(as_of) = as_of {
+                request = request.with_param(AS_OF_PARAM, as_of.to_string());
+            }
+
+            match request.send()? {
                 resp if attempts < self.max_retries && is_retryable(&resp) => {
                     thread::sleep(delay);
                     attempts += 1;
@@ -183,7 +201,7 @@ impl BlockingClient {
     ///
     /// Returns an [`Error`] if the request fails or deserialization fails.
     fn get_response<T: Decodable>(&self, path: &str) -> Result<T, Error> {
-        let response = self.get_with_retry(path)?;
+        let response = self.get_with_retry(path, None)?;
 
         if !is_success(&response) {
             let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
@@ -215,7 +233,7 @@ impl BlockingClient {
     /// Returns an [`Error`] if the request fails, hex decoding fails,
     /// or consensus deserialization fails.
     fn get_response_hex<T: Decodable>(&self, path: &str) -> Result<T, Error> {
-        let response = self.get_with_retry(path)?;
+        let response = self.get_with_retry(path, None)?;
 
         if !is_success(&response) {
             let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
@@ -251,7 +269,7 @@ impl BlockingClient {
         &'a self,
         path: &'a str,
     ) -> Result<T, Error> {
-        let response = self.get_with_retry(path)?;
+        let response = self.get_with_retry(path, None)?;
 
         if !is_success(&response) {
             let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
@@ -260,6 +278,31 @@ impl BlockingClient {
         }
 
         response.json::<T>().map_err(Error::BitReq)
+    }
+
+    /// Makes a GET request to `path` pinned at the `as_of` block, deserializing
+    /// the response body as JSON into `T` and attaching the chain view
+    /// reported by the server.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails or JSON deserialization fails.
+    fn get_response_json_as_of<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        as_of: &BlockHash,
+    ) -> Result<Stamped<T>, Error> {
+        let response = self.get_with_retry(path, Some(as_of))?;
+
+        if !is_success(&response) {
+            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+            let message = response.as_str().unwrap_or_default().to_string();
+            return Err(Error::HttpResponse { status, message });
+        }
+
+        let chain_tip = chain_tip_from_headers(&response.headers);
+        let value = response.json::<T>().map_err(Error::BitReq)?;
+        Ok(Stamped { value, chain_tip })
     }
 
     /// Makes a GET request to `path`, returning `None` on a 404 response.
@@ -285,7 +328,7 @@ impl BlockingClient {
     ///
     /// Returns an [`Error`] if the request fails.
     fn get_response_text(&self, path: &str) -> Result<String, Error> {
-        let response = self.get_with_retry(path)?;
+        let response = self.get_with_retry(path, None)?;
 
         if !is_success(&response) {
             let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
@@ -489,6 +532,27 @@ impl BlockingClient {
             .map(|s| BlockHash::from_str(s.as_str()).map_err(Error::HexToArray))?
     }
 
+    /// Get the [`BlockHash`] of the current blockchain tip, together with the
+    /// chain view reported by the server.
+    ///
+    /// On a server that reports its chain view, [`Stamped::chain_tip`] also
+    /// provides the height of the tip. It is `None` on a server that does
+    /// not, which then cannot be expected to support [`Self::as_of`] queries
+    /// either.
+    pub fn get_tip_hash_stamped(&self) -> Result<Stamped<BlockHash>, Error> {
+        let response = self.get_with_retry("/blocks/tip/hash", None)?;
+
+        if !is_success(&response) {
+            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+            let message = response.as_str().unwrap_or_default().to_string();
+            return Err(Error::HttpResponse { status, message });
+        }
+
+        let chain_tip = chain_tip_from_headers(&response.headers);
+        let value = BlockHash::from_str(response.as_str()?).map_err(Error::HexToArray)?;
+        Ok(Stamped { value, chain_tip })
+    }
+
     /// Get the [`BlockHash`] of a [`Block`] given its height.
     pub fn get_block_hash(&self, block_height: u32) -> Result<BlockHash, Error> {
         self.get_response_text(&format!("/block-height/{block_height}"))
@@ -674,5 +738,121 @@ impl BlockingClient {
         let path = format!("/scripthash/{script_hash}/utxo");
 
         self.get_response_json(&path)
+    }
+}
+
+/// A view of a [`BlockingClient`] whose queries are pinned at a block.
+///
+/// Created by [`BlockingClient::as_of`]. Every query sends the pinned block
+/// hash in the `asof` query parameter, asking the server to answer as of that
+/// block: later confirmations are invisible and the mempool is not included.
+/// Each result is returned as a [`Stamped`] value carrying the chain view the
+/// server reports having used, if any.
+///
+/// The `asof` parameter is an extension that not every Esplora server
+/// implements. A server that does not know it may ignore it and answer
+/// against its current tip, in which case [`Stamped::chain_tip`] is `None` or
+/// differs from the pinned block.
+///
+/// A server that implements the parameter responds with a 404 if the pinned
+/// block is unknown or not part of its best chain, which surfaces as an
+/// [`Error::HttpResponse`]. This cannot be told apart from a 404 for the
+/// queried item itself.
+#[derive(Debug, Clone, Copy)]
+pub struct BlockingAsOf<'a> {
+    client: &'a BlockingClient,
+    block_hash: BlockHash,
+}
+
+impl BlockingAsOf<'_> {
+    /// Return the [`BlockHash`] the queries of this view are pinned at.
+    pub fn block_hash(&self) -> BlockHash {
+        self.block_hash
+    }
+
+    fn get<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<Stamped<T>, Error> {
+        self.client.get_response_json_as_of(path, &self.block_hash)
+    }
+
+    /// Get the confirmation status of a [`Transaction`] given its [`Txid`].
+    ///
+    /// A transaction confirmed after the pinned block is reported as
+    /// unconfirmed.
+    pub fn get_tx_status(&self, txid: &Txid) -> Result<Stamped<TxStatus>, Error> {
+        self.get(&format!("/tx/{txid}/status"))
+    }
+
+    /// Get the spend status of all outputs in a [`Transaction`], given its [`Txid`].
+    ///
+    /// Only spends confirmed at or below the pinned block are reported.
+    pub fn get_tx_outspends(&self, txid: &Txid) -> Result<Stamped<Vec<OutputStatus>>, Error> {
+        self.get(&format!("/tx/{txid}/outspends"))
+    }
+
+    /// Get the spend status of a specific output, identified by its [`Txid`]
+    /// and output index.
+    ///
+    /// Only a spend confirmed at or below the pinned block is reported.
+    pub fn get_output_status(
+        &self,
+        txid: &Txid,
+        index: u64,
+    ) -> Result<Stamped<OutputStatus>, Error> {
+        self.get(&format!("/tx/{txid}/outspend/{index}"))
+    }
+
+    /// Get statistics about an [`Address`].
+    pub fn get_address_stats(&self, address: &Address) -> Result<Stamped<AddressStats>, Error> {
+        self.get(&format!("/address/{address}"))
+    }
+
+    /// Get statistics about a [`Script`] hash.
+    pub fn get_scripthash_stats(&self, script: &Script) -> Result<Stamped<ScriptHashStats>, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        self.get(&format!("/scripthash/{script_hash}"))
+    }
+
+    /// Get confirmed transaction history for an [`Address`], sorted newest first.
+    ///
+    /// To paginate, pass the [`Txid`] of the last transaction seen in the
+    /// previous response as `last_seen`.
+    pub fn get_address_txs(
+        &self,
+        address: &Address,
+        last_seen: Option<Txid>,
+    ) -> Result<Stamped<Vec<EsploraTx>>, Error> {
+        let path = match last_seen {
+            Some(last_seen) => format!("/address/{address}/txs/chain/{last_seen}"),
+            None => format!("/address/{address}/txs"),
+        };
+        self.get(&path)
+    }
+
+    /// Get confirmed transaction history for a [`Script`] hash, sorted newest first.
+    ///
+    /// To paginate, pass the [`Txid`] of the last transaction seen in the
+    /// previous response as `last_seen`.
+    pub fn get_scripthash_txs(
+        &self,
+        script: &Script,
+        last_seen: Option<Txid>,
+    ) -> Result<Stamped<Vec<EsploraTx>>, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        let path = match last_seen {
+            Some(last_seen) => format!("/scripthash/{script_hash}/txs/chain/{last_seen}"),
+            None => format!("/scripthash/{script_hash}/txs"),
+        };
+        self.get(&path)
+    }
+
+    /// Get all [`Utxo`]s locked to the given [`Address`].
+    pub fn get_address_utxos(&self, address: &Address) -> Result<Stamped<Vec<Utxo>>, Error> {
+        self.get(&format!("/address/{address}/utxo"))
+    }
+
+    /// Get all [`Utxo`]s locked to the given [`Script`].
+    pub fn get_scripthash_utxos(&self, script: &Script) -> Result<Stamped<Vec<Utxo>>, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        self.get(&format!("/scripthash/{script_hash}/utxo"))
     }
 }

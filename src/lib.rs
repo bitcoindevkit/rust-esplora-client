@@ -90,6 +90,8 @@
 #![warn(missing_docs)]
 #![allow(deprecated)]
 
+#[cfg(any(feature = "blocking", feature = "async"))]
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt;
 use std::num::TryFromIntError;
@@ -108,9 +110,9 @@ pub use api::*;
 #[cfg(any(feature = "blocking", feature = "async"))]
 use bitreq::Response;
 #[cfg(feature = "blocking")]
-pub use blocking::BlockingClient;
+pub use blocking::{BlockingAsOf, BlockingClient};
 #[cfg(feature = "async")]
-pub use r#async::AsyncClient;
+pub use r#async::{AsyncAsOf, AsyncClient};
 
 /// HTTP response status codes for which a request may be retried.
 pub const RETRYABLE_ERROR_CODES: [u16; 3] = [
@@ -168,6 +170,25 @@ fn is_server_error(response: &Response) -> bool {
 #[cfg(any(feature = "blocking", feature = "async"))]
 fn is_retryable(response: &Response) -> bool {
     RETRYABLE_ERROR_CODES.contains(&(response.status_code as u16))
+}
+
+/// Name of the query parameter pinning a request to a block.
+#[cfg(any(feature = "blocking", feature = "async"))]
+const AS_OF_PARAM: &str = "asof";
+
+/// Extract the [`ChainTip`] from response `headers`, whose names are
+/// expected to be lowercase.
+///
+/// Returns `None` unless both chain-tip headers are present and valid.
+#[cfg(any(feature = "blocking", feature = "async"))]
+fn chain_tip_from_headers(headers: &BTreeMap<String, String>) -> Option<ChainTip> {
+    let hash = headers.get("x-bitcoin-chain-tip")?.trim().parse().ok()?;
+    let height = headers
+        .get("x-bitcoin-chain-tip-height")?
+        .trim()
+        .parse()
+        .ok()?;
+    Some(ChainTip { hash, height })
 }
 
 /// Return the [`FeeRate`] for the given confirmation target in blocks.
@@ -420,3 +441,51 @@ impl_error!(std::num::ParseIntError, Parsing, Error);
 impl_error!(bitcoin::consensus::encode::Error, BitcoinEncoding, Error);
 impl_error!(bitcoin::hex::HexToArrayError, HexToArray, Error);
 impl_error!(bitcoin::hex::HexToBytesError, HexToBytes, Error);
+
+#[cfg(all(test, any(feature = "blocking", feature = "async")))]
+mod tests {
+    use super::*;
+
+    const BLOCK_HASH: &str = "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f";
+
+    fn headers(entries: &[(&str, &str)]) -> BTreeMap<String, String> {
+        entries
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn test_chain_tip_from_headers() {
+        let chain_tip = chain_tip_from_headers(&headers(&[
+            ("x-bitcoin-chain-tip", BLOCK_HASH),
+            ("x-bitcoin-chain-tip-height", "21"),
+        ]));
+        assert_eq!(
+            chain_tip,
+            Some(ChainTip {
+                hash: BLOCK_HASH.parse().unwrap(),
+                height: 21,
+            })
+        );
+    }
+
+    #[test]
+    fn test_chain_tip_from_incomplete_or_invalid_headers() {
+        for entries in [
+            vec![],
+            vec![("x-bitcoin-chain-tip", BLOCK_HASH)],
+            vec![("x-bitcoin-chain-tip-height", "21")],
+            vec![
+                ("x-bitcoin-chain-tip", "abcd"),
+                ("x-bitcoin-chain-tip-height", "21"),
+            ],
+            vec![
+                ("x-bitcoin-chain-tip", BLOCK_HASH),
+                ("x-bitcoin-chain-tip-height", "-1"),
+            ],
+        ] {
+            assert_eq!(chain_tip_from_headers(&headers(&entries)), None);
+        }
+    }
+}
