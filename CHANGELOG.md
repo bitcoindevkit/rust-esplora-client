@@ -4,6 +4,8 @@
 
 ### Added
 
+* feat(client): add `as_of` views for queries pinned at a block via the `asof` parameter
+
 ### Changed
 
 * feat(client): enable request pipelining for `AsyncClient` [#245]

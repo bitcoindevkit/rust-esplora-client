@@ -46,9 +46,10 @@ use bitcoin::{Address, Amount, Block, BlockHash, FeeRate, MerkleBlock, Script, T
 use bitreq::{Client, Method, Proxy, Request, RequestExt, Response};
 
 use crate::{
-    is_retryable, is_success, sat_per_vbyte_to_feerate, AddressStats, BlockInfo, BlockStatus,
-    Builder, Error, EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof, OutputStatus,
-    ScriptHashStats, SubmitPackageResult, TxStatus, Utxo, BASE_BACKOFF_MILLIS,
+    chain_tip_from_headers, is_retryable, is_success, sat_per_vbyte_to_feerate, AddressStats,
+    BlockInfo, BlockStatus, Builder, Error, EsploraTx, MempoolRecentTx, MempoolStats, MerkleProof,
+    OutputStatus, ScriptHashStats, Stamped, SubmitPackageResult, TxStatus, Utxo, AS_OF_PARAM,
+    BASE_BACKOFF_MILLIS,
 };
 
 // FIXME: (@oleonardolima) there's no `Debug` implementation for `bitreq::Client`.
@@ -150,13 +151,32 @@ impl<S: Sleeper> AsyncClient<S> {
         Ok(request)
     }
 
+    /// Return a view of this client whose queries are pinned at `block_hash`.
+    ///
+    /// See [`AsyncAsOf`] for the available queries and their semantics.
+    pub fn as_of(&self, block_hash: BlockHash) -> AsyncAsOf<'_, S> {
+        AsyncAsOf {
+            client: self,
+            block_hash,
+        }
+    }
+
     /// Sends a GET request to `url`, retrying on retryable status codes
     /// with exponential backoff until [`AsyncClient::max_retries`] is reached.
-    async fn get_with_retry(&self, path: &str) -> Result<Response, Error> {
+    ///
+    /// If `as_of` is set, the request is pinned at that block.
+    async fn get_with_retry(
+        &self,
+        path: &str,
+        as_of: Option<&BlockHash>,
+    ) -> Result<Response, Error> {
         let mut delay = BASE_BACKOFF_MILLIS;
         let mut attempts = 0;
 
-        let request = self.build_request(Method::Get, path)?.with_pipelining();
+        let mut request = self.build_request(Method::Get, path)?.with_pipelining();
+        if let Some(as_of) = as_of {
+            request = request.with_param(AS_OF_PARAM, as_of.to_string());
+        }
 
         loop {
             match request.clone().send_async_with_client(&self.client).await? {
@@ -179,7 +199,7 @@ impl<S: Sleeper> AsyncClient<S> {
     ///
     /// Returns an [`Error`] if the request fails or deserialization fails.
     async fn get_response<T: Decodable>(&self, path: &str) -> Result<T, Error> {
-        let response = self.get_with_retry(path).await?;
+        let response = self.get_with_retry(path, None).await?;
 
         if !is_success(&response) {
             let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
@@ -214,7 +234,7 @@ impl<S: Sleeper> AsyncClient<S> {
         &self,
         path: &str,
     ) -> Result<T, Error> {
-        let response = self.get_with_retry(path).await?;
+        let response = self.get_with_retry(path, None).await?;
 
         if !is_success(&response) {
             let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
@@ -223,6 +243,31 @@ impl<S: Sleeper> AsyncClient<S> {
         }
 
         response.json::<T>().map_err(Error::BitReq)
+    }
+
+    /// Makes a GET request to `path` pinned at the `as_of` block, deserializing
+    /// the response body as JSON into `T` and attaching the chain view
+    /// reported by the server.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the request fails or JSON deserialization fails.
+    async fn get_response_json_as_of<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        as_of: &BlockHash,
+    ) -> Result<Stamped<T>, Error> {
+        let response = self.get_with_retry(path, Some(as_of)).await?;
+
+        if !is_success(&response) {
+            let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
+            let message = response.as_str().unwrap_or_default().to_string();
+            return Err(Error::HttpResponse { status, message });
+        }
+
+        let chain_tip = chain_tip_from_headers(&response.headers);
+        let value = response.json::<T>().map_err(Error::BitReq)?;
+        Ok(Stamped { value, chain_tip })
     }
 
     /// Makes a GET request to `path`, returning `None` on a 404 response.
@@ -249,7 +294,7 @@ impl<S: Sleeper> AsyncClient<S> {
     /// Returns an [`Error`] if the request fails, hex decoding fails,
     /// or consensus deserialization fails.
     async fn get_response_hex<T: Decodable>(&self, path: &str) -> Result<T, Error> {
-        let response = self.get_with_retry(path).await?;
+        let response = self.get_with_retry(path, None).await?;
 
         if !is_success(&response) {
             let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
@@ -281,7 +326,7 @@ impl<S: Sleeper> AsyncClient<S> {
     ///
     /// Returns an [`Error`] if the request fails.
     async fn get_response_text(&self, path: &str) -> Result<String, Error> {
-        let response = self.get_with_retry(path).await?;
+        let response = self.get_with_retry(path, None).await?;
 
         if !is_success(&response) {
             let status = u16::try_from(response.status_code).map_err(Error::StatusCode)?;
@@ -722,6 +767,129 @@ impl<S: Sleeper> AsyncClient<S> {
         let path = format!("/scripthash/{script_hash}/utxo");
 
         self.get_response_json(&path).await
+    }
+}
+
+/// A view of a [`AsyncClient`] whose queries are pinned at a block.
+///
+/// Created by [`AsyncClient::as_of`]. Every query sends the pinned block
+/// hash in the `asof` query parameter, asking the server to answer as of that
+/// block: later confirmations are invisible and the mempool is not included.
+/// Each result is returned as a [`Stamped`] value carrying the chain view the
+/// server reports having used, if any.
+///
+/// The `asof` parameter is an extension that not every Esplora server
+/// implements. A server that does not know it may ignore it and answer
+/// against its current tip, in which case [`Stamped::chain_tip`] is `None` or
+/// differs from the pinned block.
+///
+/// A server that implements the parameter responds with a 404 if the pinned
+/// block is unknown or not part of its best chain, which surfaces as an
+/// [`Error::HttpResponse`]. This cannot be told apart from a 404 for the
+/// queried item itself.
+pub struct AsyncAsOf<'a, S = DefaultSleeper> {
+    client: &'a AsyncClient<S>,
+    block_hash: BlockHash,
+}
+
+impl<S: Sleeper> AsyncAsOf<'_, S> {
+    /// Return the [`BlockHash`] the queries of this view are pinned at.
+    pub fn block_hash(&self) -> BlockHash {
+        self.block_hash
+    }
+
+    async fn get<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<Stamped<T>, Error> {
+        self.client
+            .get_response_json_as_of(path, &self.block_hash)
+            .await
+    }
+
+    /// Get the confirmation status of a [`Transaction`] given its [`Txid`].
+    ///
+    /// A transaction confirmed after the pinned block is reported as
+    /// unconfirmed.
+    pub async fn get_tx_status(&self, txid: &Txid) -> Result<Stamped<TxStatus>, Error> {
+        self.get(&format!("/tx/{txid}/status")).await
+    }
+
+    /// Get the spend status of all outputs in a [`Transaction`], given its [`Txid`].
+    ///
+    /// Only spends confirmed at or below the pinned block are reported.
+    pub async fn get_tx_outspends(&self, txid: &Txid) -> Result<Stamped<Vec<OutputStatus>>, Error> {
+        self.get(&format!("/tx/{txid}/outspends")).await
+    }
+
+    /// Get the spend status of a specific output, identified by its [`Txid`]
+    /// and output index.
+    ///
+    /// Only a spend confirmed at or below the pinned block is reported.
+    pub async fn get_output_status(
+        &self,
+        txid: &Txid,
+        index: u64,
+    ) -> Result<Stamped<OutputStatus>, Error> {
+        self.get(&format!("/tx/{txid}/outspend/{index}")).await
+    }
+
+    /// Get statistics about an [`Address`].
+    pub async fn get_address_stats(
+        &self,
+        address: &Address,
+    ) -> Result<Stamped<AddressStats>, Error> {
+        self.get(&format!("/address/{address}")).await
+    }
+
+    /// Get statistics about a [`Script`] hash.
+    pub async fn get_scripthash_stats(
+        &self,
+        script: &Script,
+    ) -> Result<Stamped<ScriptHashStats>, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        self.get(&format!("/scripthash/{script_hash}")).await
+    }
+
+    /// Get confirmed transaction history for an [`Address`], sorted newest first.
+    ///
+    /// To paginate, pass the [`Txid`] of the last transaction seen in the
+    /// previous response as `last_seen`.
+    pub async fn get_address_txs(
+        &self,
+        address: &Address,
+        last_seen: Option<Txid>,
+    ) -> Result<Stamped<Vec<EsploraTx>>, Error> {
+        let path = match last_seen {
+            Some(last_seen) => format!("/address/{address}/txs/chain/{last_seen}"),
+            None => format!("/address/{address}/txs"),
+        };
+        self.get(&path).await
+    }
+
+    /// Get confirmed transaction history for a [`Script`] hash, sorted newest first.
+    ///
+    /// To paginate, pass the [`Txid`] of the last transaction seen in the
+    /// previous response as `last_seen`.
+    pub async fn get_scripthash_txs(
+        &self,
+        script: &Script,
+        last_seen: Option<Txid>,
+    ) -> Result<Stamped<Vec<EsploraTx>>, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        let path = match last_seen {
+            Some(last_seen) => format!("/scripthash/{script_hash}/txs/chain/{last_seen}"),
+            None => format!("/scripthash/{script_hash}/txs"),
+        };
+        self.get(&path).await
+    }
+
+    /// Get all [`Utxo`]s locked to the given [`Address`].
+    pub async fn get_address_utxos(&self, address: &Address) -> Result<Stamped<Vec<Utxo>>, Error> {
+        self.get(&format!("/address/{address}/utxo")).await
+    }
+
+    /// Get all [`Utxo`]s locked to the given [`Script`].
+    pub async fn get_scripthash_utxos(&self, script: &Script) -> Result<Stamped<Vec<Utxo>>, Error> {
+        let script_hash = sha256::Hash::hash(script.as_bytes());
+        self.get(&format!("/scripthash/{script_hash}/utxo")).await
     }
 }
 

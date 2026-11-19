@@ -513,3 +513,28 @@ where
         })
         .collect()
 }
+
+/// The chain view an Esplora server computed a response against.
+///
+/// Servers that support it report the view in the `X-Bitcoin-Chain-Tip` and
+/// `X-Bitcoin-Chain-Tip-Height` response headers. For a query pinned with the
+/// `asof` parameter this is the pinned block.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChainTip {
+    /// The [`BlockHash`] of the block the response reflects.
+    pub hash: BlockHash,
+    /// The height of the block the response reflects.
+    pub height: u32,
+}
+
+/// A response `value` together with the [`ChainTip`] it was computed against.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Stamped<T> {
+    /// The response returned by the server.
+    pub value: T,
+    /// The chain view reported by the server.
+    ///
+    /// `None` if the server did not send the chain-tip headers, or sent
+    /// values that could not be parsed.
+    pub chain_tip: Option<ChainTip>,
+}
